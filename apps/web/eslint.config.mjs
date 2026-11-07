@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // LHCI configs are CommonJS consumed by the CLI, not app modules.
+    "lighthouse/**",
   ]),
   {
     rules: {
