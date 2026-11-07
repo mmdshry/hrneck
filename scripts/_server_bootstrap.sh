@@ -6,7 +6,7 @@ APP_ROOT=/home/itneck/apps/hrneck
 OLD_SITE=/home/itneck/public_html/hrneck.com
 BACKUP_DIR=/home/itneck/backups
 REPO=https://github.com/mmdshry/hrneck.git
-DB_PASS='Itneck@2026!@#'
+DB_PASS="${HRNECK_DB_PASSWORD:?Set HRNECK_DB_PASSWORD}"
 
 echo "==> Backup old site"
 mkdir -p "$BACKUP_DIR"
@@ -43,6 +43,8 @@ fi
 
 # Always rewrite production values (idempotent)
 python3 - <<'PY'
+import json
+import os
 from pathlib import Path
 path = Path("/home/itneck/apps/hrneck/apps/api/.env")
 text = path.read_text()
@@ -62,7 +64,7 @@ repl = {
     "DB_PORT": "3306",
     "DB_DATABASE": "itneck_hrneck",
     "DB_USERNAME": "itneck_admin",
-    "DB_PASSWORD": '"Itneck@2026!@#"',
+    "DB_PASSWORD": json.dumps(os.environ["HRNECK_DB_PASSWORD"]),
     "SESSION_DRIVER": "redis",
     "SESSION_DOMAIN": ".hrneck.com",
     "SANCTUM_STATEFUL_DOMAINS": "hrneck.com,www.hrneck.com,app.hrneck.com,admin.hrneck.com,itneck.hrneck.com,test.hrneck.com,company.hrneck.com",
