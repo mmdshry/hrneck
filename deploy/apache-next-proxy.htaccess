@@ -1,10 +1,15 @@
-# Place in the document root that should reverse-proxy to Next.js (port 3100).
+# Document root for hrneck.com / tenant hosts → reverse-proxy to Next + Reverb.
 # Requires: mod_rewrite, mod_proxy, mod_proxy_http, mod_proxy_wstunnel
 
 <IfModule mod_rewrite.c>
   RewriteEngine On
 
-  # WebSocket (Next HMR not used in prod; Reverb may be separate)
+  # Laravel Reverb WebSocket (Echo uses /app)
+  RewriteCond %{HTTP:Upgrade} =websocket [NC]
+  RewriteRule ^app(?:/.*)?$ ws://127.0.0.1:8080%{REQUEST_URI} [P,L]
+  RewriteRule ^app(?:/.*)?$ http://127.0.0.1:8080%{REQUEST_URI} [P,L]
+
+  # Next.js WebSocket / HTTP
   RewriteCond %{HTTP:Upgrade} =websocket [NC]
   RewriteRule ^(.*)$ ws://127.0.0.1:3100/$1 [P,L]
 
