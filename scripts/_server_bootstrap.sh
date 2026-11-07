@@ -34,7 +34,11 @@ chown -R itneck:itneck "$APP_ROOT"
 
 echo "==> Composer install"
 cd "$APP_ROOT/apps/api"
-sudo -u itneck composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
+COMPOSER_BIN="$(command -v composer || true)"
+if [ -z "$COMPOSER_BIN" ] && [ -x /usr/local/bin/composer ]; then
+  COMPOSER_BIN=/usr/local/bin/composer
+fi
+sudo -u itneck env PATH="/usr/local/bin:/usr/bin:$PATH" "$COMPOSER_BIN" install --no-interaction --prefer-dist --optimize-autoloader --no-dev
 
 echo "==> Write API .env"
 if [ ! -f "$APP_ROOT/apps/api/.env" ]; then

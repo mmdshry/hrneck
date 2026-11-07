@@ -5,11 +5,17 @@ use App\Providers\Filament\AdminPanelProvider;
 use App\Providers\HorizonServiceProvider;
 use App\Providers\TelescopeServiceProvider;
 use App\Providers\TenancyServiceProvider;
+use Laravel\Telescope\TelescopeApplicationServiceProvider;
 
-return [
+$providers = [
     AppServiceProvider::class,
     AdminPanelProvider::class,
     TenancyServiceProvider::class,
     HorizonServiceProvider::class,
-    TelescopeServiceProvider::class,
 ];
+
+if (class_exists(TelescopeApplicationServiceProvider::class)) {
+    $providers[] = TelescopeServiceProvider::class;
+}
+
+return $providers;
