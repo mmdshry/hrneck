@@ -1,0 +1,26 @@
+<?php
+
+namespace App\Domains\Ticketing\Jobs;
+
+use App\Domains\Ticketing\Actions\SendPendingNotifications;
+use App\Models\Tenant;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\SerializesModels;
+use Stancl\Tenancy\Facades\Tenancy;
+
+class SendDelayedTicketNotificationsJob implements ShouldQueue
+{
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+
+    public function handle(SendPendingNotifications $sender): void
+    {
+        foreach (Tenant::query()->cursor() as $tenant) {
+            Tenancy::initialize($tenant);
+            $sender->handle();
+            Tenancy::end();
+        }
+    }
+}

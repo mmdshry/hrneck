@@ -1,0 +1,22 @@
+@import '../../../../vendor/filament/filament/resources/css/theme.css';
+
+@source '../../../../app/Filament/**/*';
+@source '../../../../resources/views/filament/**/*';
+@source '../../../../resources/views/livewire/filament-tenant-switcher.blade.php';
+
+/* HRNECK Vault dark — denser chrome aligned with apps/web tokens */
+.fi-body {
+  --spacing: 0.22rem;
+}
+
+.fi-sidebar {
+  @apply border-r border-gray-950/5 dark:border-white/10;
+}
+
+.fi-topbar {
+  @apply border-b border-gray-950/5 dark:border-white/10;
+}
+
+.fi-tenant-switcher .fi-input {
+  @apply min-h-10;
+}

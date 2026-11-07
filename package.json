@@ -1,0 +1,17 @@
+{
+  "name": "hrneck",
+  "private": true,
+  "packageManager": "pnpm@11.6.0",
+  "scripts": {
+    "dev": "concurrently -k -n api,reverb,web -c blue,magenta,green \"pnpm dev:api\" \"pnpm dev:reverb\" \"pnpm dev:web\"",
+    "dev:web": "pnpm --dir apps/web dev --hostname 127.0.0.1 --port 3100",
+    "dev:api": "php apps/api/artisan serve --host=127.0.0.1 --port=8000",
+    "dev:reverb": "php apps/api/artisan reverb:start",
+    "build:web": "pnpm --dir apps/web build",
+    "lint:web": "pnpm --dir apps/web lint",
+    "test:web": "pnpm --dir apps/web test"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.6"
+  }
+}

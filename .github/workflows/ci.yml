@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_call:
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+          MYSQL_DATABASE: hrneck_central
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.5"
+          extensions: mbstring, openssl, pdo_mysql, tokenizer, xml, ctype, json, bcmath, redis
+          coverage: none
+      - run: composer install --no-interaction --prefer-dist
+      - run: cp .env.example .env
+      - run: php artisan key:generate
+      - name: Wait for MySQL and migrate
+        run: |
+          for i in $(seq 1 30); do
+            php -r 'try { new PDO("mysql:host=127.0.0.1;port=3306", "root", ""); exit(0);} catch (Throwable $e) { fwrite(STDERR, $e->getMessage().PHP_EOL); exit(1);}' && break
+            sleep 2
+          done
+          php artisan migrate --force --no-interaction
+      - run: php artisan test
+      - run: vendor/bin/pint --test
+      - run: vendor/bin/phpstan analyse --memory-limit=1G
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install
+      - run: pnpm --dir apps/web lint
+      - run: pnpm --dir apps/web test
+      - run: pnpm --dir apps/web exec playwright install --with-deps chromium
+      - name: Playwright (skip tenant-hosts on CI)
+        run: pnpm --dir apps/web exec playwright test --project=desktop-chromium --project=mobile-chrome
+      - run: pnpm --dir apps/web build
+      - name: Lighthouse CI (desktop + mobile)
+        working-directory: apps/web
+        run: |
+          pnpm start -- --hostname 127.0.0.1 --port 3100 &
+          pnpm exec wait-on http://127.0.0.1:3100
+          pnpm exec lhci autorun --config=./lighthouse/lighthouserc.js
+          pnpm exec lhci autorun --config=./lighthouse/lighthouserc.mobile.js
+        env:
+          LHCI_BUILD_CONTEXT__CURRENT_HASH: ${{ github.sha }}

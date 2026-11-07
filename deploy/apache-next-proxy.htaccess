@@ -1,0 +1,18 @@
+# Place in the document root that should reverse-proxy to Next.js (port 3100).
+# Requires: mod_rewrite, mod_proxy, mod_proxy_http, mod_proxy_wstunnel
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # WebSocket (Next HMR not used in prod; Reverb may be separate)
+  RewriteCond %{HTTP:Upgrade} =websocket [NC]
+  RewriteRule ^(.*)$ ws://127.0.0.1:3100/$1 [P,L]
+
+  RewriteCond %{REQUEST_URI} !^/\.well-known/
+  RewriteRule ^(.*)$ http://127.0.0.1:3100/$1 [P,L]
+</IfModule>
+
+<IfModule mod_proxy.c>
+  ProxyPreserveHost On
+  RequestHeader set X-Forwarded-Proto "https" env=HTTPS
+</IfModule>

@@ -1,0 +1,34 @@
+{
+  "users": [
+    {
+      "external_id": "u-1001",
+      "email": "alex.rivera@example.test",
+      "first_name": "Alex",
+      "last_name": "Rivera"
+    },
+    {
+      "external_id": "u-1002",
+      "email": "jordan.lee@example.test",
+      "first_name": "Jordan",
+      "last_name": "Lee"
+    },
+    {
+      "external_id": "u-1003",
+      "email": "sam.patel@example.test",
+      "first_name": "Sam",
+      "last_name": "Patel"
+    }
+  ],
+  "groups": [
+    {
+      "external_id": "g-finance",
+      "name": "Finance",
+      "member_external_ids": ["u-1001", "u-1003"]
+    },
+    {
+      "external_id": "g-engineering",
+      "name": "Engineering",
+      "member_external_ids": ["u-1002"]
+    }
+  ]
+}

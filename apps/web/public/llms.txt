@@ -1,0 +1,47 @@
+# HRNECK — HRNECK Training Portal
+
+Security awareness training platform for MSPs and organizations.
+
+## Public surfaces
+- Home: /
+- Sign in: /login
+- Operator guides hub: /docs
+- Getting started: /docs/getting-started
+- Dashboard guide: /docs/dashboard
+- Targets & groups guide: /docs/targets-groups
+- Training guide: /docs/training
+- Checklists guide: /docs/checklists
+- Ticketing guide: /docs/ticketing
+- Reporting guide: /docs/reporting
+- Users & roles guide: /docs/users-roles
+- Announcements guide: /docs/announcements-notifications
+- Settings guide: /docs/settings
+
+## Authenticated surfaces
+- MSP portal: /msp
+- Organization admin: /org
+- Training hub: /org/training
+- Training campaigns: /org/training/campaigns
+- Targets and groups: /org/targets
+- Users: /org/users
+- Roles: /org/roles
+- Reports: /org/reports
+- Report export: /org/reports/export
+- Settings: /org/settings
+- Checklists: /org/checklists
+- Checklist instances: /org/checklists/instances
+- Ticketing queue: /org/ticketing
+- Ticketing desks: /org/ticketing/desks
+- Ticketing KB: /org/ticketing/kb
+- Ticketing email: /org/ticketing/email
+- Ticketing reports: /org/ticketing/reports
+- Ticketing search: /org/ticketing/search
+- Service portal tickets: /portal/tickets
+- Service portal KB: /portal/kb
+- Learner portal: /learn
+- Platform Filament admin: /admin (API host)
+
+## Local development hosts
+- Tenant hosts use `{slug}.hrneck.test` in local development.
+- Demo credentials: admin@hrneck.test (password from API `.env.example`).
+- Production: https://hrneck.com/

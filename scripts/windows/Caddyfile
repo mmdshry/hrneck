@@ -1,0 +1,42 @@
+{
+	local_certs
+	auto_https disable_redirects
+	http_port 80
+	https_port 443
+}
+
+# Next.js (MSP + tenant UIs) — WebSocket upgrade required for Turbopack HMR
+(next_proxy) {
+	reverse_proxy 127.0.0.1:3100 {
+		header_up Host {host}
+		header_up X-Forwarded-Host {host}
+		header_up X-Forwarded-Proto {scheme}
+		# Ensure HMR /_next/hmr and app Reverb-auth traffic upgrade correctly
+		flush_interval -1
+	}
+}
+
+(api_proxy) {
+	reverse_proxy 127.0.0.1:8000 {
+		header_up Host {host}
+		header_up X-Forwarded-Host {host}
+		header_up X-Forwarded-Proto {scheme}
+	}
+}
+
+http://hrneck.test, http://app.hrneck.test, http://itneck.hrneck.test, http://test.hrneck.test, http://company.hrneck.test, http://*.hrneck.test {
+	import next_proxy
+}
+
+# Legacy *.itp.test aliases (same apps) so old bookmarks / HMR sockets still work
+http://app.itp.test, http://itneck.itp.test, http://test.itp.test, http://company.itp.test {
+	import next_proxy
+}
+
+http://admin.hrneck.test, http://api.hrneck.test {
+	import api_proxy
+}
+
+http://admin.itp.test, http://api.itp.test {
+	import api_proxy
+}
