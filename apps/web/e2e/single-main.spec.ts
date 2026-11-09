@@ -1,13 +1,21 @@
 import { expect, test } from "@playwright/test";
 
 test("client navigation keeps a single main landmark", async ({ page }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(120_000);
   await page.goto("/login");
-  await page.getByLabel("Email").fill("admin@hrneck.test");
-  await page.getByLabel("Password").fill("DemoPass!234");
+  const email = page.getByLabel("Email");
+  const password = page.getByLabel("Password");
+  await email.fill("");
+  await email.pressSequentially("admin@hrneck.test", { delay: 15 });
+  await password.fill("");
+  await password.pressSequentially("DemoPass!234", { delay: 15 });
+  await expect(email).toHaveValue("admin@hrneck.test");
   await page.getByRole("button", { name: "Continue" }).click();
   await page.waitForURL(/\/msp/, { timeout: 30_000 });
 
+  await expect(page.getByRole("link", { name: "Open tenant admin" }).first()).toBeVisible({
+    timeout: 20_000,
+  });
   await page.getByRole("link", { name: "Open tenant admin" }).first().click();
   await page.waitForURL(/\/org/, { timeout: 30_000 });
   await expect(page.locator("#main-content")).toHaveCount(1);

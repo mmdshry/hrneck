@@ -116,7 +116,7 @@ jobs:
       - name: Start API
         working-directory: apps/api
         run: |
-          php artisan serve --host=127.0.0.1 --port=8000 > /tmp/hrneck-api.log 2>&1 &
+          PHP_CLI_SERVER_WORKERS=8 php artisan serve --host=127.0.0.1 --port=8000 > /tmp/hrneck-api.log 2>&1 &
           for i in $(seq 1 40); do
             if curl -sf -o /dev/null http://127.0.0.1:8000/up; then
               curl -sf http://127.0.0.1:8000/api/v1/health

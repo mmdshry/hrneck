@@ -59,6 +59,8 @@ test.describe("Notifications and branding", () => {
       timeout: 15_000,
     });
     await page.goto("/org");
-    await expect(page.getByText("ITneck Demo Brand").first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText("ITneck Demo Brand").filter({ visible: true }).first()).toBeVisible({
+      timeout: 15_000,
+    });
   });
 });

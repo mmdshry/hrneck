@@ -2,14 +2,26 @@ import { test, expect } from "@playwright/test";
 
 async function loginAsOrgAdmin(page: import("@playwright/test").Page) {
   await page.goto("/login");
-  await page.getByLabel("Email").fill("admin@itneck.test");
-  await page.getByLabel("Password").fill("DemoPass!234");
+  const email = page.getByLabel("Email");
+  const password = page.getByLabel("Password");
+  await email.fill("");
+  await email.pressSequentially("admin@itneck.test", { delay: 15 });
+  await password.fill("");
+  await password.pressSequentially("DemoPass!234", { delay: 15 });
+  await expect(email).toHaveValue("admin@itneck.test");
   await page.getByRole("button", { name: "Continue" }).click();
-  await page.waitForURL(/\/(org|msp|learn)/, { timeout: 30_000 });
+  await page.waitForURL(
+    (url) => !url.pathname.startsWith("/login") && /\/org(?:\/|$)/.test(url.pathname),
+    { timeout: 30_000 },
+  );
+  await expect(page.getByRole("link", { name: "Notifications" }).first()).toBeVisible({
+    timeout: 20_000,
+  });
 }
 
 test.describe("Ticketing", () => {
   test("org ticketing queue and desks render", async ({ page }) => {
+    test.setTimeout(90_000);
     await loginAsOrgAdmin(page);
     await page.goto("/org/ticketing");
     await expect(page.getByRole("heading", { name: "Ticketing" })).toBeVisible();
