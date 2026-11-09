@@ -2,6 +2,7 @@
 
 namespace App\Domains\Ticketing\Actions;
 
+use App\Domains\Ticketing\Models\SdDesk;
 use App\Domains\Ticketing\Models\SdTicket;
 use App\Domains\Ticketing\Models\SdTicketNote;
 use Illuminate\Support\Collection;
@@ -53,7 +54,7 @@ class ImportExportTickets
                 continue;
             }
             $deskSlug = (string) ($row['desk_slug'] ?? 'incident');
-            $deskId = \App\Domains\Ticketing\Models\SdDesk::query()->where('slug', $deskSlug)->value('id');
+            $deskId = SdDesk::query()->where('slug', $deskSlug)->value('id');
             if (! $deskId) {
                 continue;
             }

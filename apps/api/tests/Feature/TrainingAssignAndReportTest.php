@@ -1,6 +1,7 @@
 <?php
 
 use App\Domains\Campaigns\Models\Campaign;
+use App\Domains\Campaigns\Models\CampaignRecipient;
 use App\Domains\TargetsGroups\Models\Group;
 use App\Domains\TargetsGroups\Models\Target;
 use App\Domains\TrainingLms\Models\Course;
@@ -8,6 +9,7 @@ use App\Domains\TrainingLms\Models\Enrollment;
 use App\Domains\TrainingLms\Models\Lesson;
 use App\Domains\TrainingLms\Models\LessonProgress;
 use App\Models\Tenant;
+use Database\Seeders\DemoSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use Stancl\Tenancy\Facades\Tenancy;
@@ -15,7 +17,7 @@ use Stancl\Tenancy\Facades\Tenancy;
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
-    $this->seed(\Database\Seeders\DemoSeeder::class);
+    $this->seed(DemoSeeder::class);
     $this->tenant = Tenant::query()->findOrFail('itneck');
 });
 
@@ -118,7 +120,7 @@ test('assign still succeeds when training reminder SMTP fails', function () {
             ->count()
     )->toBe(1);
     expect(
-        \App\Domains\Campaigns\Models\CampaignRecipient::query()
+        CampaignRecipient::query()
             ->where('status', 'failed')
             ->count()
     )->toBeGreaterThan(0);

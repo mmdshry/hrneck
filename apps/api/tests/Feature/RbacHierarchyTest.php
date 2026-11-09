@@ -4,13 +4,14 @@ use App\Domains\IdentityAccess\Actions\CreateOrgUser;
 use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
 use App\Models\Permission;
 use App\Models\Role;
+use Database\Seeders\DemoSeeder;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
-    $this->seed(\Database\Seeders\DemoSeeder::class);
+    $this->seed(DemoSeeder::class);
 });
 
 test('platform admin cannot call org apis without tenant membership', function () {

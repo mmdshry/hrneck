@@ -4,6 +4,7 @@ namespace App\Domains\TrainingLms\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 /**
  * @property int $enrollment_id
@@ -11,8 +12,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $status
  * @property int $progress_pct
  * @property int $watched_seconds
- * @property \Illuminate\Support\Carbon|null $opened_at
- * @property \Illuminate\Support\Carbon|null $completed_at
+ * @property Carbon|null $opened_at
+ * @property Carbon|null $completed_at
  */
 class LessonProgress extends Model
 {

@@ -2,9 +2,9 @@
 
 namespace App\Filament\Resources\ReportArchives\Pages;
 
+use App\Filament\Resources\Pages\ManageTenantRecords;
 use App\Filament\Resources\ReportArchives\ReportArchiveResource;
 use App\Support\FilamentTenant;
-use App\Filament\Resources\Pages\ManageTenantRecords;
 
 class ManageReportArchives extends ManageTenantRecords
 {

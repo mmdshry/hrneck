@@ -3,10 +3,10 @@
 namespace App\Filament\Resources\SendingProfiles\Pages;
 
 use App\Domains\MailDelivery\Models\SendingProfile;
+use App\Filament\Resources\Pages\ManageTenantRecords;
 use App\Filament\Resources\SendingProfiles\SendingProfileResource;
 use App\Support\FilamentTenant;
 use Filament\Actions\CreateAction;
-use App\Filament\Resources\Pages\ManageTenantRecords;
 
 class ManageSendingProfiles extends ManageTenantRecords
 {

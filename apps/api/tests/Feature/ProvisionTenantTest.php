@@ -4,13 +4,14 @@ use App\Domains\Tenancy\Actions\DeprovisionLoadTestTenant;
 use App\Domains\Tenancy\Actions\ProvisionTenant;
 use App\Models\Tenant;
 use App\Support\LoadTestMarkers;
+use Database\Seeders\DemoSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
-    $this->seed(\Database\Seeders\DemoSeeder::class);
+    $this->seed(DemoSeeder::class);
 });
 
 test('provision tenant creates database domain and sample content', function () {

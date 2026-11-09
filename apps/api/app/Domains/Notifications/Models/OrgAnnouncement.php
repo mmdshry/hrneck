@@ -3,13 +3,14 @@
 namespace App\Domains\Notifications\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
  * @property string $title
  * @property string $body
  * @property int|null $published_by
- * @property \Illuminate\Support\Carbon|null $published_at
+ * @property Carbon|null $published_at
  */
 class OrgAnnouncement extends Model
 {

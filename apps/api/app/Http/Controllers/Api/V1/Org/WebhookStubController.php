@@ -6,6 +6,7 @@ use App\Domains\Integrations\Actions\DispatchWebhookStub;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class WebhookStubController extends Controller
 {
@@ -24,7 +25,7 @@ class WebhookStubController extends Controller
                 $data['payload'] ?? [],
             );
         } catch (\InvalidArgumentException $e) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
+            throw ValidationException::withMessages([
                 'url' => [$e->getMessage()],
             ]);
         }

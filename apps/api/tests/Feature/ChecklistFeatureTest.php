@@ -1,11 +1,11 @@
 <?php
 
 use App\Domains\Checklists\Models\ChecklistAnswer;
-use App\Domains\Checklists\Models\ChecklistInstance;
 use App\Domains\Checklists\Models\ChecklistTemplate;
 use App\Domains\TargetsGroups\Models\Target;
 use App\Models\Tenant;
 use App\Models\User;
+use Database\Seeders\DemoSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -15,7 +15,7 @@ use Stancl\Tenancy\Facades\Tenancy;
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
-    $this->seed(\Database\Seeders\DemoSeeder::class);
+    $this->seed(DemoSeeder::class);
     $this->user = orgAdmin();
     $this->tenant = Tenant::query()->findOrFail('itneck');
 });
@@ -346,4 +346,3 @@ test('checklist image uploads are stored as webp', function () {
         ->and($upload['original_name'])->toEndWith('.webp');
     Storage::disk('local')->assertExists($upload['file_disk_path']);
 });
-

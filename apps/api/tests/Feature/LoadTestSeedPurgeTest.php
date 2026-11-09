@@ -2,6 +2,7 @@
 
 use App\Models\Tenant;
 use App\Support\LoadTestMarkers;
+use Database\Seeders\DemoSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -10,7 +11,7 @@ use Stancl\Tenancy\Facades\Tenancy;
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
-    $this->seed(\Database\Seeders\DemoSeeder::class);
+    $this->seed(DemoSeeder::class);
 });
 
 test('load test seed and purge round-trip with small scale', function () {

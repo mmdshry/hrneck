@@ -2,6 +2,7 @@
 
 use App\Domains\AnalyticsReporting\Models\ReportArchive;
 use App\Models\Tenant;
+use Database\Seeders\DemoSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Stancl\Tenancy\Facades\Tenancy;
@@ -9,7 +10,7 @@ use Stancl\Tenancy\Facades\Tenancy;
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
-    $this->seed(\Database\Seeders\DemoSeeder::class);
+    $this->seed(DemoSeeder::class);
 });
 
 test('org can generate and download quarterly pdf', function () {

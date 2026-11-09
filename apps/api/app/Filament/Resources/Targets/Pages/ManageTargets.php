@@ -4,14 +4,14 @@ namespace App\Filament\Resources\Targets\Pages;
 
 use App\Domains\DirectorySync\Actions\RunDirectorySync;
 use App\Domains\TargetsGroups\Models\Target;
+use App\Filament\Resources\Pages\ManageTenantRecords;
 use App\Filament\Resources\Targets\TargetResource;
 use App\Support\FilamentTenant;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Forms\Components\FileUpload;
-use App\Filament\Resources\Pages\ManageTenantRecords;
 use Filament\Notifications\Notification;
-use Illuminate\Support\Facades\Storage;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 class ManageTargets extends ManageTenantRecords
 {
@@ -44,7 +44,7 @@ class ManageTargets extends ManageTenantRecords
                         ->storeFiles(false),
                 ])
                 ->action(function (array $data): void {
-                    /** @var \Livewire\Features\SupportFileUploads\TemporaryUploadedFile $file */
+                    /** @var TemporaryUploadedFile $file */
                     $file = $data['file'];
                     $handle = fopen($file->getRealPath(), 'r');
                     $header = fgetcsv($handle) ?: [];

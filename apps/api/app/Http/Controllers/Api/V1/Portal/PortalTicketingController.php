@@ -2,13 +2,13 @@
 
 namespace App\Http\Controllers\Api\V1\Portal;
 
+use App\Domains\TargetsGroups\Models\Target;
 use App\Domains\Ticketing\Actions\CreateTicket;
 use App\Domains\Ticketing\Models\SdDesk;
 use App\Domains\Ticketing\Models\SdKbArticle;
 use App\Domains\Ticketing\Models\SdTicket;
 use App\Domains\Ticketing\Models\SdTicketNote;
 use App\Domains\Ticketing\Support\TicketingPayload;
-use App\Domains\TargetsGroups\Models\Target;
 use App\Http\Controllers\Controller;
 use App\Support\ApiPagination;
 use Illuminate\Http\JsonResponse;

@@ -20,6 +20,7 @@ use Filament\Schemas\Schema;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class TenantResource extends Resource
 {
@@ -112,9 +113,9 @@ class TenantResource extends Resource
             ->toolbarActions([]);
     }
 
-    public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
+    public static function getEloquentQuery(): Builder
     {
-        /** @var \Illuminate\Database\Eloquent\Builder<Tenant> $query */
+        /** @var Builder<Tenant> $query */
         $query = parent::getEloquentQuery();
 
         return $query->with('domains');

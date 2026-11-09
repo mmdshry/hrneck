@@ -3,9 +3,9 @@
 namespace App\Filament\Resources\Enrollments\Pages;
 
 use App\Filament\Resources\Enrollments\EnrollmentResource;
+use App\Filament\Resources\Pages\ManageTenantRecords;
 use App\Support\FilamentTenant;
 use Filament\Actions\CreateAction;
-use App\Filament\Resources\Pages\ManageTenantRecords;
 
 class ManageEnrollments extends ManageTenantRecords
 {

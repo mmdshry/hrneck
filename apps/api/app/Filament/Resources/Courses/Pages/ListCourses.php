@@ -14,6 +14,7 @@ use Filament\Resources\Pages\ListRecords;
 class ListCourses extends ListRecords
 {
     use InteractsWithFilamentTenantTable;
+
     protected static string $resource = CourseResource::class;
 
     protected function getHeaderActions(): array

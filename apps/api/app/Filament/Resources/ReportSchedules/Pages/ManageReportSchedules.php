@@ -2,9 +2,9 @@
 
 namespace App\Filament\Resources\ReportSchedules\Pages;
 
+use App\Filament\Resources\Pages\ManageTenantRecords;
 use App\Filament\Resources\ReportSchedules\ReportScheduleResource;
 use App\Support\FilamentTenant;
-use App\Filament\Resources\Pages\ManageTenantRecords;
 use Filament\Actions\CreateAction;
 
 class ManageReportSchedules extends ManageTenantRecords

@@ -3,6 +3,7 @@
 namespace App\Domains\Notifications\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
@@ -11,7 +12,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property string $title
  * @property string|null $body
  * @property array<string, mixed>|null $data
- * @property \Illuminate\Support\Carbon|null $read_at
+ * @property Carbon|null $read_at
  */
 class UserNotification extends Model
 {

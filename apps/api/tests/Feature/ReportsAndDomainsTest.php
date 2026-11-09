@@ -2,13 +2,14 @@
 
 use App\Domains\CustomDomains\Actions\BuildDnsGuidance;
 use App\Models\Tenant;
+use Database\Seeders\DemoSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Stancl\Tenancy\Facades\Tenancy;
 
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
-    $this->seed(\Database\Seeders\DemoSeeder::class);
+    $this->seed(DemoSeeder::class);
 });
 
 test('dns guidance includes spf dkim and dmarc stubs', function () {

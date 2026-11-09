@@ -25,12 +25,12 @@ return new class extends Migration
                 Schema::table($tableNames['roles'], function (Blueprint $blueprint): void {
                     $blueprint->dropUnique(['name', 'guard_name']);
                 });
-            } catch (\Throwable) {
+            } catch (Throwable) {
                 try {
                     Schema::table($tableNames['roles'], function (Blueprint $blueprint): void {
                         $blueprint->dropUnique('roles_name_guard_name_unique');
                     });
-                } catch (\Throwable) {
+                } catch (Throwable) {
                     // already team-scoped or absent
                 }
             }

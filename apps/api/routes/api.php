@@ -21,7 +21,6 @@ use App\Http\Controllers\Api\V1\Org\ReportScheduleController;
 use App\Http\Controllers\Api\V1\Org\SendingProfileController;
 use App\Http\Controllers\Api\V1\Org\SettingsController;
 use App\Http\Controllers\Api\V1\Org\TargetController;
-use App\Http\Controllers\Api\V1\Org\TrainingController;
 use App\Http\Controllers\Api\V1\Org\Ticketing\DeskController as TicketingDeskController;
 use App\Http\Controllers\Api\V1\Org\Ticketing\EmailReaderController;
 use App\Http\Controllers\Api\V1\Org\Ticketing\KbController;
@@ -29,6 +28,7 @@ use App\Http\Controllers\Api\V1\Org\Ticketing\SearchController as TicketingSearc
 use App\Http\Controllers\Api\V1\Org\Ticketing\TemplateController;
 use App\Http\Controllers\Api\V1\Org\Ticketing\TicketController;
 use App\Http\Controllers\Api\V1\Org\Ticketing\TicketingReportController;
+use App\Http\Controllers\Api\V1\Org\TrainingController;
 use App\Http\Controllers\Api\V1\Org\WebhookStubController;
 use App\Http\Controllers\Api\V1\Portal\PortalTicketingController;
 use App\Http\Middleware\EnsureOrgMembership;

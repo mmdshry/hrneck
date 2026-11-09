@@ -1,20 +1,24 @@
 <?php
 
+use App\Domains\Campaigns\Models\Campaign;
+use App\Domains\TargetsGroups\Models\Group;
 use App\Filament\Pages\Auth\Login;
 use App\Http\Middleware\ApplyFilamentTenantContext;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Support\FilamentTenant;
+use Database\Seeders\DemoSeeder;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Livewire\Livewire;
 use Stancl\Tenancy\Facades\Tenancy;
 
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
-    $this->seed(\Database\Seeders\DemoSeeder::class);
+    $this->seed(DemoSeeder::class);
 });
 
 test('organization users see an access message instead of a bad password', function () {
@@ -88,8 +92,8 @@ test('filament tenant middleware makes groups queryable like a livewire update',
     $middleware = new ApplyFilamentTenantContext;
     $middleware->handle(Request::create('/livewire/update', 'POST'), function () {
         expect(tenancy()->initialized)->toBeTrue()
-            ->and(\Illuminate\Support\Facades\Schema::hasTable('groups'))->toBeTrue()
-            ->and(App\Domains\TargetsGroups\Models\Group::query()->count())->toBeGreaterThan(0);
+            ->and(Schema::hasTable('groups'))->toBeTrue()
+            ->and(Group::query()->count())->toBeGreaterThan(0);
 
         return response('ok');
     });
@@ -123,7 +127,7 @@ test('requires filament tenant returns empty query without session', function ()
 
     FilamentTenant::set('itneck');
     Tenancy::initialize(Tenant::query()->findOrFail('itneck'));
-    expect(\App\Domains\Campaigns\Models\Campaign::query()->count())->toBeGreaterThanOrEqual(0);
+    expect(Campaign::query()->count())->toBeGreaterThanOrEqual(0);
     Tenancy::end();
     FilamentTenant::set(null);
 });

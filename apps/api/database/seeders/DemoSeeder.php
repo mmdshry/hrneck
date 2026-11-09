@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Domains\IdentityAccess\Actions\CreateOrgUser;
 use App\Domains\IdentityAccess\Actions\SeedRbacCatalog;
 use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
+use App\Models\Role;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Artisan;
@@ -19,7 +20,7 @@ class DemoSeeder extends Seeder
         $rbac->handle();
 
         setPermissionsTeamId(null);
-        $adminRole = \App\Models\Role::findOrCreate(OrgPermissionCatalog::PLATFORM_SUPER_ADMIN, OrgPermissionCatalog::GUARD);
+        $adminRole = Role::findOrCreate(OrgPermissionCatalog::PLATFORM_SUPER_ADMIN, OrgPermissionCatalog::GUARD);
 
         $admin = User::query()->updateOrCreate(
             ['email' => config('brand.demo_admin_email')],

@@ -6,14 +6,15 @@ use App\Domains\TargetsGroups\Models\Target;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 
 /**
  * @property int $course_id
  * @property int $target_id
  * @property string $status
  * @property int $progress
- * @property \Illuminate\Support\Carbon|null $opened_at
- * @property \Illuminate\Support\Carbon|null $completed_at
+ * @property Carbon|null $opened_at
+ * @property Carbon|null $completed_at
  * @property string $source
  */
 class Enrollment extends Model
