@@ -36,12 +36,12 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
     try {
       await ensureCsrf();
       const session = await fetchSessionUser();
-      if (!session?.tenant_id && !resolveTenant()) {
+      if (!session) {
         setBranding(null);
         clearPrimaryColor();
         return;
       }
-      const tenant = resolveTenant();
+      const tenant = session.tenant_id || resolveTenant();
       if (!tenant) {
         setBranding(null);
         clearPrimaryColor();
