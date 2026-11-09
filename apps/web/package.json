@@ -12,7 +12,7 @@
     "lighthouse:urls": "node -e \"console.log(require('./lighthouse/urls.json').join('\\n'))\"",
     "lighthouse:ci": "lhci autorun --config=./lighthouse/lighthouserc.js",
     "lighthouse:ci:mobile": "lhci autorun --config=./lighthouse/lighthouserc.mobile.js",
-    "lighthouse:local": "pnpm start -- --hostname 127.0.0.1 --port 3100"
+    "lighthouse:local": "next start --hostname 127.0.0.1 --port 3100"
   },
   "dependencies": {
     "@hookform/resolvers": "^6.0.2",
