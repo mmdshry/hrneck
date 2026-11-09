@@ -30,6 +30,8 @@ module.exports = {
           "best-practices",
           "seo",
         ],
+        // CI origin is http://127.0.0.1. This audit cannot pass there; production is HTTPS.
+        skipAudits: ["redirects-http"],
       },
     },
     assert: {
