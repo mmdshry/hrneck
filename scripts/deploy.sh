@@ -9,6 +9,11 @@ BRANCH="${DEPLOY_BRANCH:-main}"
 
 cd "$ROOT"
 
+# Root deploys a tree owned by the site user. Scope this process only.
+export GIT_CONFIG_COUNT=1
+export GIT_CONFIG_KEY_0=safe.directory
+export GIT_CONFIG_VALUE_0="$ROOT"
+
 echo "==> Fetching ${BRANCH}"
 git fetch --prune origin
 git checkout "$BRANCH"
