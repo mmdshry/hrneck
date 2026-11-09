@@ -1,8 +1,8 @@
 <?php
 
-use App\Domains\IdentityAccess\Actions\CreateOrgUser;
 use App\Domains\Campaigns\Models\Campaign;
 use App\Domains\Campaigns\Models\CampaignRecipient;
+use App\Domains\IdentityAccess\Actions\CreateOrgUser;
 use App\Domains\TargetsGroups\Models\Target;
 use App\Domains\TrainingLms\Models\Course;
 use App\Domains\TrainingLms\Models\Enrollment;
@@ -12,6 +12,7 @@ use App\Domains\TrainingLms\Models\Quiz;
 use App\Domains\TrainingLms\Models\QuizQuestion;
 use App\Models\Tenant;
 use App\Models\User;
+use Database\Seeders\DemoSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -21,7 +22,7 @@ use Stancl\Tenancy\Facades\Tenancy;
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
-    $this->seed(\Database\Seeders\DemoSeeder::class);
+    $this->seed(DemoSeeder::class);
     $this->user = orgAdmin();
     $this->tenant = Tenant::query()->findOrFail('itneck');
 });
@@ -223,7 +224,20 @@ test('video progress completes at eighty percent and quiz pass syncs campaign re
 });
 
 test('assignments without a matching learner profile return a short forbidden message', function () {
-    $response = asTenantOrg($this)
+    // Tenant databases are not rolled back between tests, and other features
+    // attach the demo org admin to a learner target. Use a fresh account.
+    Tenancy::end();
+
+    $user = app(CreateOrgUser::class)->handle(
+        'itneck',
+        'No Profile Learner',
+        'no-profile-'.Str::lower((string) Str::uuid()).'@itneck.test',
+        'DemoPass!234',
+        ['org_admin'],
+    );
+
+    $response = $this->actingAs($user)
+        ->withHeader('X-Tenant', 'itneck')
         ->getJson('/api/v1/org/training/assignments')
         ->assertForbidden()
         ->assertJsonPath('message', 'No assigned training found for this account yet.');

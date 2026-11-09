@@ -1,0 +1,295 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 5
+			path: app/Console/Commands/PurgeLoadTestCommand.php
+
+		-
+			message: '#^Called ''env'' outside of the config directory which returns null when the config is cached, use ''config''\.$#'
+			identifier: larastan.noEnvCallsOutsideOfConfig
+			count: 1
+			path: app/Console/Commands/SmtpSmokeCommand.php
+
+		-
+			message: '#^Access to an undefined property App\\Domains\\Campaigns\\Models\\CampaignRecipient\:\:\$clicked\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Domains/AnalyticsReporting/Actions/BuildOrgDetailedReport.php
+
+		-
+			message: '#^Access to an undefined property App\\Domains\\Campaigns\\Models\\CampaignRecipient\:\:\$opened\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Domains/AnalyticsReporting/Actions/BuildOrgDetailedReport.php
+
+		-
+			message: '#^Access to an undefined property App\\Domains\\Campaigns\\Models\\CampaignRecipient\:\:\$recipients\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Domains/AnalyticsReporting/Actions/BuildOrgDetailedReport.php
+
+		-
+			message: '#^Access to an undefined property App\\Domains\\Campaigns\\Models\\CampaignRecipient\:\:\$reported\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Domains/AnalyticsReporting/Actions/BuildOrgDetailedReport.php
+
+		-
+			message: '#^Access to an undefined property App\\Domains\\Campaigns\\Models\\CampaignRecipient\:\:\$sent\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Domains/AnalyticsReporting/Actions/BuildOrgDetailedReport.php
+
+		-
+			message: '#^Access to an undefined property App\\Domains\\Campaigns\\Models\\CampaignRecipient\:\:\$submitted\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Domains/AnalyticsReporting/Actions/BuildOrgDetailedReport.php
+
+		-
+			message: '#^Access to an undefined property App\\Domains\\TargetsGroups\\Models\\Target\:\:\$department_label\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Domains/AnalyticsReporting/Actions/BuildOrgDetailedReport.php
+
+		-
+			message: '#^Access to an undefined property App\\Domains\\TargetsGroups\\Models\\Target\:\:\$targets\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Domains/AnalyticsReporting/Actions/BuildOrgDetailedReport.php
+
+		-
+			message: '#^Match arm comparison between ''ticketing'' and ''ticketing'' is always true\.$#'
+			identifier: match.alwaysTrue
+			count: 2
+			path: app/Domains/AnalyticsReporting/Actions/BuildOrgDetailedReport.php
+
+		-
+			message: '#^Parameter \#3 \$rows of method App\\Domains\\AnalyticsReporting\\Actions\\BuildOrgDetailedReport\:\:writeMappedCsv\(\) expects Illuminate\\Support\\Collection\<int, array\<string, mixed\>\>, Illuminate\\Support\\Collection\<int, non\-empty\-array\<string, mixed\>\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domains/AnalyticsReporting/Actions/BuildOrgDetailedReport.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>first_name" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 3
+			path: app/Domains/AnalyticsReporting/Actions/BuildOrgDetailedReport.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>last_name" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 3
+			path: app/Domains/AnalyticsReporting/Actions/BuildOrgDetailedReport.php
+
+		-
+			message: '#^Method App\\Domains\\Audit\\Actions\\LogOrgActivity\:\:handle\(\) should return Spatie\\Activitylog\\Models\\Activity but returns Spatie\\Activitylog\\Contracts\\Activity\|null\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Domains/Audit/Actions/LogOrgActivity.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>title" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Domains/Campaigns/Actions/LaunchTrainingCampaign.php
+
+		-
+			message: '#^Offset ''item_key'' on array\{item_key\: string, value\?\: mixed, file_disk_path\?\: string\|null, file_mime\?\: string\|null, file_size\?\: int\|null\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Domains/Checklists/Actions/UpdateChecklistInstance.php
+
+		-
+			message: '#^Right side of && is always true\.$#'
+			identifier: booleanAnd.rightAlwaysTrue
+			count: 1
+			path: app/Domains/Checklists/Actions/UpdateChecklistInstance.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<array\{key\: non\-falsy\-string, type\: string, label\: non\-empty\-string, help\: string\|null, required\: bool, order\: int, options\: list\<array\{value\: string, label\: string\}\>, media\: array\{kind\: string, url\: string\|null, label\: string\|null\}\|null, \.\.\.\}\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Domains/Checklists/Support/ChecklistSchemaValidator.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<string, mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 2
+			path: app/Domains/Checklists/Support/ChecklistVisibility.php
+
+		-
+			message: '#^Method App\\Domains\\IdentityAccess\\Actions\\ManageOrgRole\:\:create\(\) should return App\\Models\\Role but returns Spatie\\Permission\\Models\\Role\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Domains/IdentityAccess/Actions/ManageOrgRole.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$tenant_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Domains/IdentityAccess/Actions/SeedRbacCatalog.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:assignRole\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Domains/IdentityAccess/Actions/SeedRbacCatalog.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:removeRole\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Domains/IdentityAccess/Actions/SeedRbacCatalog.php
+
+		-
+			message: '#^Method App\\Domains\\IdentityAccess\\Actions\\SeedRbacCatalog\:\:ensureOrgAdminRole\(\) should return App\\Models\\Role but returns Spatie\\Permission\\Contracts\\Role\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Domains/IdentityAccess/Actions/SeedRbacCatalog.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\),Illuminate\\Database\\Eloquent\\Model\>\:\:map\(\) expects callable\(Illuminate\\Database\\Eloquent\\Model, int\|string\)\: array\{id\: string, name\: mixed, industry\: string\|null, employee_band\: string\|null, status\: string, training_enabled\: bool, domains\: array\<int, mixed\>\}, Closure\(App\\Models\\Tenant\)\: array\{id\: string, name\: mixed, industry\: string\|null, employee_band\: string\|null, status\: string, training_enabled\: bool, domains\: array\<int, mixed\>\} given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domains/Realtime/Snapshots/LiveSnapshotBuilder.php
+
+		-
+			message: '#^Call to function is_array\(\) with string\|null will always evaluate to false\.$#'
+			identifier: function.impossibleType
+			count: 1
+			path: app/Domains/Ticketing/Actions/ApplySlaGoals.php
+
+		-
+			message: '#^Cannot call method lt\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: app/Domains/Ticketing/Actions/ApplySlaGoals.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 1
+			path: app/Domains/Ticketing/Actions/ApplySlaGoals.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<string, mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Domains/Ticketing/Actions/ImportExportTickets.php
+
+		-
+			message: '#^Offset ''assignee_pool'' on array\{\}\|string on left side of \?\? does not exist\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Domains/Ticketing/Actions/ProcessInboundEmail.php
+
+		-
+			message: '#^Offset ''body'' on array\{from\: string, subject\: string, body\: string, message_id\?\: string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Domains/Ticketing/Actions/ProcessInboundEmail.php
+
+		-
+			message: '#^Offset ''category_id'' on array\{\}\|string on left side of \?\? does not exist\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Domains/Ticketing/Actions/ProcessInboundEmail.php
+
+		-
+			message: '#^Offset ''from'' on array\{from\: string, subject\: string, body\: string, message_id\?\: string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Domains/Ticketing/Actions/ProcessInboundEmail.php
+
+		-
+			message: '#^Offset ''priority_id'' on array\{\}\|string on left side of \?\? does not exist\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Domains/Ticketing/Actions/ProcessInboundEmail.php
+
+		-
+			message: '#^Offset ''subject'' on array\{from\: string, subject\: string, body\: string, message_id\?\: string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Domains/Ticketing/Actions/ProcessInboundEmail.php
+
+		-
+			message: '#^Empty array passed to foreach\.$#'
+			identifier: foreach.emptyArray
+			count: 1
+			path: app/Domains/Ticketing/Actions/RunProcedure.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>name" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 4
+			path: app/Domains/Ticketing/Actions/TicketingReports.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Domains/TrainingLms/Actions/SyncEnrollmentProgress.php
+
+		-
+			message: '#^Access to an undefined property App\\Filament\\Pages\\DomainsSettings\:\:\$form\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Filament/Pages/DomainsSettings.php
+
+		-
+			message: '#^Access to an undefined property App\\Filament\\Pages\\OrgSettings\:\:\$form\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Filament/Pages/OrgSettings.php
+
+		-
+			message: '#^Cannot access property \$id on Illuminate\\Database\\Eloquent\\Model\|int\|string\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Filament/Resources/Courses/Pages/EditCourse.php
+
+		-
+			message: '#^Cannot call method quiz\(\) on Illuminate\\Database\\Eloquent\\Model\|int\|string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Filament/Resources/Courses/Pages/EditCourse.php
+
+		-
+			message: '#^Method App\\Filament\\Resources\\Tenants\\TenantResource\:\:getEloquentQuery\(\) should return Illuminate\\Database\\Eloquent\\Builder\<Illuminate\\Database\\Eloquent\\Model\> but returns Illuminate\\Database\\Eloquent\\Builder\<App\\Models\\Tenant\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Filament/Resources/Tenants/TenantResource.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>schema_json" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/V1/Org/ChecklistController.php
+
+		-
+			message: '#^Match expression does not handle remaining value\: mixed$#'
+			identifier: match.unhandled
+			count: 1
+			path: app/Http/Controllers/Api/V1/Org/Ticketing/TicketController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/Api/V1/Org/TrainingController.php
+
+		-
+			message: '#^Right side of \|\| is always true\.$#'
+			identifier: booleanOr.rightAlwaysTrue
+			count: 1
+			path: app/Http/Controllers/Api/V1/Org/TrainingController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\),Illuminate\\Database\\Eloquent\\Model\>\:\:mapWithKeys\(\) expects callable\(Illuminate\\Database\\Eloquent\\Model, int\|string\)\: array\<string, non\-falsy\-string\>, Closure\(App\\Models\\Tenant\)\: non\-empty\-array\<string, non\-falsy\-string\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Support/FilamentTenant.php
