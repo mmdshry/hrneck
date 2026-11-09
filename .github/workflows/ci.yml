@@ -70,8 +70,63 @@ jobs:
     defaults:
       run:
         working-directory: .
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+          MYSQL_DATABASE: hrneck_central
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
     steps:
       - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.5"
+          extensions: mbstring, openssl, pdo_mysql, tokenizer, xml, ctype, json, bcmath, redis
+          coverage: none
+      - name: Install API dependencies
+        working-directory: apps/api
+        run: composer install --no-interaction --prefer-dist
+      - name: Migrate and seed API
+        working-directory: apps/api
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+          for i in $(seq 1 30); do
+            php -r 'try { new PDO("mysql:host=127.0.0.1;port=3306", "root", ""); exit(0);} catch (Throwable $e) { fwrite(STDERR, $e->getMessage().PHP_EOL); exit(1);}' && break
+            sleep 2
+          done
+          php artisan migrate --force --no-interaction
+          php artisan db:seed --force --no-interaction
+      - name: Start API
+        working-directory: apps/api
+        run: |
+          php artisan serve --host=127.0.0.1 --port=8000 > /tmp/hrneck-api.log 2>&1 &
+          for i in $(seq 1 40); do
+            if curl -sf -o /dev/null http://127.0.0.1:8000/up; then
+              curl -sf http://127.0.0.1:8000/api/v1/health
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "API did not become ready" >&2
+          cat /tmp/hrneck-api.log >&2
+          exit 1
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -88,8 +143,13 @@ jobs:
       - name: Lighthouse CI (desktop + mobile)
         working-directory: apps/web
         run: |
-          pnpm start -- --hostname 127.0.0.1 --port 3100 &
-          pnpm exec wait-on http://127.0.0.1:3100
+          if command -v fuser >/dev/null; then fuser -k 3100/tcp || true; fi
+          sleep 1
+          pnpm start -- --hostname 127.0.0.1 --port 3100 > /tmp/hrneck-web.log 2>&1 &
+          if ! pnpm exec wait-on -t 60000 http://127.0.0.1:3100; then
+            cat /tmp/hrneck-web.log >&2
+            exit 1
+          fi
           pnpm exec lhci autorun --config=./lighthouse/lighthouserc.js
           pnpm exec lhci autorun --config=./lighthouse/lighthouserc.mobile.js
         env:

@@ -19,7 +19,7 @@ export function PageSkeleton({
       aria-live="polite"
       className={cn("mx-auto w-full max-w-6xl flex-1 space-y-6 px-6 py-10", className)}
     >
-      <span className="sr-only">Loading</span>
+      <h1 className="sr-only">Loading</h1>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 space-y-2">
           <Skeleton className="h-8 w-48 md:h-9 md:w-64" />

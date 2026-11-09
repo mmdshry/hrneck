@@ -19,7 +19,7 @@ test.describe("HRNECK smoke", () => {
   test("home is accessible and branded", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByRole("heading", { level: 1 })).toContainText(
-      "Training Portal",
+      "Security awareness training for MSPs and every client organization.",
     );
     await expect(page.getByRole("link", { name: "Skip to main content" })).toHaveAttribute(
       "href",

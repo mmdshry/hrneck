@@ -70,68 +70,64 @@ export function LandingFooter() {
               Contact
             </h2>
             <dl className="mt-6 space-y-5 text-sm">
-              <div className="flex gap-3">
-                <MapPin
-                  className="mt-0.5 h-4 w-4 shrink-0 text-[var(--accent)]"
-                  aria-hidden
-                />
-                <div>
-                  <dt className="font-medium text-[var(--foreground)]">
-                    Postal Address
-                  </dt>
-                  <dd className="mt-1.5 text-[var(--muted-foreground)]">
-                    San Diego, CA
-                  </dd>
-                </div>
+              <div>
+                <dt className="flex items-center gap-3 font-medium text-[var(--foreground)]">
+                  <MapPin
+                    className="h-4 w-4 shrink-0 text-[var(--accent)]"
+                    aria-hidden
+                  />
+                  Postal Address
+                </dt>
+                <dd className="mt-1.5 pl-7 text-[var(--muted-foreground)]">
+                  San Diego, CA
+                </dd>
               </div>
-              <div className="flex gap-3">
-                <Clock
-                  className="mt-0.5 h-4 w-4 shrink-0 text-[var(--accent)]"
-                  aria-hidden
-                />
-                <div>
-                  <dt className="font-medium text-[var(--foreground)]">
-                    Work Hours
-                  </dt>
-                  <dd className="mt-1.5 space-y-1 text-[var(--muted-foreground)]">
-                    <p>Monday–Friday, 7:00 AM – 7:00 PM</p>
-                    <p>Saturday, 8:00 AM – 3:00 PM</p>
-                  </dd>
-                </div>
+              <div>
+                <dt className="flex items-center gap-3 font-medium text-[var(--foreground)]">
+                  <Clock
+                    className="h-4 w-4 shrink-0 text-[var(--accent)]"
+                    aria-hidden
+                  />
+                  Work Hours
+                </dt>
+                <dd className="mt-1.5 space-y-1 pl-7 text-[var(--muted-foreground)]">
+                  <p>Monday–Friday, 7:00 AM – 7:00 PM</p>
+                  <p>Saturday, 8:00 AM – 3:00 PM</p>
+                </dd>
               </div>
-              <div className="flex gap-3">
-                <Phone
-                  className="mt-0.5 h-4 w-4 shrink-0 text-[var(--accent)]"
-                  aria-hidden
-                />
-                <div>
-                  <dt className="font-medium text-[var(--foreground)]">Phone</dt>
-                  <dd className="mt-1.5">
-                    <a
-                      href={`tel:${supportPhoneTel}`}
-                      className="text-[var(--primary)] underline-offset-4 hover:underline"
-                    >
-                      {supportPhoneDisplay}
-                    </a>
-                  </dd>
-                </div>
+              <div>
+                <dt className="flex items-center gap-3 font-medium text-[var(--foreground)]">
+                  <Phone
+                    className="h-4 w-4 shrink-0 text-[var(--accent)]"
+                    aria-hidden
+                  />
+                  Phone
+                </dt>
+                <dd className="mt-1.5 pl-7">
+                  <a
+                    href={`tel:${supportPhoneTel}`}
+                    className="text-[var(--primary)] underline-offset-4 hover:underline"
+                  >
+                    {supportPhoneDisplay}
+                  </a>
+                </dd>
               </div>
-              <div className="flex gap-3">
-                <Mail
-                  className="mt-0.5 h-4 w-4 shrink-0 text-[var(--accent)]"
-                  aria-hidden
-                />
-                <div>
-                  <dt className="font-medium text-[var(--foreground)]">Email</dt>
-                  <dd className="mt-1.5">
-                    <a
-                      href={`mailto:${supportEmail}`}
-                      className="text-[var(--primary)] underline-offset-4 hover:underline"
-                    >
-                      {supportEmail}
-                    </a>
-                  </dd>
-                </div>
+              <div>
+                <dt className="flex items-center gap-3 font-medium text-[var(--foreground)]">
+                  <Mail
+                    className="h-4 w-4 shrink-0 text-[var(--accent)]"
+                    aria-hidden
+                  />
+                  Email
+                </dt>
+                <dd className="mt-1.5 pl-7">
+                  <a
+                    href={`mailto:${supportEmail}`}
+                    className="text-[var(--primary)] underline-offset-4 hover:underline"
+                  >
+                    {supportEmail}
+                  </a>
+                </dd>
               </div>
             </dl>
           </div>
