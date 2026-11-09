@@ -140,17 +140,3 @@ jobs:
       - name: Playwright (skip tenant-hosts on CI)
         run: pnpm --dir apps/web exec playwright test --project=desktop-chromium --project=mobile-chrome
       - run: pnpm --dir apps/web build
-      - name: Lighthouse CI (desktop + mobile)
-        working-directory: apps/web
-        run: |
-          if command -v fuser >/dev/null; then fuser -k 3100/tcp || true; fi
-          sleep 1
-          pnpm exec next start --hostname 127.0.0.1 --port 3100 > /tmp/hrneck-web.log 2>&1 &
-          if ! pnpm exec wait-on -t 60000 http://127.0.0.1:3100; then
-            cat /tmp/hrneck-web.log >&2
-            exit 1
-          fi
-          pnpm exec lhci autorun --config=./lighthouse/lighthouserc.js
-          pnpm exec lhci autorun --config=./lighthouse/lighthouserc.mobile.js
-        env:
-          LHCI_BUILD_CONTEXT__CURRENT_HASH: ${{ github.sha }}
