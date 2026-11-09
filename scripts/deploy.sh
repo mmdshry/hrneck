@@ -25,6 +25,8 @@ composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
 
 echo "==> Node dependencies + builds"
 cd "$ROOT"
+# Non-interactive SSH has no TTY. pnpm refuses to recreate node_modules unless CI is set.
+export CI=true
 corepack enable >/dev/null 2>&1 || true
 pnpm install --frozen-lockfile
 pnpm --dir apps/api build
