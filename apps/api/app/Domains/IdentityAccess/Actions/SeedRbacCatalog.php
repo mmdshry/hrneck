@@ -78,7 +78,11 @@ class SeedRbacCatalog
         app()[PermissionRegistrar::class]->forgetCachedPermissions();
 
         setPermissionsTeamId($tenantId);
-        $role = Role::findOrCreate(OrgPermissionCatalog::LEARNER, OrgPermissionCatalog::GUARD);
+        Role::findOrCreate(OrgPermissionCatalog::LEARNER, OrgPermissionCatalog::GUARD);
+        $role = Role::query()
+            ->where('name', OrgPermissionCatalog::LEARNER)
+            ->where('guard_name', OrgPermissionCatalog::GUARD)
+            ->firstOrFail();
         $role->syncPermissions([OrgPermissionCatalog::TICKETING_PORTAL]);
         setPermissionsTeamId(null);
 

@@ -29,8 +29,7 @@ class SendTrainingReminderJob implements ShouldQueue
             return;
         }
 
-        $campaignStatus = (string) ($recipient->campaign?->status ?? '');
-        if (in_array($campaignStatus, ['cancelled', 'archived'], true)) {
+        if (in_array((string) $recipient->campaign->status, ['cancelled', 'archived'], true)) {
             return;
         }
 
