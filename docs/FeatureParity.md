@@ -13,14 +13,14 @@ Track implementation status for HRNECK.
 - [x] Email verification gate on login (admin-created users verified)
 - [x] Platform staff tenant-context (`staff_tenant_id` enter/leave) for Next `/org`
 - [x] Next `proxy.ts` auth gate for `/msp` `/org` `/learn` `/portal`
-- [x] RBAC hierarchy: platform staff (`platform_super_admin` / `platform_agent`) vs single-tenant org users (`org_admin` + custom roles)
+- [x] RBAC roles (peer, not hierarchical): platform staff (`platform_super_admin` / `platform_agent`) and single-tenant org users (`org_admin` + custom roles + `learner`)
 - [x] Spatie teams (`tenant_id`) + `users.tenant_id` membership (no multi-company users)
 - [x] Org permission catalog + middleware on `/api/v1/org/*`; MSP gated to platform staff
 - [x] Org Users / Roles API + Next UI (`/org/users`, `/org/roles`)
-- [x] Employees (`Target`) categorized by department/groups only (no RBAC)
+- [x] Employees (`Target`) paired with login `User`/`learner`; categorized by department/groups (not operator RBAC)
 - [x] Demo users: `admin@hrneck.test` (platform), `admin@{tenant}.test` (org_admin)
 - [x] White-label settings API (display name, color, timezone)
-- [x] MSP Organizations live API (industry, employee band, status, module flags)
+- [x] MSP Organizations live API (industry, employee band, status, module flags / `training_enabled` — informational, not enforced)
 - [x] Realtime WebSocket (Laravel Reverb + Echo): MSP + org Refresh-live pages use private channel snapshot/updated (no manual refresh)
 - [x] Org shell sidebar (Dashboard, Organizations/MSP, Training, Courses, Checklists, Ticketing, Employees, Departments, Groups, Users, Roles, Reporting, Export, Announcements, Settings, Guides)
 - [x] Filament full admin (`admin.hrneck.test/admin`): Tenant Switcher (`filament_tenant_id`) + central directory + full tenant ops/settings/reporting
@@ -59,7 +59,7 @@ Track implementation status for HRNECK.
 
 - [x] Admin-only flexible form builder (`org.checklists.manage`); no learner/`/learn` access
 - [x] Template versions + per-target instances bound to `Target`
-- [x] Item types: section, checkbox, text, select, date, number, file, link, rich note
+- [x] Item types: section, checkbox, short_text, long_text, single_select, multi_select, date, number, file, link, rich_note
 - [x] Conditional visibility (`visible_when`) + item dependencies (`requires`)
 - [x] Save template with admin choice: apply schema to open instances or new-only
 - [x] Detailed activity audit (Spatie activitylog in tenant DB) + instance audit UI
@@ -117,7 +117,7 @@ Track implementation status for HRNECK.
 
 ## Platform
 
-- [x] Feature flags (Pennant)
+- [x] Feature flags (Pennant) — informational / stored; not used as hard enforcement gates
 - [x] Audit log package installed
 - [x] Fleet-wide org CRUD activity logging (Spatie `activity_log` in tenant DB via `LogOrgActivity`)
 - [x] Filament Activity log resource (read-only; HRneck platform staff + tenant switcher; not exposed to customers)
