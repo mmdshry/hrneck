@@ -59,8 +59,9 @@ test.describe("Notifications and branding", () => {
       timeout: 15_000,
     });
     await page.goto("/org");
-    await expect(page.getByText("ITneck Demo Brand").filter({ visible: true }).first()).toBeVisible({
-      timeout: 15_000,
-    });
+    // Brand chrome can appear in the sidebar wordmark or mobile header BrandMark.
+    await expect(
+      page.getByText("ITneck Demo Brand").filter({ visible: true }).first(),
+    ).toBeVisible({ timeout: 20_000 });
   });
 });

@@ -118,7 +118,8 @@ jobs:
       - name: Start API
         working-directory: apps/api
         run: |
-          PHP_CLI_SERVER_WORKERS=16 php artisan serve --host=127.0.0.1 --port=8000 > /tmp/hrneck-api.log 2>&1 &
+          # --no-reload is required for PHP_CLI_SERVER_WORKERS to take effect.
+          PHP_CLI_SERVER_WORKERS=8 php artisan serve --host=127.0.0.1 --port=8000 --no-reload > /tmp/hrneck-api.log 2>&1 &
           echo $! > /tmp/hrneck-api.pid
           for i in $(seq 1 40); do
             if curl -sf -o /dev/null http://127.0.0.1:8000/up; then
@@ -140,16 +141,43 @@ jobs:
       - run: pnpm --dir apps/web lint
       - run: pnpm --dir apps/web test
       - run: pnpm --dir apps/web exec playwright install --with-deps chromium
-      - name: Playwright desktop
-        run: pnpm --dir apps/web exec playwright test --project=desktop-chromium
+      - name: Playwright desktop core
+        run: >
+          pnpm --dir apps/web exec playwright test --project=desktop-chromium
+          --grep-invert "Learner portal|Password reset UI|Targets CSV import|Notifications and branding"
+      - name: Restart API before desktop heavy Playwright
+        working-directory: apps/api
+        run: |
+          if [[ -f /tmp/hrneck-api.pid ]]; then
+            kill "$(cat /tmp/hrneck-api.pid)" 2>/dev/null || true
+            pkill -f "artisan serve --host=127.0.0.1 --port=8000" 2>/dev/null || true
+            sleep 2
+          fi
+          PHP_CLI_SERVER_WORKERS=8 php artisan serve --host=127.0.0.1 --port=8000 --no-reload > /tmp/hrneck-api.log 2>&1 &
+          echo $! > /tmp/hrneck-api.pid
+          for i in $(seq 1 40); do
+            if curl -sf -o /dev/null http://127.0.0.1:8000/up; then
+              curl -sf http://127.0.0.1:8000/api/v1/health
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "API did not become ready after restart" >&2
+          cat /tmp/hrneck-api.log >&2
+          exit 1
+      - name: Playwright desktop heavy
+        run: >
+          pnpm --dir apps/web exec playwright test --project=desktop-chromium
+          e2e/learner.spec.ts e2e/password-reset.spec.ts e2e/targets-import.spec.ts e2e/notifications-branding.spec.ts
       - name: Restart API before mobile Playwright
         working-directory: apps/api
         run: |
           if [[ -f /tmp/hrneck-api.pid ]]; then
             kill "$(cat /tmp/hrneck-api.pid)" 2>/dev/null || true
-            sleep 1
+            pkill -f "artisan serve --host=127.0.0.1 --port=8000" 2>/dev/null || true
+            sleep 2
           fi
-          PHP_CLI_SERVER_WORKERS=16 php artisan serve --host=127.0.0.1 --port=8000 > /tmp/hrneck-api.log 2>&1 &
+          PHP_CLI_SERVER_WORKERS=8 php artisan serve --host=127.0.0.1 --port=8000 --no-reload > /tmp/hrneck-api.log 2>&1 &
           echo $! > /tmp/hrneck-api.pid
           for i in $(seq 1 40); do
             if curl -sf -o /dev/null http://127.0.0.1:8000/up; then
