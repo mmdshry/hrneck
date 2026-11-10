@@ -37,3 +37,23 @@ export async function openOrgNavIfNeeded(page: Page): Promise<void> {
     await expect(page.locator("#org-mobile-nav")).toBeVisible();
   }
 }
+
+/** Prefer the visible control; desktop sidebar stays in the DOM while inert on mobile. */
+export function visibleRole(
+  page: Page,
+  role: Parameters<Page["getByRole"]>[0],
+  name: string | RegExp,
+) {
+  return page.getByRole(role, { name }).filter({ visible: true });
+}
+
+/** Prefer the visible control — desktop sidebar and mobile drawer both mount Sign out. */
+export async function signOutFromOrgShell(page: Page): Promise<void> {
+  await openOrgNavIfNeeded(page);
+  const mobileNav = page.locator("#org-mobile-nav");
+  const signOut = (await mobileNav.isVisible())
+    ? mobileNav.getByRole("button", { name: /sign out/i })
+    : page.getByRole("button", { name: /sign out/i }).locator("visible=true");
+  await expect(signOut.first()).toBeVisible({ timeout: 15_000 });
+  await signOut.first().click();
+}

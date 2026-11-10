@@ -13,15 +13,18 @@ test.describe("DataTable filters", () => {
     await page.getByRole("button", { name: "Create ticket" }).click();
     await page.waitForURL(/\/org\/ticketing\/tickets\/\d+/, { timeout: 30_000 });
     await page.goto("/org/ticketing");
-    await expect(page.getByLabel("Search table")).toBeVisible();
+    await expect(page.getByLabel("Search table").filter({ visible: true })).toBeVisible();
     // Column filters sit in a desktop table row; on mobile they live in a sheet.
-    const filterNumber = page.getByLabel("Filter Number");
-    if (!(await filterNumber.first().isVisible())) {
-      await page.getByRole("button", { name: /^Filters/i }).click();
+    // Both mount in the DOM — always target a visible control.
+    let filterNumber = page.getByLabel("Filter Number").filter({ visible: true });
+    if ((await filterNumber.count()) === 0) {
+      await page.getByRole("button", { name: /^Filters/i }).filter({ visible: true }).click();
+      filterNumber = page.getByLabel("Filter Number").filter({ visible: true });
     }
     await expect(filterNumber.first()).toBeVisible();
-    await page.getByLabel("Search table").fill("INC");
-    await expect(page.getByLabel("Search table")).toHaveValue("INC");
+    const search = page.getByLabel("Search table").filter({ visible: true });
+    await search.fill("INC");
+    await expect(search).toHaveValue("INC");
   });
 
   test("reports users section has searchable DataTable", async ({ page }) => {

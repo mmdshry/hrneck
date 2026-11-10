@@ -24,7 +24,15 @@ export default defineConfig({
     },
     {
       name: "mobile-chrome",
-      testIgnore: /tenant-hosts\.spec\.ts/,
+      // Keep mobile focused on shell/smoke coverage. Heavy API-mutating specs stay
+      // on desktop so php artisan serve is less likely to die mid-suite in CI.
+      testIgnore: [
+        /tenant-hosts\.spec\.ts/,
+        /learner\.spec\.ts/,
+        /password-reset\.spec\.ts/,
+        /targets-import\.spec\.ts/,
+        /ticketing-advanced\.spec\.ts/,
+      ],
       use: {
         ...devices["Pixel 7"],
         ...(useSystemChrome ? { channel: "chrome" as const } : {}),
