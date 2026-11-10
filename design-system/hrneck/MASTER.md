@@ -19,12 +19,13 @@
 
 | Role | Hex | CSS Variable |
 |------|-----|--------------|
-| Primary | `#1E3A5F` | `--color-primary` / `--primary` |
+| Primary | `#083A6D` | `--color-primary` / `--primary` |
 | On Primary | `#FFFFFF` | `--color-on-primary` |
 | Secondary | `#334155` | `--color-secondary` |
 | On Secondary | `#FFFFFF` | `--color-on-secondary` |
-| Accent/CTA | `#047857` | `--color-accent` / `--accent` |
+| Accent/CTA | `#083A6D` | `--color-accent` / `--accent` |
 | On Accent/CTA | `#FFFFFF` | `--color-on-accent` |
+| Success (status only) | `#047857` | `--success` |
 | Background | `#F8FAFC` | `--color-background` |
 | Foreground | `#0F172A` | `--color-foreground` |
 | Card | `#FFFFFF` | `--color-card` |
@@ -34,9 +35,11 @@
 | Border | `#E2E8F0` | `--color-border` |
 | Destructive | `#DC2626` | `--color-destructive` |
 | On Destructive | `#FFFFFF` | `--color-on-destructive` |
-| Ring | `#1E3A5F` | `--color-ring` |
+| Ring | `#083A6D` | `--color-ring` |
+| Brand mark navy | `#083A6D` | `--brand` |
+| Brand spark | `#F76B13` | `--spark` |
 
-**Color Notes:** Navy trust + emerald accent (≥4.5:1 with white). Do not use accent as body/link text on light backgrounds — use primary for links.
+**Color Notes:** Source of truth is `apps/web/src/app/globals.css`. Primary and accent share logo navy (`#083A6D`). Emerald is **success status only**, not CTA. Do not use success green for primary actions.
 
 ### Typography
 

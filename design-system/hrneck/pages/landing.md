@@ -13,7 +13,7 @@
 
 - First viewport: brand (hero-level), one headline, one supporting sentence, one CTA group.
 - Max width ~72rem; generous white space (Minimalism / Swiss).
-- No cards in the hero; no floating badges or promo chips on media.
+- Hero may include the product mock as the dominant visual plane (full-bleed / edge-aligned). Avoid floating promo badges or info chips on media.
 
 ### Spacing Overrides
 
@@ -22,7 +22,7 @@
 ### Color Overrides
 
 - Default theme is **light**. Dark is optional via theme toggle.
-- Primary navy + green accent on `#F8FAFC`.
+- Primary and accent both logo navy `#083A6D` on `#F8FAFC`. Emerald is success status only.
 
 ### Component Overrides
 

@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HRNECK · Production Access Guide</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --primary: #083A6D;
+      --spark: #F76B13;
+      --bg: #F8FAFC;
+      --fg: #0F172A;
+      --muted: #E2E8F0;
+      --muted-fg: #334155;
+      --card: #FFFFFF;
+      --success: #047857;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    @page {
+      size: A4 landscape;
+      margin: 0;
+    }
+
+    html, body {
+      width: 297mm;
+      height: 210mm;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: "Plus Jakarta Sans", "Segoe UI", sans-serif;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .page {
+      width: 297mm;
+      height: 210mm;
+      padding: 10mm 12mm 8mm;
+      display: flex;
+      flex-direction: column;
+      gap: 6mm;
+      background:
+        radial-gradient(ellipse 80% 50% at 0% 0%, rgba(8, 58, 109, 0.08), transparent 55%),
+        radial-gradient(ellipse 60% 40% at 100% 100%, rgba(247, 107, 19, 0.07), transparent 50%),
+        var(--bg);
+    }
+
+    header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 12mm;
+      border-bottom: 2px solid var(--primary);
+      padding-bottom: 4mm;
+    }
+
+    .brand {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5mm;
+    }
+
+    .brand-mark {
+      display: flex;
+      align-items: center;
+      gap: 3mm;
+    }
+
+    .brand-mark .spark {
+      width: 8mm;
+      height: 8mm;
+      border-radius: 2mm;
+      background: linear-gradient(135deg, var(--primary), #0B4F94);
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    .brand-mark .spark::after {
+      content: "";
+      position: absolute;
+      right: 1.2mm;
+      bottom: 1.2mm;
+      width: 2.4mm;
+      height: 2.4mm;
+      border-radius: 0.6mm;
+      background: var(--spark);
+    }
+
+    .brand-name {
+      font-size: 22pt;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      color: var(--primary);
+      line-height: 1;
+    }
+
+    .subtitle {
+      font-size: 9.5pt;
+      font-weight: 600;
+      color: var(--muted-fg);
+      margin-left: 11mm;
+    }
+
+    .badge {
+      background: var(--primary);
+      color: #fff;
+      font-size: 8pt;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 2mm 3.5mm;
+      border-radius: 1.5mm;
+      white-space: nowrap;
+    }
+
+    .columns {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 5mm;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .col {
+      background: var(--card);
+      border: 1px solid var(--muted);
+      border-radius: 3mm;
+      padding: 5mm;
+      display: flex;
+      flex-direction: column;
+      gap: 3.5mm;
+      box-shadow: 0 1mm 3mm rgba(15, 23, 42, 0.04);
+    }
+
+    .col-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 3mm;
+    }
+
+    .col-title {
+      font-size: 12pt;
+      font-weight: 800;
+      color: var(--primary);
+      letter-spacing: -0.02em;
+    }
+
+    .role-tag {
+      font-size: 7pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--spark);
+      background: rgba(247, 107, 19, 0.12);
+      padding: 1mm 2mm;
+      border-radius: 1mm;
+    }
+
+    .steps {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 2.5mm;
+    }
+
+    .steps li {
+      display: grid;
+      grid-template-columns: 6mm 1fr;
+      gap: 2.5mm;
+      align-items: start;
+    }
+
+    .num {
+      width: 6mm;
+      height: 6mm;
+      border-radius: 50%;
+      background: var(--primary);
+      color: #fff;
+      font-size: 8pt;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+      margin-top: 0.3mm;
+    }
+
+    .step-body {
+      font-size: 8.5pt;
+      line-height: 1.35;
+      color: var(--fg);
+      font-weight: 500;
+    }
+
+    .step-body strong {
+      font-weight: 700;
+      color: var(--primary);
+    }
+
+    .url {
+      font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+      font-size: 7.8pt;
+      font-weight: 600;
+      color: var(--primary);
+      word-break: break-all;
+    }
+
+    .creds {
+      background: #F1F5F9;
+      border: 1px dashed #CBD5E1;
+      border-radius: 2mm;
+      padding: 2.5mm 3mm;
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 1mm 3mm;
+      font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+      font-size: 8pt;
+    }
+
+    .creds dt {
+      color: var(--muted-fg);
+      font-weight: 700;
+      font-family: "Plus Jakarta Sans", sans-serif;
+      font-size: 7pt;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      align-self: center;
+    }
+
+    .creds dd {
+      font-weight: 700;
+      color: var(--fg);
+      word-break: break-all;
+    }
+
+    .note {
+      font-size: 7.5pt;
+      color: var(--muted-fg);
+      font-weight: 500;
+      line-height: 1.3;
+    }
+
+    .filament {
+      background: var(--primary);
+      color: #fff;
+      border-radius: 3mm;
+      padding: 4mm 5mm;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 5mm;
+      align-items: center;
+    }
+
+    .filament-label {
+      font-size: 7.5pt;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--spark);
+      white-space: nowrap;
+    }
+
+    .filament-title {
+      font-size: 10.5pt;
+      font-weight: 800;
+      margin-bottom: 1mm;
+    }
+
+    .filament-body {
+      font-size: 8pt;
+      font-weight: 500;
+      line-height: 1.35;
+      opacity: 0.95;
+    }
+
+    .filament-body .url {
+      color: #fff;
+      opacity: 1;
+    }
+
+    .filament-creds {
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 2mm;
+      padding: 2.5mm 3mm;
+      font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+      font-size: 7.5pt;
+      font-weight: 700;
+      line-height: 1.45;
+      white-space: nowrap;
+    }
+
+    footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 6.5pt;
+      color: var(--muted-fg);
+      font-weight: 500;
+    }
+
+    footer .warn {
+      color: #B45309;
+      font-weight: 700;
+    }
+
+    @media print {
+      html, body, .page {
+        width: 297mm;
+        height: 210mm;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <div class="brand">
+        <div class="brand-mark">
+          <span class="spark" aria-hidden="true"></span>
+          <span class="brand-name">HRNECK</span>
+        </div>
+        <p class="subtitle">Production access guide · executive walkthrough</p>
+      </div>
+      <span class="badge">Confidential · DemoSeeder accounts</span>
+    </header>
+
+    <div class="columns">
+      <section class="col" aria-labelledby="super-admin">
+        <div class="col-head">
+          <h2 class="col-title" id="super-admin">Platform Super Admin</h2>
+          <span class="role-tag">MSP console</span>
+        </div>
+        <ol class="steps">
+          <li>
+            <span class="num">1</span>
+            <div class="step-body">
+              Open <span class="url">https://app.hrneck.com/login</span>
+              <br /><span class="note">Also works at https://hrneck.com/login</span>
+            </div>
+          </li>
+          <li>
+            <span class="num">2</span>
+            <div class="step-body">
+              Sign in with platform credentials:
+              <dl class="creds" style="margin-top: 1.5mm;">
+                <dt>Email</dt>
+                <dd>admin@hrneck.test</dd>
+                <dt>Password</dt>
+                <dd>DemoPass!234</dd>
+              </dl>
+            </div>
+          </li>
+          <li>
+            <span class="num">3</span>
+            <div class="step-body">Complete <strong>MFA only if prompted</strong> (seeded off by default).</div>
+          </li>
+          <li>
+            <span class="num">4</span>
+            <div class="step-body">You land on <strong>/msp</strong> — Organizations directory.</div>
+          </li>
+          <li>
+            <span class="num">5</span>
+            <div class="step-body">
+              Optional: click <strong>Open tenant admin</strong> to work inside that tenant’s <strong>/org</strong>.
+              Use <strong>Exit tenant</strong> to return to MSP.
+            </div>
+          </li>
+        </ol>
+      </section>
+
+      <section class="col" aria-labelledby="org-admin">
+        <div class="col-head">
+          <h2 class="col-title" id="org-admin">Organization Admin</h2>
+          <span class="role-tag">Tenant · itneck</span>
+        </div>
+        <ol class="steps">
+          <li>
+            <span class="num">1</span>
+            <div class="step-body">
+              Open tenant host <span class="url">https://itneck.hrneck.com/login</span>
+            </div>
+          </li>
+          <li>
+            <span class="num">2</span>
+            <div class="step-body">
+              Sign in with org admin credentials:
+              <dl class="creds" style="margin-top: 1.5mm;">
+                <dt>Email</dt>
+                <dd>admin@itneck.test</dd>
+                <dt>Password</dt>
+                <dd>DemoPass!234</dd>
+                <dt>Tenant</dt>
+                <dd>itneck</dd>
+              </dl>
+            </div>
+          </li>
+          <li>
+            <span class="num">3</span>
+            <div class="step-body">Complete <strong>MFA only if prompted</strong>.</div>
+          </li>
+          <li>
+            <span class="num">4</span>
+            <div class="step-body">
+              You land on <strong>/org</strong> — Organization dashboard
+              (training, employees, ticketing, settings).
+            </div>
+          </li>
+        </ol>
+        <p class="note" style="margin-top: auto;">
+          Org admins use the tenant subdomain only. They cannot open /msp or Filament.
+        </p>
+      </section>
+    </div>
+
+    <section class="filament" aria-labelledby="filament">
+      <div class="filament-label">Filament</div>
+      <div>
+        <h2 class="filament-title" id="filament">Platform ops panel</h2>
+        <p class="filament-body">
+          Open <span class="url">https://admin.hrneck.com/admin/login</span>
+          · Central ops: tenants, health, activity log (not the customer UI).
+        </p>
+      </div>
+      <div class="filament-creds">
+        admin@hrneck.test<br />
+        DemoPass!234
+      </div>
+    </section>
+
+    <footer>
+      <span>HRNECK · hrneck.com · accounts from DemoSeeder / brand.php</span>
+      <span class="warn">Do not forward beyond intended recipients · MFA off by default</span>
+    </footer>
+  </div>
+</body>
+</html>

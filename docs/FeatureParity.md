@@ -7,7 +7,12 @@ Track implementation status for HRNECK.
 - [x] Foundation monorepo + brand config
 - [x] Demo MSP admin user
 - [x] Demo tenants (`itneck`, `test`, `company`) on `{slug}.hrneck.test`
-- [x] MFA setup/verify API + Settings MFA page
+- [x] MFA setup/verify/disable + recovery codes + Settings MFA/password page
+- [x] Filament MFA (App Authentication) + password reset on admin panel
+- [x] Password forgot/reset/change API + Next `/login/forgot` `/login/reset`
+- [x] Email verification gate on login (admin-created users verified)
+- [x] Platform staff tenant-context (`staff_tenant_id` enter/leave) for Next `/org`
+- [x] Next `proxy.ts` auth gate for `/msp` `/org` `/learn` `/portal`
 - [x] RBAC hierarchy: platform staff (`platform_super_admin` / `platform_agent`) vs single-tenant org users (`org_admin` + custom roles)
 - [x] Spatie teams (`tenant_id`) + `users.tenant_id` membership (no multi-company users)
 - [x] Org permission catalog + middleware on `/api/v1/org/*`; MSP gated to platform staff
@@ -17,7 +22,7 @@ Track implementation status for HRNECK.
 - [x] White-label settings API (display name, color, timezone)
 - [x] MSP Organizations live API (industry, employee band, status, module flags)
 - [x] Realtime WebSocket (Laravel Reverb + Echo): MSP + org Refresh-live pages use private channel snapshot/updated (no manual refresh)
-- [x] Org shell sidebar (Dashboard, Users, Roles, Training, Checklists, Ticketing, Targets, Reporting, Settings, Guides)
+- [x] Org shell sidebar (Dashboard, Organizations/MSP, Training, Courses, Checklists, Ticketing, Employees, Departments, Groups, Users, Roles, Reporting, Export, Announcements, Settings, Guides)
 - [x] Filament full admin (`admin.hrneck.test/admin`): Tenant Switcher (`filament_tenant_id`) + central directory + full tenant ops/settings/reporting
 - [ ] SSO admin Entra OIDC (deferred)
 - [ ] Active/Purchased license cards (deferred to Billing)
@@ -28,7 +33,7 @@ Track implementation status for HRNECK.
 |---------|------|
 | Filament (`/admin`) | Platform staff only (`platform_super_admin` / `platform_agent`); tenant switcher for ops |
 | Next `/msp` | Platform staff |
-| Next `/org` | Organization users (`tenant_id` match) with RBAC permissions |
+| Next `/org` | Organization users (`tenant_id` match) **or** platform staff after MSP enter |
 
 ## Targets & directory
 
@@ -59,6 +64,7 @@ Track implementation status for HRNECK.
 - [x] Save template with admin choice: apply schema to open instances or new-only
 - [x] Detailed activity audit (Spatie activitylog in tenant DB) + instance audit UI
 - [x] Five system HR templates (onboarding, offboarding, IT access, transfer, leave return)
+- [x] Checklist packs (API + Next `/org/checklists/packs`)
 - [ ] Filament parity for checklists (deferred)
 
 ## Reporting
@@ -81,17 +87,16 @@ Track implementation status for HRNECK.
 
 - [x] ITIL desks: Incident, Problem, Service Request, Change + Knowledge Base seed
 - [x] Stages, statuses, priorities, severities, categories
-- [x] Tickets CRUD + notes, tasks, attachments
-- [x] Bulk: archive/unarchive, unlock, read/unread, stop notification, delete, group update, link, merge, copy
-- [x] Procedures (on_create / on_stage_enter / on_escalation) + escalation job
-- [x] SLA policies, goals, breach evaluation
-- [x] Email readers + ingest/IMAP poller job + delayed notifications
-- [x] KB articles, ticket→KB convert, Search All
-- [x] Org UI `/org/ticketing/*` (HRNECK UX, English)
+- [x] Tickets CRUD + notes, tasks, attachments — **API + Next ✓** (attachments upload/download, task complete toggle, copy)
+- [x] Bulk actions — **API + Next ✓** (archive/unarchive/read/unread/stop_notification/delete/merge/group_update/link/unlock + archived filter)
+- [x] Procedures + SLA — **API + Next ✓** (desk create/edit, stages, support rows, procedures, SLA, templates)
+- [x] Email readers + ingest/IMAP poller job + delayed notifications — **API + Next ✓** (create/ingest/edit/delete)
+- [x] KB articles, ticket→KB convert, Search All — **API + Next ✓** (list/create/edit/publish toggle/delete)
+- [x] Org UI `/org/ticketing/*` (HRNECK UX, English) — core flows complete for implemented API surface
 - [x] End-user portal `/portal/tickets` + published KB
 - [x] Filament tenant-ops Tickets resource (view/unlock)
-- [x] Reports summary + CSV export; import/export JSON package
-- [x] Preferences (delay, scope, default desk)
+- [x] Reports summary + CSV/PDF export — **API + Next ✓**; JSON import/export package — **API + Next ✓**
+- [x] Preferences (delay, scope, default desk) — **API + Next ✓**
 - [x] RBAC: `org.ticketing.*` + `sd_admin` / `sd_technician` / `sd_user` / `kb_admin`
 
 ### Ticketing non-goals
