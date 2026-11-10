@@ -9,6 +9,7 @@ apps/api/storage/logs/*
 apps/api/storage/framework/cache/*
 apps/api/storage/framework/sessions/*
 apps/api/storage/framework/views/*
+apps/api/storage/tenant*/
 apps/api/bootstrap/cache/*.php
 apps/web/.next/
 apps/web/.env
@@ -18,6 +19,7 @@ apps/web/.lighthouseci/
 apps/web/.lighthouseci-mobile/
 apps/web/test-results/
 apps/web/playwright-report/
+apps/web/next-dev-error.log.err
 packages/**/dist/
 .idea/
 .vscode/
