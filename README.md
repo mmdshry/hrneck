@@ -6,7 +6,7 @@ Production: https://hrneck.com/
 
 ## Stack (always latest stable at install)
 
-- `apps/api` — PHP 8.5, Laravel 13, Filament 5, stancl/tenancy, Horizon, Reverb, Scramble, Pest
+- `apps/api` — PHP 8.3+ (CI uses 8.5), Laravel 13, Filament 5, stancl/tenancy, Horizon, Reverb, Scramble, Pest
 - `apps/web` — Next.js 16, React 19, Tailwind 4, Playwright, Lighthouse budgets
 - `packages/api-client` — Orval stub (web currently uses `apps/web/src/lib/api.ts`)
 
@@ -19,7 +19,7 @@ Production: https://hrneck.com/
 | `admin.hrneck.test` | Filament central |
 | `{slug}.hrneck.test` | Tenant admin + learner |
 
-Demo: `admin@hrneck.test` / `DemoPass!234` (see `apps/api/.env.example` and `apps/web/.env.example`).
+Demo: `admin@hrneck.test` / `DemoPass!234` (platform); `admin@itneck.test` (org). See `apps/api/config/brand.php` and [`docs/auth.md`](docs/auth.md).
 
 ## Quick start (Windows)
 

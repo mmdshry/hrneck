@@ -47,7 +47,18 @@ php -v | Select-Object -First 1
 node -v
 composer -V | Select-Object -First 1
 redis-cli ping
-& C:\xampp\mysql\bin\mysql.exe -u root -e "SELECT 1" | Out-Null
+$mysqlOk = $false
+$xamppMysql = "C:\xampp\mysql\bin\mysql.exe"
+if (Test-Path $xamppMysql) {
+  & $xamppMysql -u root -e "SELECT 1" | Out-Null
+  $mysqlOk = $true
+} elseif (Get-Command mysql -ErrorAction SilentlyContinue) {
+  & mysql -u root -e "SELECT 1" | Out-Null
+  $mysqlOk = $true
+}
+if (-not $mysqlOk) {
+  throw "MySQL client not found. Install XAMPP MySQL or add mysql to PATH (see apps/api/.env DB_*)."
+}
 
 Write-Host "==> Migrating & seeding API"
 Push-Location $api

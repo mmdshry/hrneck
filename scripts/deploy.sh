@@ -35,12 +35,12 @@ pnpm --dir apps/web build
 echo "==> Laravel optimize + migrate"
 cd "$ROOT/apps/api"
 php artisan migrate --force --no-interaction
-php artisan tenants:migrate --force --no-interaction || true
+php artisan tenants:migrate --force --no-interaction
 php artisan storage:link --force >/dev/null 2>&1 || true
 php artisan config:cache
 php artisan route:cache
 php artisan view:cache
-php artisan event:cache || true
+php artisan event:cache
 
 echo "==> PM2 reload"
 cd "$ROOT"

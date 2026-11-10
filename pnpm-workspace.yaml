@@ -3,3 +3,6 @@ packages:
   - "packages/*"
 minimumReleaseAgeExclude:
   - playwright-core@1.65.0
+allowBuilds:
+  sharp: false
+  unrs-resolver: false

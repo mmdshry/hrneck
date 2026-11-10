@@ -1,5 +1,5 @@
 # Document root for hrneck.com / tenant hosts → reverse-proxy to Next + Reverb.
-# Requires: mod_rewrite, mod_proxy, mod_proxy_http, mod_proxy_wstunnel
+# Requires: mod_rewrite, mod_proxy, mod_proxy_http, mod_proxy_wstunnel, mod_headers
 
 <IfModule mod_rewrite.c>
   RewriteEngine On
@@ -19,5 +19,8 @@
 
 <IfModule mod_proxy.c>
   ProxyPreserveHost On
+</IfModule>
+
+<IfModule mod_headers.c>
   RequestHeader set X-Forwarded-Proto "https" env=HTTPS
 </IfModule>
