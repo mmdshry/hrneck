@@ -9,6 +9,7 @@ use App\Domains\Realtime\Support\LiveTopics;
 use App\Domains\Realtime\Support\PublishLive;
 use App\Http\Controllers\Controller;
 use App\Support\ApiPagination;
+use App\Support\ListQuery;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -18,9 +19,23 @@ class ReportExportController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $rows = ReportArchive::query()
-            ->latest('generated_at')
-            ->paginate(ApiPagination::perPage($request));
+        $query = ReportArchive::query();
+        ListQuery::applySearch($query, $request, ['name', 'scope', 'period_key', 'status']);
+        ListQuery::applyLikeFilters($query, $request, [
+            'name' => 'name',
+            'scope' => 'scope',
+            'period' => 'period_key',
+        ]);
+        ListQuery::applyExactFilters($query, $request, [
+            'status' => 'status',
+        ]);
+        ListQuery::applySort($query, $request, [
+            'name' => 'name',
+            'status' => 'status',
+            'generated_at' => 'generated_at',
+        ], 'generated_at', 'desc');
+
+        $rows = $query->paginate(ApiPagination::perPage($request));
 
         return response()->json([
             'data' => collect($rows->items())->values(),

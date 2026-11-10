@@ -2,15 +2,21 @@
 
 namespace App\Http\Controllers\Api\V1\Org;
 
+use App\Domains\Checklists\Actions\AssignChecklistPack;
 use App\Domains\Checklists\Actions\CopySystemChecklistTemplate;
 use App\Domains\Checklists\Actions\CreateChecklistInstances;
+use App\Domains\Checklists\Actions\SaveChecklistPack;
 use App\Domains\Checklists\Actions\SaveChecklistTemplate;
 use App\Domains\Checklists\Actions\UpdateChecklistInstance;
 use App\Domains\Checklists\Models\ChecklistInstance;
+use App\Domains\Checklists\Models\ChecklistPack;
 use App\Domains\Checklists\Models\ChecklistTemplate;
+use App\Domains\Realtime\Support\LiveTopics;
+use App\Domains\Realtime\Support\PublishLive;
 use App\Http\Controllers\Controller;
 use App\Support\ApiPagination;
 use App\Support\Images\ConvertUploadedImageToWebp;
+use App\Support\ListQuery;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -34,6 +40,15 @@ class ChecklistController extends Controller
             $query->where('is_system', false);
         }
 
+        ListQuery::applySearch($query, $request, ['name', 'description', 'category', 'status']);
+        ListQuery::applyLikeFilters($query, $request, [
+            'name' => 'name',
+            'description' => 'description',
+        ]);
+        ListQuery::applyExactFilters($query, $request, [
+            'status' => 'status',
+        ]);
+
         $rows = $query->orderByDesc('is_system')->orderBy('name')->paginate(ApiPagination::perPage($request));
 
         return response()->json([
@@ -54,6 +69,8 @@ class ChecklistController extends Controller
         ]);
 
         $template = $action->create($data, $request->user()?->id);
+
+        PublishLive::org([LiveTopics::CHECKLISTS, LiveTopics::REPORTS_DETAILED]);
 
         return response()->json(['data' => $this->templatePayload($template->load('versions'))], 201);
     }
@@ -80,6 +97,8 @@ class ChecklistController extends Controller
 
         $updated = $action->handle($model, $data, $request->user()?->id);
 
+        PublishLive::org([LiveTopics::CHECKLISTS, LiveTopics::CHECKLIST_INSTANCES, LiveTopics::REPORTS_DETAILED]);
+
         return response()->json(['data' => $this->templatePayload($updated->load('versions'), detailed: true)]);
     }
 
@@ -92,7 +111,97 @@ class ChecklistController extends Controller
 
         $copy = $action->handle($model, $request->user()?->id, $data['name'] ?? null);
 
+        PublishLive::org([LiveTopics::CHECKLISTS]);
+
         return response()->json(['data' => $this->templatePayload($copy->load('versions'), detailed: true)], 201);
+    }
+
+    public function packs(Request $request): JsonResponse
+    {
+        $query = ChecklistPack::query()->with(['items.template']);
+
+        ListQuery::applySearch($query, $request, ['name', 'description', 'status']);
+        ListQuery::applyLikeFilters($query, $request, [
+            'name' => 'name',
+            'description' => 'description',
+        ]);
+        ListQuery::applyExactFilters($query, $request, [
+            'status' => 'status',
+        ]);
+        if ($request->has('auto_assign_on_create')) {
+            $query->where('auto_assign_on_create', $request->boolean('auto_assign_on_create'));
+        }
+
+        $rows = $query->orderBy('name')->paginate(ApiPagination::perPage($request));
+
+        return response()->json([
+            'data' => collect($rows->items())->map(fn (ChecklistPack $pack) => $this->packPayload($pack))->values(),
+            'meta' => ApiPagination::meta($rows),
+        ]);
+    }
+
+    public function storePack(Request $request, SaveChecklistPack $action): JsonResponse
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:160'],
+            'description' => ['nullable', 'string'],
+            'status' => ['nullable', 'string', 'in:draft,published,archived'],
+            'auto_assign_on_create' => ['sometimes', 'boolean'],
+            'template_ids' => ['required', 'array', 'min:1'],
+            'template_ids.*' => ['integer'],
+        ]);
+
+        $pack = $action->create($data, $request->user()?->id);
+
+        return response()->json(['data' => $this->packPayload($pack)], 201);
+    }
+
+    public function showPack(int $pack): JsonResponse
+    {
+        $model = ChecklistPack::query()->with(['items.template'])->findOrFail($pack);
+
+        return response()->json(['data' => $this->packPayload($model)]);
+    }
+
+    public function updatePack(Request $request, int $pack, SaveChecklistPack $action): JsonResponse
+    {
+        $model = ChecklistPack::query()->findOrFail($pack);
+        $data = $request->validate([
+            'name' => ['sometimes', 'string', 'max:160'],
+            'description' => ['nullable', 'string'],
+            'status' => ['sometimes', 'string', 'in:draft,published,archived'],
+            'auto_assign_on_create' => ['sometimes', 'boolean'],
+            'template_ids' => ['sometimes', 'array', 'min:1'],
+            'template_ids.*' => ['integer'],
+        ]);
+
+        $updated = $action->handle($model, $data, $request->user()?->id);
+
+        return response()->json(['data' => $this->packPayload($updated)]);
+    }
+
+    public function assignPack(Request $request, int $pack, AssignChecklistPack $action): JsonResponse
+    {
+        $model = ChecklistPack::query()->with(['items.template'])->findOrFail($pack);
+        $data = $request->validate([
+            'target_ids' => ['nullable', 'array'],
+            'target_ids.*' => ['integer'],
+            'group_ids' => ['nullable', 'array'],
+            'group_ids.*' => ['integer'],
+        ]);
+
+        $created = $action->handle(
+            $model,
+            $data['target_ids'] ?? [],
+            $data['group_ids'] ?? [],
+            $request->user()?->id,
+        );
+
+        return response()->json([
+            'data' => collect($created)->map(
+                fn (ChecklistInstance $i) => $this->instancePayload($i->load(['target', 'template']))
+            )->values(),
+        ], 201);
     }
 
     public function instances(Request $request): JsonResponse
@@ -108,6 +217,13 @@ class ChecklistController extends Controller
         if ($request->filled('status')) {
             $query->where('status', (string) $request->input('status'));
         }
+
+        ListQuery::applySearch($query, $request, ['title']);
+        ListQuery::applyLikeFilters($query, $request, [
+            'title' => 'title',
+            'email' => 'target.email',
+            'assignee' => 'target.email',
+        ]);
 
         $rows = $query->latest()->paginate(ApiPagination::perPage($request));
 
@@ -135,6 +251,8 @@ class ChecklistController extends Controller
             $request->user()?->id,
         );
 
+        // PublishLive runs inside CreateChecklistInstances.
+
         return response()->json([
             'data' => collect($created)->map(fn (ChecklistInstance $i) => $this->instancePayload($i->load(['target', 'template'])))->values(),
         ], 201);
@@ -161,6 +279,11 @@ class ChecklistController extends Controller
         ]);
 
         $updated = $action->handle($model, $data, $request->user()?->id);
+
+        PublishLive::org([
+            LiveTopics::CHECKLIST_INSTANCES,
+            LiveTopics::REPORTS_DETAILED,
+        ], throttled: true);
 
         return response()->json(['data' => $this->instancePayload($updated, detailed: true)]);
     }
@@ -241,6 +364,37 @@ class ChecklistController extends Controller
         $rows = $query->limit(min(500, max(1, (int) $request->input('limit', 100))))->get();
 
         return response()->json(['data' => $rows->map(fn (Activity $a) => $this->activityPayload($a))->values()]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function packPayload(ChecklistPack $pack): array
+    {
+        $items = $pack->relationLoaded('items') ? $pack->items : collect();
+
+        return [
+            'id' => $pack->id,
+            'name' => $pack->name,
+            'slug' => $pack->slug,
+            'description' => $pack->description,
+            'status' => $pack->status,
+            'auto_assign_on_create' => (bool) $pack->auto_assign_on_create,
+            'template_ids' => $items->pluck('template_id')->map(fn ($id) => (int) $id)->values()->all(),
+            'templates' => $items->map(function ($item) {
+                $template = $item->template;
+
+                return [
+                    'id' => $template !== null ? $template->id : (int) $item->template_id,
+                    'name' => $template !== null ? $template->name : 'Template #'.$item->template_id,
+                    'category' => $template !== null ? $template->category : null,
+                    'status' => $template !== null ? $template->status : null,
+                    'is_system' => $template !== null ? (bool) $template->is_system : false,
+                    'sort_order' => (int) $item->sort_order,
+                ];
+            })->values()->all(),
+            'updated_at' => $pack->updated_at?->toIso8601String(),
+        ];
     }
 
     /**

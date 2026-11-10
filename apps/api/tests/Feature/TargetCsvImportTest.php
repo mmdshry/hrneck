@@ -1,5 +1,6 @@
 <?php
 
+use App\Domains\TargetsGroups\Models\Department;
 use App\Domains\TargetsGroups\Models\Target;
 use App\Models\Tenant;
 use Database\Seeders\DemoSeeder;
@@ -28,7 +29,12 @@ test('csv import upserts targets in tenant', function () {
         ->assertOk()
         ->assertJsonPath('imported', 1);
 
-    expect(Target::query()->where('email', 'csv.user@example.test')->exists())->toBeTrue();
+    $target = Target::query()->where('email', 'csv.user@example.test')->first();
+    expect($target)->not->toBeNull();
+    expect($target->department)->toBe('IT');
+    expect($target->department_id)->not->toBeNull();
+    expect(Department::query()->where('name', 'IT')->exists())->toBeTrue();
+    expect(Department::query()->where('name', 'IT')->value('id'))->toBe($target->department_id);
 
     Tenancy::end();
 });

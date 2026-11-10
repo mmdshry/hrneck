@@ -19,9 +19,11 @@ use App\Domains\TrainingLms\Models\QuizAttempt;
 use App\Domains\TrainingLms\Models\QuizQuestion;
 use App\Http\Controllers\Controller;
 use App\Support\ApiPagination;
+use App\Support\ListQuery;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -30,10 +32,18 @@ class TrainingController extends Controller
 {
     public function courses(Request $request): JsonResponse
     {
-        $rows = Course::query()
-            ->with(['lessons', 'quiz.questions'])
-            ->latest()
-            ->paginate(ApiPagination::perPage($request));
+        $query = Course::query()->with(['lessons', 'quizzes.questions']);
+        ListQuery::applySearch($query, $request, ['title', 'description']);
+        ListQuery::applyLikeFilters($query, $request, [
+            'title' => 'title',
+            'description' => 'description',
+        ]);
+        ListQuery::applySort($query, $request, [
+            'title' => 'title',
+            'duration_minutes' => 'duration_minutes',
+        ], 'id', 'desc');
+
+        $rows = $query->paginate(ApiPagination::perPage($request));
 
         return response()->json([
             'data' => collect($rows->items())->values(),
@@ -61,9 +71,9 @@ class TrainingController extends Controller
             'title' => $course->title,
         ]);
 
-        PublishLive::org([LiveTopics::TRAINING_CAMPAIGNS]);
+        PublishLive::org([LiveTopics::TRAINING_CAMPAIGNS, LiveTopics::TRAINING, LiveTopics::REPORTS_DETAILED]);
 
-        return response()->json(['data' => $course->load(['lessons', 'quiz.questions'])], 201);
+        return response()->json(['data' => $course->load(['lessons', 'quizzes.questions'])], 201);
     }
 
     public function updateCourse(Request $request, int $course, LogOrgActivity $audit): JsonResponse
@@ -88,7 +98,7 @@ class TrainingController extends Controller
             'after' => $model->only(['title', 'description', 'duration_minutes', 'is_sample']),
         ]);
 
-        return response()->json(['data' => $model->fresh(['lessons', 'quiz.questions'])]);
+        return response()->json(['data' => $model->fresh(['lessons', 'quizzes.questions'])]);
     }
 
     public function destroyCourse(int $course, LogOrgActivity $audit): JsonResponse
@@ -101,7 +111,7 @@ class TrainingController extends Controller
             'course' => $snapshot,
         ]);
 
-        PublishLive::org([LiveTopics::TRAINING_CAMPAIGNS]);
+        PublishLive::org([LiveTopics::TRAINING_CAMPAIGNS, LiveTopics::TRAINING, LiveTopics::REPORTS_DETAILED]);
 
         return response()->json(['deleted' => true]);
     }
@@ -121,6 +131,8 @@ class TrainingController extends Controller
             'title' => $lesson->title ?? null,
         ]);
 
+        PublishLive::org([LiveTopics::TRAINING_CAMPAIGNS, LiveTopics::TRAINING, LiveTopics::REPORTS_DETAILED]);
+
         return response()->json(['data' => $lesson], 201);
     }
 
@@ -137,6 +149,8 @@ class TrainingController extends Controller
             'course_id' => $course,
         ]);
 
+        PublishLive::org([LiveTopics::TRAINING_CAMPAIGNS, LiveTopics::TRAINING, LiveTopics::REPORTS_DETAILED]);
+
         return response()->json(['data' => $model->fresh()]);
     }
 
@@ -152,6 +166,8 @@ class TrainingController extends Controller
         $audit->handle('training', 'lesson_deleted', 'Lesson deleted', null, [
             'lesson' => $snapshot,
         ]);
+
+        PublishLive::org([LiveTopics::TRAINING_CAMPAIGNS, LiveTopics::TRAINING, LiveTopics::REPORTS_DETAILED]);
 
         return response()->json(['deleted' => true]);
     }
@@ -386,8 +402,10 @@ class TrainingController extends Controller
     ): JsonResponse {
         $data = $request->validate([
             'name' => ['sometimes', 'string', 'max:160'],
-            'course_id' => ['required_without:content', 'nullable', 'integer'],
-            'content' => ['required_without:course_id', 'nullable', 'array'],
+            'course_id' => ['required_without_all:course_ids,content', 'nullable', 'integer'],
+            'course_ids' => ['required_without_all:course_id,content', 'nullable', 'array', 'min:1'],
+            'course_ids.*' => ['integer'],
+            'content' => ['required_without_all:course_id,course_ids', 'nullable', 'array'],
             'content.title' => ['required_with:content', 'string', 'max:160'],
             'content.content_type' => ['required_with:content', 'in:text,video,pdf'],
             'content.body' => ['nullable', 'string'],
@@ -406,6 +424,8 @@ class TrainingController extends Controller
         ]);
 
         $targetIds = $audience->handle($data['target_ids'] ?? [], $data['group_ids'] ?? []);
+        $shouldLaunch = $request->boolean('launch', true);
+        $courses = collect();
 
         if (! empty($data['content'])) {
             $content = $data['content'];
@@ -431,38 +451,84 @@ class TrainingController extends Controller
                 'duration_seconds' => $content['duration_seconds'] ?? null,
                 'sort_order' => 1,
             ]);
-            $courseId = $course->id;
+            $courses = collect([$course->fresh(['lessons'])]);
         } else {
-            $course = Course::query()->findOrFail((int) $data['course_id']);
-            $courseId = $course->id;
+            $courseIds = collect($data['course_ids'] ?? [])
+                ->when(isset($data['course_id']), fn ($ids) => $ids->push((int) $data['course_id']))
+                ->map(fn ($id) => (int) $id)
+                ->unique()
+                ->values();
+
+            $courses = Course::query()
+                ->with('lessons')
+                ->whereIn('id', $courseIds->all())
+                ->get();
+
+            if ($courses->count() !== $courseIds->count()) {
+                abort(404, 'One or more courses were not found.');
+            }
+
+            // Preserve request order.
+            $courses = $courseIds
+                ->map(fn (int $id) => $courses->firstWhere('id', $id))
+                ->filter()
+                ->values();
         }
 
-        $campaign = Campaign::query()->create([
-            'name' => $data['name'] ?? ('Assign: '.($course->title ?? 'training')),
-            'type' => 'training',
-            'status' => 'draft',
-            'course_id' => $courseId,
-            'randomize_send' => false,
-        ]);
+        $campaigns = collect();
+        $sharedName = $data['name'] ?? null;
 
-        if ($request->boolean('launch', true)) {
-            $campaign = $train->handle($campaign, $targetIds);
-        } else {
+        foreach ($courses as $course) {
+            $campaignName = $sharedName
+                ?? ('Assign: '.($course->title ?? 'training'));
+
+            if ($sharedName !== null && $courses->count() > 1) {
+                $campaignName = $sharedName.' · '.$course->title;
+            }
+
+            $campaign = Campaign::query()->create([
+                'name' => $campaignName,
+                'type' => 'training',
+                'status' => 'draft',
+                'course_id' => $course->id,
+                'randomize_send' => false,
+            ]);
+
+            if ($shouldLaunch) {
+                $campaign = $train->handle($campaign, $targetIds);
+            }
+
+            $campaigns->push($campaign->load(['recipients', 'course.lessons']));
+        }
+
+        if (! $shouldLaunch) {
             PublishLive::metricsBundle();
         }
 
-        $audit->handle('training', 'assigned', 'Training assigned', $campaign, [
-            'course_id' => $courseId,
+        $courseIds = $courses->pluck('id')->values()->all();
+        $primaryCampaign = $campaigns->first();
+        $primaryCourse = $courses->first();
+
+        $audit->handle('training', 'assigned', 'Training assigned', $primaryCampaign, [
+            'course_id' => $courseIds[0] ?? null,
+            'course_ids' => $courseIds,
+            'campaign_count' => $campaigns->count(),
             'target_count' => count($targetIds),
         ]);
 
-        return response()->json([
-            'data' => [
-                'campaign' => $campaign->load(['recipients', 'course.lessons']),
-                'course' => $campaign->course?->load('lessons') ?? Course::query()->with('lessons')->find($courseId),
-                'assigned_target_ids' => $targetIds,
-            ],
-        ], 201);
+        $payload = [
+            'campaign' => $primaryCampaign,
+            'course' => $primaryCampaign?->course?->load('lessons')
+                ?? $primaryCourse?->load('lessons'),
+            'assigned_target_ids' => $targetIds,
+        ];
+
+        if ($campaigns->count() > 1) {
+            $payload['campaigns'] = $campaigns->values();
+            $payload['courses'] = $courses->values();
+        }
+
+        return response()->json(['data' => $payload], 201);
     }
 
     public function completeLesson(Request $request, SyncEnrollmentProgress $sync): JsonResponse
@@ -485,8 +551,12 @@ class TrainingController extends Controller
         }
 
         PublishLive::metricsBundle(throttled: true);
+        $fresh = $enrollment->fresh(['target']);
+        if ($fresh?->target?->email) {
+            PublishLive::learnForTargetEmail((string) $fresh->target->email);
+        }
 
-        return response()->json(['data' => $enrollment->fresh()]);
+        return response()->json(['data' => $fresh]);
     }
 
     public function updateLessonProgress(Request $request, SyncEnrollmentProgress $sync): JsonResponse
@@ -537,9 +607,12 @@ class TrainingController extends Controller
             'completed_at' => $pct >= 100 ? ($row->completed_at ?? now()) : null,
         ])->save();
 
-        $enrollment = $sync->recompute($enrollment->fresh(['course.lessons', 'course.quiz']) ?? $enrollment);
+        $enrollment = $sync->recompute($enrollment->fresh(['course.lessons', 'course.quizzes', 'target']) ?? $enrollment);
 
         PublishLive::metricsBundle(throttled: true);
+        if ($enrollment->target?->email) {
+            PublishLive::learnForTargetEmail((string) $enrollment->target->email);
+        }
 
         return response()->json([
             'data' => [
@@ -556,6 +629,7 @@ class TrainingController extends Controller
             'target_id' => ['sometimes', 'integer'],
             'enrollment_id' => ['sometimes', 'integer'],
             'answers' => ['required', 'array'],
+            'started_at' => ['nullable', 'date'],
         ]);
 
         $targetId = $this->ownedTargetId($request);
@@ -564,20 +638,40 @@ class TrainingController extends Controller
         }
 
         $quiz = Quiz::query()->with('questions')->findOrFail($data['quiz_id']);
+        $startedAt = isset($data['started_at']) ? Carbon::parse($data['started_at']) : null;
+
+        if ($quiz->time_limit_seconds !== null && $quiz->time_limit_seconds > 0) {
+            if ($startedAt === null) {
+                abort(422, 'started_at is required for timed quizzes.');
+            }
+            $elapsed = $startedAt->diffInSeconds(now());
+            // Allow a small grace window for network latency.
+            if ($elapsed > $quiz->time_limit_seconds + 15) {
+                abort(422, 'Time limit exceeded for this quiz.');
+            }
+        }
+
         $correct = 0;
+        $mcqTotal = 0;
         foreach ($quiz->questions as $index => $question) {
-            if ((int) ($data['answers'][$index] ?? -1) === (int) $question->correct_index) {
+            if ($question->isEssay()) {
+                continue;
+            }
+            $mcqTotal++;
+            $answer = $data['answers'][$index] ?? null;
+            if (is_numeric($answer) && (int) $answer === (int) $question->correct_index) {
                 $correct++;
             }
         }
-        $total = max(1, $quiz->questions->count());
-        $score = (int) round(($correct / $total) * 100);
+
+        $score = $mcqTotal > 0 ? (int) round(($correct / $mcqTotal) * 100) : 100;
         $attempt = QuizAttempt::query()->create([
             'quiz_id' => $quiz->id,
             'target_id' => $targetId,
             'score' => $score,
             'passed' => $score >= $quiz->pass_score,
             'answers' => $data['answers'],
+            'started_at' => $startedAt,
         ]);
 
         $enrollment = null;
@@ -592,10 +686,13 @@ class TrainingController extends Controller
         }
         if ($enrollment) {
             $sync->markOpened($enrollment);
-            $enrollment = $sync->recompute($enrollment->fresh(['course.lessons', 'course.quiz']) ?? $enrollment);
+            $enrollment = $sync->recompute($enrollment->fresh(['course.lessons', 'course.quizzes', 'target']) ?? $enrollment);
         }
 
         PublishLive::metricsBundle(throttled: true);
+        if ($enrollment?->target?->email) {
+            PublishLive::learnForTargetEmail((string) $enrollment->target->email);
+        }
 
         return response()->json([
             'data' => array_merge($attempt->toArray(), [
@@ -604,35 +701,67 @@ class TrainingController extends Controller
         ]);
     }
 
+    public function storeQuiz(Request $request, int $course, LogOrgActivity $audit): JsonResponse
+    {
+        Course::query()->findOrFail($course);
+        $data = $this->validatedQuizPayload($request, creating: true);
+        $quiz = $this->persistQuiz($course, null, $data);
+
+        $audit->handle('training', 'quiz_created', 'Quiz created', $quiz, [
+            'course_id' => $course,
+            'title' => $quiz->title,
+        ]);
+
+        PublishLive::org([LiveTopics::TRAINING_CAMPAIGNS, LiveTopics::TRAINING, LiveTopics::REPORTS_DETAILED]);
+
+        return response()->json(['data' => $quiz->load('questions')], 201);
+    }
+
+    public function updateQuiz(Request $request, int $course, int $quiz, LogOrgActivity $audit): JsonResponse
+    {
+        $model = Quiz::query()->where('course_id', $course)->whereKey($quiz)->firstOrFail();
+        $data = $this->validatedQuizPayload($request, creating: false);
+        $model = $this->persistQuiz($course, $model, $data);
+
+        $audit->handle('training', 'quiz_updated', 'Quiz updated', $model, [
+            'course_id' => $course,
+            'title' => $model->title,
+        ]);
+
+        PublishLive::org([LiveTopics::TRAINING_CAMPAIGNS, LiveTopics::TRAINING, LiveTopics::REPORTS_DETAILED]);
+
+        return response()->json(['data' => $model->load('questions')]);
+    }
+
+    public function destroyQuiz(int $course, int $quiz, LogOrgActivity $audit): JsonResponse
+    {
+        $model = Quiz::query()->where('course_id', $course)->whereKey($quiz)->firstOrFail();
+        $title = $model->title;
+        $model->questions()->delete();
+        $model->delete();
+
+        $audit->handle('training', 'quiz_deleted', 'Quiz deleted', null, [
+            'course_id' => $course,
+            'quiz_id' => $quiz,
+            'title' => $title,
+        ]);
+
+        PublishLive::org([LiveTopics::TRAINING_CAMPAIGNS, LiveTopics::TRAINING, LiveTopics::REPORTS_DETAILED]);
+
+        return response()->json(['data' => ['ok' => true]]);
+    }
+
+    /**
+     * Back-compat: upsert the first quiz (or create one) for a course.
+     */
     public function upsertQuiz(Request $request, int $course): JsonResponse
     {
         Course::query()->findOrFail($course);
-        $data = $request->validate([
-            'title' => ['required', 'string', 'max:160'],
-            'pass_score' => ['sometimes', 'integer', 'min:1', 'max:100'],
-            'questions' => ['required', 'array', 'min:1'],
-            'questions.*.prompt' => ['required', 'string'],
-            'questions.*.options' => ['required', 'array', 'min:2'],
-            'questions.*.correct_index' => ['required', 'integer', 'min:0'],
-        ]);
+        $data = $this->validatedQuizPayload($request, creating: true);
+        $existing = Quiz::query()->where('course_id', $course)->orderBy('sort_order')->orderBy('id')->first();
+        $quiz = $this->persistQuiz($course, $existing, $data);
 
-        $quiz = Quiz::query()->updateOrCreate(
-            ['course_id' => $course],
-            [
-                'title' => $data['title'],
-                'pass_score' => $data['pass_score'] ?? 70,
-            ],
-        );
-
-        $quiz->questions()->delete();
-        foreach ($data['questions'] as $question) {
-            QuizQuestion::query()->create([
-                'quiz_id' => $quiz->id,
-                'prompt' => $question['prompt'],
-                'options' => array_values($question['options']),
-                'correct_index' => $question['correct_index'],
-            ]);
-        }
+        PublishLive::org([LiveTopics::TRAINING_CAMPAIGNS, LiveTopics::TRAINING, LiveTopics::REPORTS_DETAILED]);
 
         return response()->json(['data' => $quiz->load('questions')]);
     }
@@ -646,7 +775,7 @@ class TrainingController extends Controller
         $courseId = $request->integer('course_id') ?: null;
 
         $query = Enrollment::query()
-            ->with(['course.lessons', 'course.quiz.questions', 'lessonProgress', 'target'])
+            ->with(['course.lessons', 'course.quizzes.questions', 'lessonProgress', 'target'])
             ->where('target_id', $targetId)
             ->latest();
 
@@ -696,7 +825,7 @@ class TrainingController extends Controller
     private function enrollmentQuery(Request $request)
     {
         $query = Enrollment::query()
-            ->with(['course.lessons', 'course.quiz', 'target', 'lessonProgress'])
+            ->with(['course.lessons', 'course.quizzes', 'target', 'lessonProgress'])
             ->latest();
 
         if ($request->filled('course_id')) {
@@ -717,6 +846,23 @@ class TrainingController extends Controller
             $query->where('status', (string) $request->input('status'));
         }
 
+        if ($request->filled('q')) {
+            $like = ListQuery::likePattern(trim((string) $request->input('q')));
+            $query->where(function ($builder) use ($like): void {
+                $builder->whereHas('target', function ($t) use ($like): void {
+                    $t->where('email', 'like', $like)
+                        ->orWhere('first_name', 'like', $like)
+                        ->orWhere('last_name', 'like', $like);
+                })->orWhereHas('course', function ($c) use ($like): void {
+                    $c->where('title', 'like', $like);
+                });
+            });
+        }
+        ListQuery::applyLikeFilters($query, $request, [
+            'learner' => 'target.email',
+            'course' => 'course.title',
+        ]);
+
         return $query;
     }
 
@@ -725,26 +871,143 @@ class TrainingController extends Controller
      */
     private function serializeEnrollment(Enrollment $enrollment): array
     {
-        $quizPassed = false;
+        $enrollment->loadMissing(['course.quizzes']);
+        $required = $enrollment->course?->quizzes->where('is_required', true)->values() ?? collect();
+        $quizPassed = true;
         $latestScore = null;
-        if ($enrollment->course?->quiz) {
-            $attempt = QuizAttempt::query()
-                ->where('quiz_id', $enrollment->course->quiz->id)
-                ->where('target_id', $enrollment->target_id)
-                ->latest()
-                ->first();
-            $latestScore = $attempt?->score;
-            $quizPassed = QuizAttempt::query()
-                ->where('quiz_id', $enrollment->course->quiz->id)
-                ->where('target_id', $enrollment->target_id)
-                ->where('passed', true)
-                ->exists();
+
+        if ($required->isEmpty()) {
+            $quizPassed = true;
+            $anyQuiz = $enrollment->course?->quizzes->first();
+            if ($anyQuiz) {
+                $latestScore = QuizAttempt::query()
+                    ->where('quiz_id', $anyQuiz->id)
+                    ->where('target_id', $enrollment->target_id)
+                    ->latest()
+                    ->value('score');
+            }
+        } else {
+            foreach ($required as $quiz) {
+                $attempt = QuizAttempt::query()
+                    ->where('quiz_id', $quiz->id)
+                    ->where('target_id', $enrollment->target_id)
+                    ->latest()
+                    ->first();
+                if ($latestScore === null && $attempt) {
+                    $latestScore = $attempt->score;
+                }
+                $passed = QuizAttempt::query()
+                    ->where('quiz_id', $quiz->id)
+                    ->where('target_id', $enrollment->target_id)
+                    ->where('passed', true)
+                    ->exists();
+                if (! $passed) {
+                    $quizPassed = false;
+                }
+            }
         }
 
         return array_merge($enrollment->toArray(), [
             'quiz_passed' => $quizPassed,
             'quiz_score' => $latestScore,
         ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function validatedQuizPayload(Request $request, bool $creating): array
+    {
+        $data = $request->validate([
+            'title' => [$creating ? 'required' : 'sometimes', 'string', 'max:160'],
+            'pass_score' => ['sometimes', 'integer', 'min:1', 'max:100'],
+            'is_required' => ['sometimes', 'boolean'],
+            'time_limit_seconds' => ['nullable', 'integer', 'min:30', 'max:86400'],
+            'sort_order' => ['sometimes', 'integer', 'min:0', 'max:9999'],
+            'questions' => [$creating ? 'required' : 'sometimes', 'array', 'min:1'],
+            'questions.*.type' => ['sometimes', 'in:mcq,essay'],
+            'questions.*.prompt' => ['required', 'string'],
+            'questions.*.options' => ['nullable', 'array'],
+            'questions.*.correct_index' => ['nullable', 'integer', 'min:0'],
+        ]);
+
+        if (array_key_exists('questions', $data)) {
+            foreach ($data['questions'] as $index => $question) {
+                $type = $question['type'] ?? QuizQuestion::TYPE_MCQ;
+                if ($type === QuizQuestion::TYPE_ESSAY) {
+                    $data['questions'][$index]['options'] = null;
+                    $data['questions'][$index]['correct_index'] = null;
+
+                    continue;
+                }
+                $options = array_values(array_filter(
+                    array_map(
+                        static fn ($option) => is_string($option) ? trim($option) : '',
+                        $question['options'] ?? [],
+                    ),
+                    static fn (string $option) => $option !== '',
+                ));
+                if (count($options) < 2) {
+                    abort(422, "Question #{$index} must include at least 2 options.");
+                }
+                $correct = (int) ($question['correct_index'] ?? 0);
+                if ($correct < 0 || $correct >= count($options)) {
+                    abort(422, "Question #{$index} has an invalid correct_index.");
+                }
+                $data['questions'][$index]['type'] = QuizQuestion::TYPE_MCQ;
+                $data['questions'][$index]['options'] = $options;
+                $data['questions'][$index]['correct_index'] = $correct;
+            }
+        }
+
+        if ($request->has('is_required')) {
+            $data['is_required'] = $request->boolean('is_required');
+        }
+
+        return $data;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function persistQuiz(int $courseId, ?Quiz $quiz, array $data): Quiz
+    {
+        if ($quiz === null) {
+            $nextOrder = (int) (Quiz::query()->where('course_id', $courseId)->max('sort_order') ?? -1) + 1;
+            $quiz = Quiz::query()->create([
+                'course_id' => $courseId,
+                'title' => $data['title'],
+                'pass_score' => $data['pass_score'] ?? 70,
+                'is_required' => $data['is_required'] ?? true,
+                'time_limit_seconds' => $data['time_limit_seconds'] ?? null,
+                'sort_order' => $data['sort_order'] ?? $nextOrder,
+            ]);
+        } else {
+            $quiz->fill([
+                'title' => $data['title'] ?? $quiz->title,
+                'pass_score' => $data['pass_score'] ?? $quiz->pass_score,
+                'is_required' => array_key_exists('is_required', $data) ? $data['is_required'] : $quiz->is_required,
+                'time_limit_seconds' => array_key_exists('time_limit_seconds', $data)
+                    ? $data['time_limit_seconds']
+                    : $quiz->time_limit_seconds,
+                'sort_order' => $data['sort_order'] ?? $quiz->sort_order,
+            ])->save();
+        }
+
+        if (array_key_exists('questions', $data)) {
+            $quiz->questions()->delete();
+            foreach ($data['questions'] as $question) {
+                QuizQuestion::query()->create([
+                    'quiz_id' => $quiz->id,
+                    'type' => $question['type'] ?? QuizQuestion::TYPE_MCQ,
+                    'prompt' => $question['prompt'],
+                    'options' => $question['options'] ?? null,
+                    'correct_index' => $question['correct_index'] ?? null,
+                ]);
+            }
+        }
+
+        return $quiz->fresh(['questions']) ?? $quiz;
     }
 
     /**

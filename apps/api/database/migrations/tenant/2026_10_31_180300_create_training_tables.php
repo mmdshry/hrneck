@@ -31,15 +31,19 @@ return new class extends Migration
             $table->foreignId('course_id')->constrained()->cascadeOnDelete();
             $table->string('title');
             $table->unsignedTinyInteger('pass_score')->default(70);
+            $table->boolean('is_required')->default(true);
+            $table->unsignedInteger('time_limit_seconds')->nullable();
+            $table->unsignedSmallInteger('sort_order')->default(0);
             $table->timestamps();
         });
 
         Schema::create('quiz_questions', function (Blueprint $table) {
             $table->id();
             $table->foreignId('quiz_id')->constrained()->cascadeOnDelete();
+            $table->string('type', 16)->default('mcq');
             $table->text('prompt');
-            $table->json('options');
-            $table->unsignedTinyInteger('correct_index');
+            $table->json('options')->nullable();
+            $table->unsignedTinyInteger('correct_index')->nullable();
             $table->timestamps();
         });
 
@@ -62,6 +66,7 @@ return new class extends Migration
             $table->unsignedTinyInteger('score')->default(0);
             $table->boolean('passed')->default(false);
             $table->json('answers')->nullable();
+            $table->timestamp('started_at')->nullable();
             $table->timestamps();
         });
 

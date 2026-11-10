@@ -3,11 +3,14 @@
 namespace App\Http\Controllers\Api\V1\Org\Ticketing;
 
 use App\Domains\Audit\Actions\LogOrgActivity;
+use App\Domains\Realtime\Support\LiveTopics;
+use App\Domains\Realtime\Support\PublishLive;
 use App\Domains\Ticketing\Actions\ProcessInboundEmail;
 use App\Domains\Ticketing\Models\SdEmailReader;
 use App\Domains\Ticketing\Support\TicketingPayload;
 use App\Http\Controllers\Controller;
 use App\Support\ApiPagination;
+use App\Support\ListQuery;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -15,7 +18,22 @@ class EmailReaderController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $paginator = SdEmailReader::query()->with('desk')->orderBy('name')->paginate(ApiPagination::perPage($request));
+        $query = SdEmailReader::query()->with('desk');
+        ListQuery::applySearch($query, $request, ['name', 'username', 'host']);
+        ListQuery::applyLikeFilters($query, $request, [
+            'name' => 'name',
+            'username' => 'username',
+            'host' => 'host',
+        ]);
+        ListQuery::applyBooleanFilters($query, $request, [
+            'active' => 'is_active',
+        ]);
+        ListQuery::applySort($query, $request, [
+            'name' => 'name',
+            'host' => 'host',
+        ], 'name', 'asc');
+
+        $paginator = $query->paginate(ApiPagination::perPage($request));
 
         return response()->json([
             'data' => collect($paginator->items())->map(fn (SdEmailReader $r) => [
@@ -60,6 +78,8 @@ class EmailReaderController extends Controller
             'desk_id' => $reader->desk_id,
         ]);
 
+        PublishLive::org([LiveTopics::EMAIL_READERS]);
+
         return response()->json(['data' => ['id' => $reader->id, 'name' => $reader->name]], 201);
     }
 
@@ -86,6 +106,8 @@ class EmailReaderController extends Controller
             'is_active' => $model->is_active,
         ]);
 
+        PublishLive::org([LiveTopics::EMAIL_READERS]);
+
         return response()->json(['data' => ['id' => $model->id, 'name' => $model->name, 'is_active' => $model->is_active]]);
     }
 
@@ -98,6 +120,8 @@ class EmailReaderController extends Controller
         $audit->handle('ticketing', 'email_reader_deleted', 'Email reader deleted', null, [
             'reader' => $snapshot,
         ]);
+
+        PublishLive::org([LiveTopics::EMAIL_READERS]);
 
         return response()->json(['message' => 'Deleted']);
     }

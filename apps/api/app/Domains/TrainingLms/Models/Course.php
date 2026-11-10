@@ -20,9 +20,20 @@ class Course extends Model
         return $this->hasMany(Lesson::class)->orderBy('sort_order');
     }
 
+    /** @return HasMany<Quiz, $this> */
+    public function quizzes(): HasMany
+    {
+        return $this->hasMany(Quiz::class)->orderBy('sort_order')->orderBy('id');
+    }
+
+    /**
+     * Back-compat: first quiz for callers still using course.quiz.
+     *
+     * @return HasOne<Quiz, $this>
+     */
     public function quiz(): HasOne
     {
-        return $this->hasOne(Quiz::class);
+        return $this->hasOne(Quiz::class)->orderBy('sort_order')->orderBy('id');
     }
 
     public function enrollments(): HasMany

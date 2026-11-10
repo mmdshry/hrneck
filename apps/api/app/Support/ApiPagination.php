@@ -7,7 +7,7 @@ use Illuminate\Http\Request;
 
 final class ApiPagination
 {
-    public static function perPage(Request $request, int $default = 25, int $max = 100): int
+    public static function perPage(Request $request, int $default = 5, int $max = 100): int
     {
         return min($max, max(1, (int) $request->input('per_page', $default)));
     }

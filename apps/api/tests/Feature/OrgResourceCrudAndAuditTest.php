@@ -36,7 +36,8 @@ test('org admin can update archive and delete targets and groups with audit', fu
             'status' => 'inactive',
         ])
         ->assertOk()
-        ->assertJsonPath('data.status', 'inactive');
+        ->assertJsonPath('data.status', 'inactive')
+        ->assertJsonPath('data.department', 'Security');
 
     $group = $this->actingAs($admin)
         ->withHeader('X-Tenant', 'itneck')
@@ -47,6 +48,16 @@ test('org admin can update archive and delete targets and groups with audit', fu
         ->assertCreated();
 
     $groupId = (int) $group->json('data.id');
+
+    $this->actingAs($admin)
+        ->withHeader('X-Tenant', 'itneck')
+        ->getJson('/api/v1/org/groups')
+        ->assertOk()
+        ->assertJsonFragment([
+            'id' => $groupId,
+            'name' => 'Audit Group',
+            'target_ids' => [$targetId],
+        ]);
 
     $this->actingAs($admin)
         ->withHeader('X-Tenant', 'itneck')
@@ -72,6 +83,73 @@ test('org admin can update archive and delete targets and groups with audit', fu
     expect(Activity::query()->inLog('targets')->where('event', 'deleted')->count())->toBeGreaterThan(0);
     expect(Activity::query()->inLog('groups')->where('event', 'deleted')->count())->toBeGreaterThan(0);
     expect(Target::query()->find($targetId))->toBeNull();
+    Tenancy::end();
+});
+
+test('org admin can manage departments with rename sync and blocked delete', function () {
+    $admin = orgAdmin();
+    $suffix = str_replace('.', '', uniqid('dept', true));
+    $name = 'Finance '.$suffix;
+    $renamed = 'Finance Ops '.$suffix;
+
+    $department = $this->actingAs($admin)
+        ->withHeader('X-Tenant', 'itneck')
+        ->postJson('/api/v1/org/departments', [
+            'name' => $name,
+        ])
+        ->assertCreated()
+        ->assertJsonPath('data.name', $name);
+
+    $departmentId = (int) $department->json('data.id');
+
+    $target = $this->actingAs($admin)
+        ->withHeader('X-Tenant', 'itneck')
+        ->postJson('/api/v1/org/targets', [
+            'email' => $suffix.'@itneck.test',
+            'department_id' => $departmentId,
+        ])
+        ->assertCreated()
+        ->assertJsonPath('data.department', $name)
+        ->assertJsonPath('data.department_id', $departmentId);
+
+    $targetId = (int) $target->json('data.id');
+
+    $this->actingAs($admin)
+        ->withHeader('X-Tenant', 'itneck')
+        ->patchJson('/api/v1/org/departments/'.$departmentId, [
+            'name' => $renamed,
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.name', $renamed);
+
+    $this->actingAs($admin)
+        ->withHeader('X-Tenant', 'itneck')
+        ->getJson('/api/v1/org/targets?include_inactive=1')
+        ->assertOk()
+        ->assertJsonFragment([
+            'id' => $targetId,
+            'department' => $renamed,
+            'department_id' => $departmentId,
+        ]);
+
+    $this->actingAs($admin)
+        ->withHeader('X-Tenant', 'itneck')
+        ->deleteJson('/api/v1/org/departments/'.$departmentId)
+        ->assertStatus(422);
+
+    $this->actingAs($admin)
+        ->withHeader('X-Tenant', 'itneck')
+        ->deleteJson('/api/v1/org/targets/'.$targetId)
+        ->assertOk();
+
+    $this->actingAs($admin)
+        ->withHeader('X-Tenant', 'itneck')
+        ->deleteJson('/api/v1/org/departments/'.$departmentId)
+        ->assertOk();
+
+    Tenancy::initialize('itneck');
+    expect(Activity::query()->inLog('departments')->where('event', 'created')->count())->toBeGreaterThan(0);
+    expect(Activity::query()->inLog('departments')->where('event', 'deleted')->count())->toBeGreaterThan(0);
     Tenancy::end();
 });
 

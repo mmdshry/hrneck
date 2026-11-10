@@ -3,6 +3,8 @@
 namespace App\Domains\Ticketing\Actions;
 
 use App\Domains\Notifications\Actions\NotifyTicketAssignee;
+use App\Domains\Realtime\Support\LiveTopics;
+use App\Domains\Realtime\Support\PublishLive;
 use App\Domains\Ticketing\Models\SdStage;
 use App\Domains\Ticketing\Models\SdTicket;
 use Illuminate\Support\Carbon;
@@ -67,6 +69,16 @@ class UpdateTicket
 
         if (array_key_exists('assignee_user_id', $data)) {
             app(NotifyTicketAssignee::class)->handle($fresh, $previousAssignee);
+        }
+
+        PublishLive::org([
+            LiveTopics::TICKETS,
+            LiveTopics::TICKETING_REPORTS,
+            LiveTopics::REPORTS_DETAILED,
+        ], throttled: true);
+
+        if ($fresh->requester_user_id) {
+            PublishLive::portalUser((int) $fresh->requester_user_id);
         }
 
         return $fresh;

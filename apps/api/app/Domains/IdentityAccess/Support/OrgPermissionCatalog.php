@@ -29,6 +29,8 @@ final class OrgPermissionCatalog
 
     public const TARGETS_MANAGE = 'org.targets.manage';
 
+    public const DEPARTMENTS_MANAGE = 'org.departments.manage';
+
     public const GROUPS_MANAGE = 'org.groups.manage';
 
     public const CAMPAIGNS_MANAGE = 'org.campaigns.manage';
@@ -72,6 +74,7 @@ final class OrgPermissionCatalog
             self::USERS_MANAGE,
             self::ROLES_MANAGE,
             self::TARGETS_MANAGE,
+            self::DEPARTMENTS_MANAGE,
             self::GROUPS_MANAGE,
             self::CAMPAIGNS_MANAGE,
             self::TRAINING_MANAGE,

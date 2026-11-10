@@ -2,6 +2,8 @@
 
 namespace App\Domains\Ticketing\Actions;
 
+use App\Domains\Realtime\Support\LiveTopics;
+use App\Domains\Realtime\Support\PublishLive;
 use App\Domains\Ticketing\Models\SdEmailInboundLog;
 use App\Domains\Ticketing\Models\SdEmailReader;
 use App\Domains\Ticketing\Models\SdTicket;
@@ -54,6 +56,11 @@ class ProcessInboundEmail
                     'ticket_id' => $ticket->id,
                     'status' => 'note_added',
                 ]);
+
+                PublishLive::org([LiveTopics::TICKETS], throttled: true);
+                if ($ticket->requester_user_id) {
+                    PublishLive::portalUser((int) $ticket->requester_user_id);
+                }
 
                 return $ticket->fresh(['notes']) ?? $ticket;
             }

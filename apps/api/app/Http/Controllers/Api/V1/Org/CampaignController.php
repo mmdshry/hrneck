@@ -11,6 +11,7 @@ use App\Domains\TrainingLms\Models\Course;
 use App\Domains\TrainingLms\Models\Enrollment;
 use App\Http\Controllers\Controller;
 use App\Support\ApiPagination;
+use App\Support\ListQuery;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -19,12 +20,24 @@ class CampaignController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $query = Campaign::query()->with(['course', 'recipients'])->latest();
+        $query = Campaign::query()->with(['course', 'recipients']);
         if ($request->filled('type')) {
             $query->where('type', $request->string('type'));
         } else {
             $query->where('type', 'training');
         }
+
+        ListQuery::applySearch($query, $request, ['name', 'status']);
+        ListQuery::applyLikeFilters($query, $request, [
+            'name' => 'name',
+        ]);
+        ListQuery::applyExactFilters($query, $request, [
+            'status' => 'status',
+        ]);
+        ListQuery::applySort($query, $request, [
+            'name' => 'name',
+            'status' => 'status',
+        ], 'id', 'desc');
 
         $rows = $query->paginate(ApiPagination::perPage($request));
 

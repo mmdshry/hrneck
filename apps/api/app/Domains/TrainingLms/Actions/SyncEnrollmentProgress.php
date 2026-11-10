@@ -25,7 +25,7 @@ class SyncEnrollmentProgress
 
     public function recompute(Enrollment $enrollment): Enrollment
     {
-        $enrollment->loadMissing(['course.lessons', 'course.quiz']);
+        $enrollment->loadMissing(['course.lessons', 'course.quizzes']);
 
         $lessonIds = $enrollment->course?->lessons->pluck('id') ?? collect();
         $totalLessons = max(1, $lessonIds->count());
@@ -36,19 +36,26 @@ class SyncEnrollmentProgress
             ->count();
 
         $lessonPct = (int) round(($completedLessons / $totalLessons) * 100);
-        $hasQuiz = $enrollment->course?->quiz !== null;
-        $quizPassed = false;
 
-        if ($hasQuiz) {
-            $quizPassed = QuizAttempt::query()
-                ->where('quiz_id', $enrollment->course->quiz->id)
+        $requiredQuizzes = $enrollment->course?->quizzes
+            ->where('is_required', true)
+            ->values() ?? collect();
+
+        $requiredQuizzesPassed = true;
+        foreach ($requiredQuizzes as $quiz) {
+            $passed = QuizAttempt::query()
+                ->where('quiz_id', $quiz->id)
                 ->where('target_id', $enrollment->target_id)
                 ->where('passed', true)
                 ->exists();
+            if (! $passed) {
+                $requiredQuizzesPassed = false;
+                break;
+            }
         }
 
         $allLessonsDone = $completedLessons >= $lessonIds->count();
-        $completed = $allLessonsDone && (! $hasQuiz || $quizPassed);
+        $completed = $allLessonsDone && $requiredQuizzesPassed;
 
         $enrollment->forceFill([
             'progress' => $completed ? 100 : $lessonPct,

@@ -10,6 +10,7 @@ use App\Filament\Resources\Courses\RelationManagers\LessonsRelationManager;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Repeater;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -40,16 +41,38 @@ class CourseResource extends Resource
             Textarea::make('description')->rows(3),
             TextInput::make('duration_minutes')->numeric()->default(10),
             Toggle::make('is_sample')->default(false),
-            Repeater::make('quiz_questions')
-                ->label('Quiz questions (saved to course quiz)')
+            Repeater::make('course_quizzes')
+                ->label('Quizzes')
                 ->dehydrated(false)
                 ->schema([
-                    TextInput::make('prompt')->required(),
-                    Textarea::make('options_text')
-                        ->label('Options (one per line)')
-                        ->required()
-                        ->helperText('First option is index 0'),
-                    TextInput::make('correct_index')->numeric()->default(0)->required(),
+                    TextInput::make('title')->required()->default('Quiz'),
+                    TextInput::make('pass_score')->numeric()->default(70)->required(),
+                    Toggle::make('is_required')->default(true),
+                    TextInput::make('time_limit_seconds')
+                        ->label('Time limit (seconds)')
+                        ->numeric()
+                        ->nullable(),
+                    Repeater::make('questions')
+                        ->schema([
+                            Select::make('type')
+                                ->options([
+                                    'mcq' => 'Multiple choice',
+                                    'essay' => 'Essay (no score)',
+                                ])
+                                ->default('mcq')
+                                ->required(),
+                            TextInput::make('prompt')->required(),
+                            Textarea::make('options_text')
+                                ->label('Options (one per line)')
+                                ->helperText('Required for multiple choice. First option is index 0.')
+                                ->visible(fn ($get): bool => ($get('type') ?? 'mcq') === 'mcq'),
+                            TextInput::make('correct_index')
+                                ->numeric()
+                                ->default(0)
+                                ->visible(fn ($get): bool => ($get('type') ?? 'mcq') === 'mcq'),
+                        ])
+                        ->defaultItems(1)
+                        ->columnSpanFull(),
                 ])
                 ->columnSpanFull()
                 ->defaultItems(0),
@@ -64,6 +87,7 @@ class CourseResource extends Resource
                 TextColumn::make('duration_minutes')->label('Minutes'),
                 IconColumn::make('is_sample')->boolean(),
                 TextColumn::make('lessons_count')->counts('lessons'),
+                TextColumn::make('quizzes_count')->counts('quizzes')->label('Quizzes'),
             ])
             ->recordActions([
                 EditAction::make(),

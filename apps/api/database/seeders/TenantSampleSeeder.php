@@ -47,12 +47,18 @@ class TenantSampleSeeder extends Seeder
 
         $quiz = Quiz::query()->firstOrCreate(
             ['course_id' => $course->id],
-            ['title' => 'Retention check', 'pass_score' => 70],
+            [
+                'title' => 'Retention check',
+                'pass_score' => 70,
+                'is_required' => true,
+                'sort_order' => 0,
+            ],
         );
 
         QuizQuestion::query()->firstOrCreate(
             ['quiz_id' => $quiz->id, 'prompt' => 'Which is a social-engineering red flag?'],
             [
+                'type' => 'mcq',
                 'options' => ['Urgent payment request from unknown sender', 'Newsletter you subscribed to', 'Calendar invite from your manager'],
                 'correct_index' => 0,
             ],
@@ -62,7 +68,7 @@ class TenantSampleSeeder extends Seeder
             ['id' => 1],
             [
                 'display_name' => tenant('id') ? strtoupper((string) tenant('id')) : 'Organization',
-                'primary_color' => '#0f766e',
+                'primary_color' => '#083a6d',
                 'timezone' => 'UTC',
                 'created_at' => now(),
                 'updated_at' => now(),
@@ -70,6 +76,7 @@ class TenantSampleSeeder extends Seeder
         );
 
         $this->call(ChecklistHrTemplatesSeeder::class);
+        $this->call(ChecklistWelcomePackSeeder::class);
         $this->call(TicketingItilSeeder::class);
     }
 }

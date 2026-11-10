@@ -130,6 +130,9 @@ class UserResource extends Resource
                 $record->password = Hash::make((string) $password);
             }
             $record->tenant_id = null;
+            if ($record->email_verified_at === null) {
+                $record->email_verified_at = now();
+            }
             $record->save();
             $record->syncRoles($roles);
 
@@ -141,6 +144,7 @@ class UserResource extends Resource
             'password' => Hash::make((string) $password),
             'tenant_id' => null,
         ]);
+        $user->forceFill(['email_verified_at' => now()])->save();
         $user->syncRoles($roles !== [] ? $roles : [OrgPermissionCatalog::PLATFORM_SUPER_ADMIN]);
 
         return $user;

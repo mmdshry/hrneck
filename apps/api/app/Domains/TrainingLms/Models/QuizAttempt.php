@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class QuizAttempt extends Model
 {
     protected $fillable = [
-        'quiz_id', 'target_id', 'score', 'passed', 'answers',
+        'quiz_id', 'target_id', 'score', 'passed', 'answers', 'started_at',
     ];
 
     protected function casts(): array
@@ -15,6 +15,7 @@ class QuizAttempt extends Model
         return [
             'passed' => 'boolean',
             'answers' => 'array',
+            'started_at' => 'datetime',
         ];
     }
 }

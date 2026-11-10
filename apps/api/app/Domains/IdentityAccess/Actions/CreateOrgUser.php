@@ -35,8 +35,8 @@ class CreateOrgUser
             'email' => $email,
             'password' => Hash::make($password),
             'tenant_id' => $tenantId,
-            'mfa_enabled' => false,
         ]);
+        $user->forceFill(['email_verified_at' => now()])->save();
 
         setPermissionsTeamId($tenantId);
 

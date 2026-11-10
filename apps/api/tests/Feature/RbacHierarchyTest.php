@@ -62,6 +62,38 @@ test('org user without permission is forbidden', function () {
         ->assertOk();
 });
 
+test('groups manager can list targets but not mutate them', function () {
+    $manager = app(CreateOrgUser::class)->handle(
+        'itneck',
+        'Groups Manager',
+        'groups.manager@itneck.test',
+        'DemoPass!234',
+        [],
+    );
+
+    setPermissionsTeamId('itneck');
+    $role = Role::create([
+        'name' => 'groups_only',
+        'guard_name' => OrgPermissionCatalog::GUARD,
+        config('permission.column_names.team_foreign_key') => 'itneck',
+    ]);
+    $role->syncPermissions([OrgPermissionCatalog::GROUPS_MANAGE]);
+    $manager->syncRoles([$role]);
+    setPermissionsTeamId(null);
+
+    $this->actingAs($manager)
+        ->withHeader('X-Tenant', 'itneck')
+        ->getJson('/api/v1/org/targets')
+        ->assertOk();
+
+    $this->actingAs($manager)
+        ->withHeader('X-Tenant', 'itneck')
+        ->postJson('/api/v1/org/targets', [
+            'email' => 'blocked@itneck.test',
+        ])
+        ->assertForbidden();
+});
+
 test('org admin can manage users and roles', function () {
     $admin = orgAdmin();
 

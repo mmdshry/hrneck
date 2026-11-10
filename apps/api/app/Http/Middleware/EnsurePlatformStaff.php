@@ -2,7 +2,6 @@
 
 namespace App\Http\Middleware;
 
-use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
 use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
@@ -18,9 +17,7 @@ class EnsurePlatformStaff
             abort(401);
         }
 
-        setPermissionsTeamId(null);
-
-        if (! $user->hasAnyRole(OrgPermissionCatalog::platformRoles())) {
+        if (! $user->isPlatformStaff()) {
             abort(403, 'Platform staff access required.');
         }
 

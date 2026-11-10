@@ -20,14 +20,44 @@ test('org admin can load detailed reports overview', function () {
             'data' => [
                 'campaign' => [
                     'campaigns',
+                    'campaigns_running',
                     'recipients',
-                    'sent',
                     'opened',
-                    'clicked',
-                    'submitted',
-                    'reported',
+                    'completed',
+                    'no_action',
+                    'opened_pct',
+                    'completed_pct',
+                    'no_action_pct',
                     'enrollments',
-                    'click_rate',
+                    'active_employees',
+                ],
+                'blocks' => [
+                    'training' => [
+                        'assigned',
+                        'in_progress',
+                        'completed',
+                        'completion_rate',
+                        'segments',
+                    ],
+                    'checklists' => [
+                        'open',
+                        'completed',
+                        'completion_rate',
+                        'segments',
+                    ],
+                    'ticketing' => [
+                        'open',
+                        'resolved',
+                        'sla_response_breached',
+                        'sla_resolve_breached',
+                    ],
+                    'campaigns_people' => [
+                        'campaigns_running',
+                        'opened_pct',
+                        'completed_pct',
+                        'no_action_pct',
+                        'active_employees',
+                    ],
                 ],
                 'counts' => [
                     'users',
@@ -49,6 +79,27 @@ test('org admin can load detailed reports overview', function () {
                 'ticketing',
             ],
         ]);
+});
+
+test('org admin can load campaign summary funnel', function () {
+    $user = orgAdmin();
+
+    $this->actingAs($user)
+        ->withHeader('X-Tenant', 'itneck')
+        ->getJson('/api/v1/org/reports/summary')
+        ->assertOk()
+        ->assertJsonStructure([
+            'data' => [
+                'campaigns',
+                'campaigns_running',
+                'opened_pct',
+                'completed_pct',
+                'no_action_pct',
+                'active_employees',
+            ],
+        ])
+        ->assertJsonMissingPath('data.click_rate')
+        ->assertJsonMissingPath('data.clicked');
 });
 
 test('org admin can paginate targets report section', function () {

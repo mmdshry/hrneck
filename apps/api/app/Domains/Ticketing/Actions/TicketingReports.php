@@ -2,16 +2,26 @@
 
 namespace App\Domains\Ticketing\Actions;
 
+use App\Domains\Ticketing\Models\SdDesk;
+use App\Domains\Ticketing\Models\SdPriority;
+use App\Domains\Ticketing\Models\SdStage;
 use App\Domains\Ticketing\Models\SdTicket;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 class TicketingReports
 {
     /**
      * @return array<string, mixed>
      */
-    public function summary(?int $deskId = null, ?Carbon $from = null, ?Carbon $to = null): array
-    {
+    public function summary(
+        ?int $deskId = null,
+        ?Carbon $from = null,
+        ?Carbon $to = null,
+        ?int $departmentId = null,
+    ): array {
         $query = SdTicket::query()->active();
         if ($deskId) {
             $query->where('desk_id', $deskId);
@@ -22,18 +32,48 @@ class TicketingReports
         if ($to) {
             $query->where('created_at', '<=', $to);
         }
+        if ($departmentId) {
+            $query->whereHas('requesterTarget', fn (Builder $t) => $t->where('department_id', $departmentId));
+        }
 
         $base = clone $query;
+
+        $byStageIds = (clone $base)->selectRaw('stage_id, count(*) as c')->groupBy('stage_id')->pluck('c', 'stage_id');
+        $byPriorityIds = (clone $base)->selectRaw('priority_id, count(*) as c')->groupBy('priority_id')->pluck('c', 'priority_id');
+        $byDeskIds = (clone $base)->selectRaw('desk_id, count(*) as c')->groupBy('desk_id')->pluck('c', 'desk_id');
 
         return [
             'total_open' => (clone $base)->whereNull('resolved_at')->count(),
             'total_resolved' => (clone $base)->whereNotNull('resolved_at')->count(),
             'sla_response_breached' => (clone $base)->where('sla_response_breached', true)->count(),
             'sla_resolve_breached' => (clone $base)->where('sla_resolve_breached', true)->count(),
-            'by_stage' => (clone $base)->selectRaw('stage_id, count(*) as c')->groupBy('stage_id')->pluck('c', 'stage_id'),
-            'by_priority' => (clone $base)->selectRaw('priority_id, count(*) as c')->groupBy('priority_id')->pluck('c', 'priority_id'),
-            'by_desk' => (clone $base)->selectRaw('desk_id, count(*) as c')->groupBy('desk_id')->pluck('c', 'desk_id'),
+            'by_stage' => $this->namedCounts($byStageIds, SdStage::class),
+            'by_priority' => $this->namedCounts($byPriorityIds, SdPriority::class),
+            'by_desk' => $this->namedCounts($byDeskIds, SdDesk::class),
         ];
+    }
+
+    /**
+     * @param  Collection<int|string, mixed>  $countsById
+     * @param  class-string<Model>  $modelClass
+     * @return array<string, int>
+     */
+    private function namedCounts($countsById, string $modelClass): array
+    {
+        if ($countsById->isEmpty()) {
+            return [];
+        }
+
+        $ids = $countsById->keys()->map(fn ($id) => (int) $id)->all();
+        $names = $modelClass::query()->whereIn('id', $ids)->pluck('name', 'id');
+
+        $named = [];
+        foreach ($countsById as $id => $count) {
+            $label = (string) ($names[(int) $id] ?? ('#'.$id));
+            $named[$label] = (int) $count;
+        }
+
+        return $named;
     }
 
     public function csv(?int $deskId = null): string

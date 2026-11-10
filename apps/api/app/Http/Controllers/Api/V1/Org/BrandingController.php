@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api\V1\Org;
 
 use App\Domains\Audit\Actions\LogOrgActivity;
+use App\Domains\Realtime\Support\LiveTopics;
+use App\Domains\Realtime\Support\PublishLive;
 use App\Http\Controllers\Controller;
 use App\Support\Images\ConvertUploadedImageToWebp;
 use Illuminate\Http\JsonResponse;
@@ -64,7 +66,7 @@ class BrandingController extends Controller
                 'updated_at' => now(),
                 'created_at' => $existing->created_at ?? now(),
                 'display_name' => $existing->display_name ?? null,
-                'primary_color' => $existing->primary_color ?? '#0f766e',
+                'primary_color' => $existing->primary_color ?? '#083a6d',
                 'timezone' => $existing->timezone ?? 'UTC',
                 'meta' => $existing->meta ?? '{}',
             ],
@@ -73,6 +75,8 @@ class BrandingController extends Controller
         $audit->handle('settings', 'logo_uploaded', 'Organization logo uploaded', null, [
             'logo_path' => $path,
         ]);
+
+        PublishLive::org([LiveTopics::BRANDING]);
 
         return $this->show();
     }

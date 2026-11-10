@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api\V1\Portal;
 
+use App\Domains\Realtime\Support\LiveTopics;
+use App\Domains\Realtime\Support\PublishLive;
 use App\Domains\TargetsGroups\Models\Target;
 use App\Domains\Ticketing\Actions\CreateTicket;
 use App\Domains\Ticketing\Models\SdDesk;
@@ -11,6 +13,7 @@ use App\Domains\Ticketing\Models\SdTicketNote;
 use App\Domains\Ticketing\Support\TicketingPayload;
 use App\Http\Controllers\Controller;
 use App\Support\ApiPagination;
+use App\Support\ListQuery;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -41,6 +44,20 @@ class PortalTicketingController extends Controller
                     $q->orWhere('requester_target_id', $targetId);
                 }
             });
+
+        ListQuery::applySearch($query, $request, ['summary', 'number']);
+        ListQuery::applyLikeFilters($query, $request, [
+            'number' => 'number',
+            'summary' => 'summary',
+        ]);
+        if ($request->filled('stage')) {
+            $stage = trim((string) $request->input('stage'));
+            $query->whereHas('stage', fn ($q) => $q->where('name', 'like', ListQuery::likePattern($stage)));
+        }
+        if ($request->filled('status')) {
+            $status = trim((string) $request->input('status'));
+            $query->whereHas('status', fn ($q) => $q->where('name', 'like', ListQuery::likePattern($status)));
+        }
 
         $rows = $query->latest()->paginate(ApiPagination::perPage($request));
 
@@ -106,18 +123,25 @@ class PortalTicketingController extends Controller
             'author_user_id' => $request->user()?->id,
         ]);
 
+        PublishLive::org([LiveTopics::TICKETS], throttled: true);
+        if ($model->requester_user_id) {
+            PublishLive::portalUser((int) $model->requester_user_id);
+        } elseif ($request->user()?->id) {
+            PublishLive::portalUser((int) $request->user()->id);
+        }
+
         return response()->json(['data' => $note], 201);
     }
 
     public function kb(Request $request): JsonResponse
     {
         $query = SdKbArticle::query()->where('is_published', true)->latest();
-        if ($request->filled('q')) {
-            $q = '%'.str_replace(['%', '_'], ['\\%', '\\_'], (string) $request->input('q')).'%';
-            $query->where(function ($b) use ($q): void {
-                $b->where('summary', 'like', $q)->orWhere('description', 'like', $q);
-            });
-        }
+        ListQuery::applySearch($query, $request, ['summary', 'description', 'number']);
+        ListQuery::applyLikeFilters($query, $request, [
+            'number' => 'number',
+            'summary' => 'summary',
+            'description' => 'description',
+        ]);
 
         $rows = $query->paginate(ApiPagination::perPage($request));
 

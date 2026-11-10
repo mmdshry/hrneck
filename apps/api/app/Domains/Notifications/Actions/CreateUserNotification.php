@@ -4,6 +4,7 @@ namespace App\Domains\Notifications\Actions;
 
 use App\Domains\Notifications\Events\UserNotificationBroadcast;
 use App\Domains\Notifications\Models\UserNotification;
+use App\Domains\Realtime\Support\PublishLive;
 use Throwable;
 
 class CreateUserNotification
@@ -50,6 +51,7 @@ class CreateUserNotification
                     'created_at' => optional($notification->created_at)?->toIso8601String(),
                 ],
             ]));
+            PublishLive::notificationsUser((int) $notification->user_id, $tenantId);
         } catch (Throwable $e) {
             report($e);
         }

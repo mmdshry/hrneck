@@ -5,10 +5,13 @@ namespace App\Http\Controllers\Api\V1\Org;
 use App\Domains\Audit\Actions\LogOrgActivity;
 use App\Domains\IdentityAccess\Actions\CreateOrgUser;
 use App\Domains\IdentityAccess\Actions\SyncOrgUserRoles;
+use App\Domains\Realtime\Support\LiveTopics;
+use App\Domains\Realtime\Support\PublishLive;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Api\V1\UserResource;
 use App\Models\User;
 use App\Support\ApiPagination;
+use App\Support\ListQuery;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -20,10 +23,22 @@ class OrgUserController extends Controller
     {
         $tenantId = (string) tenant('id');
 
-        $users = User::query()
-            ->where('tenant_id', $tenantId)
-            ->orderBy('name')
-            ->paginate(ApiPagination::perPage($request));
+        $query = User::query()->where('tenant_id', $tenantId);
+        ListQuery::applySearch($query, $request, ['name', 'email']);
+        ListQuery::applyLikeFilters($query, $request, [
+            'name' => 'name',
+            'email' => 'email',
+        ]);
+        if ($request->filled('role')) {
+            $role = trim((string) $request->input('role'));
+            $query->whereHas('roles', fn ($q) => $q->where('name', 'like', ListQuery::likePattern($role)));
+        }
+        ListQuery::applySort($query, $request, [
+            'name' => 'name',
+            'email' => 'email',
+        ], 'name', 'asc');
+
+        $users = $query->paginate(ApiPagination::perPage($request));
 
         return UserResource::collection($users);
     }
@@ -50,6 +65,8 @@ class OrgUserController extends Controller
             'email' => $user->email,
             'roles' => $data['roles'] ?? ['org_admin'],
         ]);
+
+        PublishLive::org([LiveTopics::USERS, LiveTopics::REPORTS_DETAILED]);
 
         return response()->json(['data' => new UserResource($user)], 201);
     }
@@ -79,6 +96,8 @@ class OrgUserController extends Controller
             'after' => $user->only(['name', 'email']),
         ]);
 
+        PublishLive::org([LiveTopics::USERS, LiveTopics::REPORTS_DETAILED]);
+
         return new UserResource($user->load('roles'));
     }
 
@@ -96,6 +115,8 @@ class OrgUserController extends Controller
             'before' => $before,
             'after' => $data['roles'],
         ]);
+
+        PublishLive::org([LiveTopics::USERS]);
 
         return new UserResource($updated);
     }
@@ -117,6 +138,8 @@ class OrgUserController extends Controller
         $audit->handle('users', 'deleted', 'Org user deleted', null, [
             'user' => $snapshot,
         ]);
+
+        PublishLive::org([LiveTopics::USERS, LiveTopics::REPORTS_DETAILED]);
 
         return response()->json(['message' => 'Deleted']);
     }

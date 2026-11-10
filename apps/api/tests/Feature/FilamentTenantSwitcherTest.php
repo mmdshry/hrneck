@@ -21,15 +21,17 @@ beforeEach(function () {
     $this->seed(DemoSeeder::class);
 });
 
-test('organization users see an access message instead of a bad password', function () {
+test('organization users get the same generic Filament login failure as bad passwords', function () {
     Filament::setCurrentPanel(Filament::getPanel('admin'));
 
+    // Anti-enumeration: org users must not get a distinct "belongs to an organization" hint.
     Livewire::test(Login::class)
         ->set('data.email', 'admin@itneck.test')
         ->set('data.password', 'DemoPass!234')
         ->call('authenticate')
         ->assertHasErrors(['data.email'])
-        ->assertSee('belongs to an organization');
+        ->assertSee('These credentials do not match our records.')
+        ->assertDontSee('belongs to an organization');
 
     Livewire::test(Login::class)
         ->set('data.email', 'admin@hrneck.test')

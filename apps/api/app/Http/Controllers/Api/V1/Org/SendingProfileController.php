@@ -8,6 +8,7 @@ use App\Domains\Realtime\Support\LiveTopics;
 use App\Domains\Realtime\Support\PublishLive;
 use App\Http\Controllers\Controller;
 use App\Support\ApiPagination;
+use App\Support\ListQuery;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -15,9 +16,20 @@ class SendingProfileController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $rows = SendingProfile::query()
-            ->orderByDesc('is_default')
-            ->paginate(ApiPagination::perPage($request));
+        $query = SendingProfile::query();
+        ListQuery::applySearch($query, $request, ['name', 'from_name', 'from_email', 'mailer']);
+        ListQuery::applyLikeFilters($query, $request, [
+            'name' => 'name',
+            'from_name' => 'from_name',
+            'from_email' => 'from_email',
+            'mailer' => 'mailer',
+        ]);
+        ListQuery::applySort($query, $request, [
+            'name' => 'name',
+            'from_email' => 'from_email',
+        ], 'is_default', 'desc');
+
+        $rows = $query->paginate(ApiPagination::perPage($request));
 
         return response()->json([
             'data' => collect($rows->items())->values(),

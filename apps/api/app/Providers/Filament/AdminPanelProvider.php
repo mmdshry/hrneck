@@ -9,6 +9,7 @@ use App\Filament\Widgets\OpenNextMspWidget;
 use App\Filament\Widgets\RecentTenants;
 use App\Filament\Widgets\TenantOpsOverview;
 use App\Http\Middleware\ApplyFilamentTenantContext;
+use Filament\Auth\MultiFactor\App\AppAuthentication;
 use Filament\Enums\ThemeMode;
 use Filament\FontProviders\BunnyFontProvider;
 use Filament\Http\Middleware\Authenticate;
@@ -36,18 +37,24 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->login(Login::class)
+            ->passwordReset()
+            ->multiFactorAuthentication([
+                AppAuthentication::make()
+                    ->recoverable()
+                    ->brandName(config('brand.short')),
+            ])
             ->brandName(config('brand.short'))
             // Avoid Windows DIRECTORY_SEPARATOR leaking into local font CSS URLs.
             ->font('Plus Jakarta Sans', provider: BunnyFontProvider::class)
             ->viteTheme('resources/css/filament/admin/theme.css')
             ->darkMode(true)
-            ->defaultThemeMode(ThemeMode::Dark)
+            ->defaultThemeMode(ThemeMode::Light)
             ->colors([
-                'primary' => Color::hex('#059669'),
+                'primary' => Color::hex('#083a6d'),
                 'gray' => Color::Slate,
                 'danger' => Color::hex('#DC2626'),
-                'info' => Color::hex('#1E3A5F'),
-                'success' => Color::hex('#059669'),
+                'info' => Color::hex('#083a6d'),
+                'success' => Color::hex('#047857'),
                 'warning' => Color::hex('#D97706'),
             ])
             ->navigationGroups([

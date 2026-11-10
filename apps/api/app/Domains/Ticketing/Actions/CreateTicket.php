@@ -3,6 +3,8 @@
 namespace App\Domains\Ticketing\Actions;
 
 use App\Domains\Notifications\Actions\NotifyTicketAssignee;
+use App\Domains\Realtime\Support\LiveTopics;
+use App\Domains\Realtime\Support\PublishLive;
 use App\Domains\Ticketing\Models\SdDesk;
 use App\Domains\Ticketing\Models\SdStage;
 use App\Domains\Ticketing\Models\SdStatus;
@@ -81,6 +83,16 @@ class CreateTicket
             $fresh = $ticket->fresh(['desk', 'stage', 'status', 'priority', 'severity', 'category', 'notes', 'tasks', 'links'])
                 ?? $ticket;
             app(NotifyTicketAssignee::class)->handle($fresh);
+
+            PublishLive::org([
+                LiveTopics::TICKETS,
+                LiveTopics::TICKETING_REPORTS,
+                LiveTopics::REPORTS_DETAILED,
+            ], throttled: true);
+
+            if ($fresh->requester_user_id) {
+                PublishLive::portalUser((int) $fresh->requester_user_id);
+            }
 
             return $fresh;
         });

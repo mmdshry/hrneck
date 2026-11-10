@@ -1,6 +1,7 @@
 <?php
 
 use App\Domains\Checklists\Models\ChecklistAnswer;
+use App\Domains\Checklists\Models\ChecklistPack;
 use App\Domains\Checklists\Models\ChecklistTemplate;
 use App\Domains\TargetsGroups\Models\Target;
 use App\Models\Tenant;
@@ -345,4 +346,161 @@ test('checklist image uploads are stored as webp', function () {
         ->and($upload['file_mime'])->toBe('image/webp')
         ->and($upload['original_name'])->toEndWith('.webp');
     Storage::disk('local')->assertExists($upload['file_disk_path']);
+});
+
+test('pack crud assign and rejects system templates', function () {
+    Tenancy::initialize($this->tenant);
+    $system = ChecklistTemplate::query()->where('is_system', true)->firstOrFail();
+    $target = Target::query()->firstOrFail();
+    Tenancy::end();
+
+    $templateA = asChecklistAdmin($this)
+        ->postJson('/api/v1/org/checklists/templates', [
+            'name' => 'Pack item A',
+            'category' => 'onboarding',
+            'status' => 'published',
+            'schema_json' => [
+                'items' => [
+                    [
+                        'key' => 'done_a',
+                        'type' => 'checkbox',
+                        'label' => 'Done A',
+                        'required' => false,
+                        'order' => 1,
+                        'options' => [],
+                    ],
+                ],
+            ],
+        ])
+        ->assertCreated()
+        ->json('data');
+
+    $templateB = asChecklistAdmin($this)
+        ->postJson('/api/v1/org/checklists/templates', [
+            'name' => 'Pack item B',
+            'category' => 'hr_ops',
+            'status' => 'published',
+            'schema_json' => [
+                'items' => [
+                    [
+                        'key' => 'done_b',
+                        'type' => 'checkbox',
+                        'label' => 'Done B',
+                        'required' => false,
+                        'order' => 1,
+                        'options' => [],
+                    ],
+                ],
+            ],
+        ])
+        ->assertCreated()
+        ->json('data');
+
+    asChecklistAdmin($this)
+        ->postJson('/api/v1/org/checklists/packs', [
+            'name' => 'Bad pack',
+            'template_ids' => [$system->id],
+        ])
+        ->assertStatus(422);
+
+    $pack = asChecklistAdmin($this)
+        ->postJson('/api/v1/org/checklists/packs', [
+            'name' => 'Welcome pack test',
+            'status' => 'published',
+            'auto_assign_on_create' => false,
+            'template_ids' => [$templateA['id'], $templateB['id']],
+        ])
+        ->assertCreated()
+        ->json('data');
+
+    expect($pack['template_ids'])->toBe([$templateA['id'], $templateB['id']]);
+
+    $created = asChecklistAdmin($this)
+        ->postJson("/api/v1/org/checklists/packs/{$pack['id']}/assign", [
+            'target_ids' => [$target->id],
+        ])
+        ->assertCreated()
+        ->json('data');
+
+    expect($created)->toHaveCount(2);
+
+    asChecklistAdmin($this)
+        ->postJson("/api/v1/org/checklists/packs/{$pack['id']}/assign", [
+            'target_ids' => [$target->id],
+        ])
+        ->assertStatus(422);
+});
+
+test('creating a target auto assigns published packs', function () {
+    $template = asChecklistAdmin($this)
+        ->postJson('/api/v1/org/checklists/templates', [
+            'name' => 'Auto hire checklist',
+            'category' => 'onboarding',
+            'status' => 'published',
+            'schema_json' => [
+                'items' => [
+                    [
+                        'key' => 'welcome',
+                        'type' => 'checkbox',
+                        'label' => 'Welcome done',
+                        'required' => false,
+                        'order' => 1,
+                        'options' => [],
+                    ],
+                ],
+            ],
+        ])
+        ->assertCreated()
+        ->json('data');
+
+    asChecklistAdmin($this)
+        ->postJson('/api/v1/org/checklists/packs', [
+            'name' => 'Auto hire pack',
+            'status' => 'published',
+            'auto_assign_on_create' => true,
+            'template_ids' => [$template['id']],
+        ])
+        ->assertCreated();
+
+    $email = 'new.hire.auto.'.uniqid('', true).'@itneck.test';
+    $created = asChecklistAdmin($this)
+        ->postJson('/api/v1/org/targets', [
+            'email' => $email,
+            'first_name' => 'New',
+            'last_name' => 'Hire',
+        ])
+        ->assertCreated()
+        ->json();
+
+    expect($created['meta']['auto_assigned_instance_count'])->toBeGreaterThanOrEqual(1);
+
+    $targetId = $created['data']['id'];
+
+    $instances = asChecklistAdmin($this)
+        ->getJson('/api/v1/org/checklists/instances?target_id='.$targetId)
+        ->assertOk()
+        ->json('data');
+
+    expect(collect($instances)->pluck('title')->all())->toContain('Auto hire checklist');
+});
+
+test('org admin can show a single target', function () {
+    Tenancy::initialize($this->tenant);
+    $target = Target::query()->firstOrFail();
+    Tenancy::end();
+
+    asChecklistAdmin($this)
+        ->getJson("/api/v1/org/targets/{$target->id}")
+        ->assertOk()
+        ->assertJsonPath('data.id', $target->id)
+        ->assertJsonPath('data.email', $target->email);
+});
+
+test('welcome pack is seeded for sample tenants', function () {
+    Tenancy::initialize($this->tenant);
+    expect(ChecklistPack::query()->where('slug', 'welcome-pack')->exists())->toBeTrue();
+    $pack = ChecklistPack::query()->where('slug', 'welcome-pack')->firstOrFail();
+    expect($pack->auto_assign_on_create)->toBeTrue();
+    expect($pack->items()->count())->toBeGreaterThanOrEqual(1);
+    Tenancy::end();
 });

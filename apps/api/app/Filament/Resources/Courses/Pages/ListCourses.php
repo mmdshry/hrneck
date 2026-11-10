@@ -23,25 +23,10 @@ class ListCourses extends ListRecords
             CreateAction::make()
                 ->visible(fn (): bool => FilamentTenant::has())
                 ->using(function (array $data): Course {
-                    $questions = $data['quiz_questions'] ?? [];
-                    unset($data['quiz_questions']);
+                    $quizzes = $data['course_quizzes'] ?? [];
+                    unset($data['course_quizzes']);
                     $course = Course::query()->create($data);
-                    if ($questions !== []) {
-                        $quiz = Quiz::query()->create([
-                            'course_id' => $course->id,
-                            'title' => 'Quiz',
-                            'pass_score' => 70,
-                        ]);
-                        foreach ($questions as $q) {
-                            $options = array_values(array_filter(array_map('trim', explode("\n", (string) ($q['options_text'] ?? '')))));
-                            QuizQuestion::query()->create([
-                                'quiz_id' => $quiz->id,
-                                'prompt' => $q['prompt'],
-                                'options' => $options,
-                                'correct_index' => (int) ($q['correct_index'] ?? 0),
-                            ]);
-                        }
-                    }
+                    self::syncQuizzes($course, $quizzes);
 
                     return $course;
                 })
@@ -52,5 +37,47 @@ class ListCourses extends ListRecords
     public function getHeading(): string
     {
         return FilamentTenant::has() ? 'Training courses' : 'Training courses — select an organization';
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $quizzes
+     */
+    public static function syncQuizzes(Course $course, array $quizzes): void
+    {
+        foreach ($course->quizzes()->with('questions')->get() as $quiz) {
+            $quiz->questions()->delete();
+            $quiz->delete();
+        }
+
+        foreach ($quizzes as $index => $quizData) {
+            $questions = $quizData['questions'] ?? [];
+            $quiz = Quiz::query()->create([
+                'course_id' => $course->id,
+                'title' => $quizData['title'] ?? 'Quiz',
+                'pass_score' => (int) ($quizData['pass_score'] ?? 70),
+                'is_required' => (bool) ($quizData['is_required'] ?? true),
+                'time_limit_seconds' => isset($quizData['time_limit_seconds']) && $quizData['time_limit_seconds'] !== ''
+                    ? (int) $quizData['time_limit_seconds']
+                    : null,
+                'sort_order' => $index,
+            ]);
+
+            foreach ($questions as $question) {
+                $type = ($question['type'] ?? 'mcq') === 'essay' ? QuizQuestion::TYPE_ESSAY : QuizQuestion::TYPE_MCQ;
+                $options = null;
+                $correctIndex = null;
+                if ($type === QuizQuestion::TYPE_MCQ) {
+                    $options = array_values(array_filter(array_map('trim', explode("\n", (string) ($question['options_text'] ?? '')))));
+                    $correctIndex = (int) ($question['correct_index'] ?? 0);
+                }
+                QuizQuestion::query()->create([
+                    'quiz_id' => $quiz->id,
+                    'type' => $type,
+                    'prompt' => $question['prompt'],
+                    'options' => $options,
+                    'correct_index' => $correctIndex,
+                ]);
+            }
+        }
     }
 }

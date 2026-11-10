@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\V1\Org\BrandingController;
 use App\Http\Controllers\Api\V1\Org\CampaignController;
 use App\Http\Controllers\Api\V1\Org\ChecklistController;
 use App\Http\Controllers\Api\V1\Org\CustomDomainController;
+use App\Http\Controllers\Api\V1\Org\DepartmentController;
 use App\Http\Controllers\Api\V1\Org\DirectorySyncController;
 use App\Http\Controllers\Api\V1\Org\GroupController;
 use App\Http\Controllers\Api\V1\Org\IntegrationController;
@@ -40,17 +41,23 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('v1')->group(function (): void {
     Route::get('/health', HealthController::class)->name('api.v1.health');
 
-    Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:tenant-api');
+    Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:auth-login');
     Route::post('/auth/mfa/verify', [AuthController::class, 'verifyMfa'])->middleware('throttle:mfa');
     Route::post('/auth/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
     // Guest-friendly: returns 200 with data:null so browsers/LHCI do not log 401 noise.
     Route::get('/auth/me', [AuthController::class, 'me']);
     Route::post('/auth/mfa/setup', [AuthController::class, 'setupMfa'])->middleware(['auth:sanctum', 'throttle:mfa']);
     Route::post('/auth/mfa/confirm', [AuthController::class, 'confirmMfa'])->middleware(['auth:sanctum', 'throttle:mfa']);
+    Route::post('/auth/mfa/disable', [AuthController::class, 'disableMfa'])->middleware(['auth:sanctum', 'throttle:mfa']);
+    Route::post('/auth/password/forgot', [AuthController::class, 'forgotPassword'])->middleware('throttle:auth-login');
+    Route::post('/auth/password/reset', [AuthController::class, 'resetPassword'])->middleware('throttle:auth-login');
+    Route::post('/auth/password', [AuthController::class, 'changePassword'])->middleware('auth:sanctum');
 
     Route::middleware(['auth:sanctum', EnsurePlatformStaff::class])->prefix('msp')->group(function (): void {
         Route::get('/tenants', [TenantController::class, 'index']);
         Route::post('/tenants', [TenantController::class, 'store']);
+        Route::post('/tenants/leave', [TenantController::class, 'leave']);
+        Route::post('/tenants/{tenant}/enter', [TenantController::class, 'enter']);
         Route::put('/tenants/{tenant}', [TenantController::class, 'update']);
     });
 
@@ -93,13 +100,25 @@ Route::prefix('v1')->group(function (): void {
                 Route::delete('/roles/{role}', [OrgRoleController::class, 'destroy']);
             });
 
+            Route::get('/targets', [TargetController::class, 'index'])
+                ->middleware('permission:'.OrgPermissionCatalog::TARGETS_MANAGE.'|'.OrgPermissionCatalog::GROUPS_MANAGE);
+
             Route::middleware('permission:'.OrgPermissionCatalog::TARGETS_MANAGE)->group(function (): void {
-                Route::get('/targets', [TargetController::class, 'index']);
+                Route::get('/targets/{target}', [TargetController::class, 'show']);
                 Route::post('/targets', [TargetController::class, 'store']);
                 Route::patch('/targets/{target}', [TargetController::class, 'update']);
                 Route::delete('/targets/{target}', [TargetController::class, 'destroy']);
                 Route::post('/targets/import', [TargetController::class, 'importCsv']);
                 Route::post('/directory-sync', DirectorySyncController::class);
+            });
+
+            Route::get('/departments', [DepartmentController::class, 'index'])
+                ->middleware('permission:'.OrgPermissionCatalog::DEPARTMENTS_MANAGE.'|'.OrgPermissionCatalog::TARGETS_MANAGE.'|'.OrgPermissionCatalog::REPORTS_VIEW);
+
+            Route::middleware('permission:'.OrgPermissionCatalog::DEPARTMENTS_MANAGE)->group(function (): void {
+                Route::post('/departments', [DepartmentController::class, 'store']);
+                Route::patch('/departments/{department}', [DepartmentController::class, 'update']);
+                Route::delete('/departments/{department}', [DepartmentController::class, 'destroy']);
             });
 
             Route::middleware('permission:'.OrgPermissionCatalog::GROUPS_MANAGE)->group(function (): void {
@@ -126,6 +145,9 @@ Route::prefix('v1')->group(function (): void {
                 Route::patch('/training/courses/{course}/lessons/{lesson}', [TrainingController::class, 'updateLesson']);
                 Route::delete('/training/courses/{course}/lessons/{lesson}', [TrainingController::class, 'destroyLesson']);
                 Route::put('/training/courses/{course}/quiz', [TrainingController::class, 'upsertQuiz']);
+                Route::post('/training/courses/{course}/quizzes', [TrainingController::class, 'storeQuiz']);
+                Route::put('/training/courses/{course}/quizzes/{quiz}', [TrainingController::class, 'updateQuiz']);
+                Route::delete('/training/courses/{course}/quizzes/{quiz}', [TrainingController::class, 'destroyQuiz']);
                 Route::post('/training/media/upload', [TrainingController::class, 'uploadMedia']);
                 Route::get('/training/enrollments', [TrainingController::class, 'enrollments']);
                 Route::get('/training/enrollments/export', [TrainingController::class, 'exportEnrollments']);
@@ -139,6 +161,11 @@ Route::prefix('v1')->group(function (): void {
                 Route::get('/checklists/templates/{template}', [ChecklistController::class, 'showTemplate']);
                 Route::patch('/checklists/templates/{template}', [ChecklistController::class, 'updateTemplate']);
                 Route::post('/checklists/templates/{template}/from-system', [ChecklistController::class, 'copyFromSystem']);
+                Route::get('/checklists/packs', [ChecklistController::class, 'packs']);
+                Route::post('/checklists/packs', [ChecklistController::class, 'storePack']);
+                Route::get('/checklists/packs/{pack}', [ChecklistController::class, 'showPack']);
+                Route::patch('/checklists/packs/{pack}', [ChecklistController::class, 'updatePack']);
+                Route::post('/checklists/packs/{pack}/assign', [ChecklistController::class, 'assignPack']);
                 Route::get('/checklists/instances', [ChecklistController::class, 'instances']);
                 Route::post('/checklists/instances', [ChecklistController::class, 'storeInstances']);
                 Route::get('/checklists/instances/{instance}', [ChecklistController::class, 'showInstance']);

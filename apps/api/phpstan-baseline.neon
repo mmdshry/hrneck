@@ -13,42 +13,6 @@ parameters:
 			path: app/Console/Commands/SmtpSmokeCommand.php
 
 		-
-			message: '#^Access to an undefined property App\\Domains\\Campaigns\\Models\\CampaignRecipient\:\:\$clicked\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Domains/AnalyticsReporting/Actions/BuildOrgDetailedReport.php
-
-		-
-			message: '#^Access to an undefined property App\\Domains\\Campaigns\\Models\\CampaignRecipient\:\:\$opened\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Domains/AnalyticsReporting/Actions/BuildOrgDetailedReport.php
-
-		-
-			message: '#^Access to an undefined property App\\Domains\\Campaigns\\Models\\CampaignRecipient\:\:\$recipients\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Domains/AnalyticsReporting/Actions/BuildOrgDetailedReport.php
-
-		-
-			message: '#^Access to an undefined property App\\Domains\\Campaigns\\Models\\CampaignRecipient\:\:\$reported\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Domains/AnalyticsReporting/Actions/BuildOrgDetailedReport.php
-
-		-
-			message: '#^Access to an undefined property App\\Domains\\Campaigns\\Models\\CampaignRecipient\:\:\$sent\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Domains/AnalyticsReporting/Actions/BuildOrgDetailedReport.php
-
-		-
-			message: '#^Access to an undefined property App\\Domains\\Campaigns\\Models\\CampaignRecipient\:\:\$submitted\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Domains/AnalyticsReporting/Actions/BuildOrgDetailedReport.php
-
-		-
 			message: '#^Access to an undefined property App\\Domains\\TargetsGroups\\Models\\Target\:\:\$department_label\.$#'
 			identifier: property.notFound
 			count: 1
@@ -125,6 +89,12 @@ parameters:
 			identifier: return.type
 			count: 1
 			path: app/Domains/IdentityAccess/Actions/ManageOrgRole.php
+
+		-
+			message: '#^Call to function is_string\(\) with string will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Domains/IdentityAccess/Actions/MfaService.php
 
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$tenant_id\.$#'
@@ -229,12 +199,6 @@ parameters:
 			path: app/Domains/Ticketing/Actions/TicketingReports.php
 
 		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Domains/TrainingLms/Actions/SyncEnrollmentProgress.php
-
-		-
 			message: '#^Access to an undefined property App\\Filament\\Pages\\DomainsSettings\:\:\$form\.$#'
 			identifier: property.notFound
 			count: 2
@@ -245,18 +209,6 @@ parameters:
 			identifier: property.notFound
 			count: 2
 			path: app/Filament/Pages/OrgSettings.php
-
-		-
-			message: '#^Cannot access property \$id on Illuminate\\Database\\Eloquent\\Model\|int\|string\.$#'
-			identifier: property.nonObject
-			count: 1
-			path: app/Filament/Resources/Courses/Pages/EditCourse.php
-
-		-
-			message: '#^Cannot call method quiz\(\) on Illuminate\\Database\\Eloquent\\Model\|int\|string\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: app/Filament/Resources/Courses/Pages/EditCourse.php
 
 		-
 			message: '#^Method App\\Filament\\Resources\\Tenants\\TenantResource\:\:getEloquentQuery\(\) should return Illuminate\\Database\\Eloquent\\Builder\<Illuminate\\Database\\Eloquent\\Model\> but returns Illuminate\\Database\\Eloquent\\Builder\<App\\Models\\Tenant\>\.$#'
@@ -275,12 +227,6 @@ parameters:
 			identifier: match.unhandled
 			count: 1
 			path: app/Http/Controllers/Api/V1/Org/Ticketing/TicketController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
-			identifier: property.notFound
-			count: 2
-			path: app/Http/Controllers/Api/V1/Org/TrainingController.php
 
 		-
 			message: '#^Right side of \|\| is always true\.$#'

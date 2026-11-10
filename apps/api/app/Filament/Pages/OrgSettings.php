@@ -43,7 +43,7 @@ class OrgSettings extends Page
         $meta = json_decode((string) ($row->meta ?? '{}'), true) ?: [];
         $this->form->fill([
             'display_name' => $row->display_name ?? '',
-            'primary_color' => $row->primary_color ?? '#0f766e',
+            'primary_color' => $row->primary_color ?? '#083a6d',
             'timezone' => $row->timezone ?? 'UTC',
             'logo_path' => $row->logo_path ?? null,
             'sending_domain' => $meta['sending_domain'] ?? '',

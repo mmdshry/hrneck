@@ -8,6 +8,8 @@ use App\Domains\Checklists\Models\ChecklistTemplate;
 use App\Domains\Notifications\Actions\CreateUserNotification;
 use App\Domains\Notifications\Models\UserNotification;
 use App\Domains\Notifications\Support\ResolveUsersFromTargets;
+use App\Domains\Realtime\Support\LiveTopics;
+use App\Domains\Realtime\Support\PublishLive;
 use App\Domains\TargetsGroups\Models\Target;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -29,6 +31,7 @@ class CreateChecklistInstances
         array $targetIds = [],
         array $groupIds = [],
         ?int $actorId = null,
+        bool $requireCreated = true,
     ): array {
         if ($template->is_system) {
             throw ValidationException::withMessages([
@@ -99,9 +102,13 @@ class CreateChecklistInstances
         });
 
         if ($created === []) {
-            throw ValidationException::withMessages([
-                'target_ids' => ['No new instances created. Targets may already have an open checklist for this template.'],
-            ]);
+            if ($requireCreated) {
+                throw ValidationException::withMessages([
+                    'target_ids' => ['No new instances created. Targets may already have an open checklist for this template.'],
+                ]);
+            }
+
+            return [];
         }
 
         $createdTargetIds = array_values(array_unique(array_map(
@@ -123,6 +130,11 @@ class CreateChecklistInstances
                 ],
             );
         }
+
+        PublishLive::org([
+            LiveTopics::CHECKLIST_INSTANCES,
+            LiveTopics::REPORTS_DETAILED,
+        ]);
 
         return $created;
     }

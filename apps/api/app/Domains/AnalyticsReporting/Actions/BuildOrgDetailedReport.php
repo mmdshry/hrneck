@@ -14,6 +14,7 @@ use App\Domains\TrainingLms\Models\Enrollment;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -38,35 +39,170 @@ class BuildOrgDetailedReport
     ) {}
 
     /**
+     * @param  array{department_id?: int|null, from?: Carbon|null, to?: Carbon|null}  $filters
      * @return array<string, mixed>
      */
-    public function overview(): array
+    public function overview(array $filters = []): array
     {
-        $ticketing = $this->ticketingReports->summary();
+        $departmentId = isset($filters['department_id']) ? (int) $filters['department_id'] : null;
+        if ($departmentId === 0) {
+            $departmentId = null;
+        }
+        $from = $filters['from'] ?? null;
+        $to = $filters['to'] ?? null;
+        $from = $from instanceof Carbon ? $from : null;
+        $to = $to instanceof Carbon ? $to : null;
+
+        $campaign = $this->campaignReport->handle(null, $departmentId, $from, $to);
+        $ticketing = $this->ticketingReports->summary(null, $from, $to, $departmentId);
+        $training = $this->trainingBlock($departmentId, $from, $to);
+        $checklists = $this->checklistsBlock($departmentId, $from, $to);
+
+        $targetsQuery = Target::query();
+        if ($departmentId) {
+            $targetsQuery->where('department_id', $departmentId);
+        }
 
         return [
-            'campaign' => $this->campaignReport->handle(),
+            'campaign' => $campaign,
+            'blocks' => [
+                'training' => $training,
+                'checklists' => $checklists,
+                'ticketing' => [
+                    'open' => $ticketing['total_open'],
+                    'resolved' => $ticketing['total_resolved'],
+                    'sla_response_breached' => $ticketing['sla_response_breached'],
+                    'sla_resolve_breached' => $ticketing['sla_resolve_breached'],
+                    'segments' => [
+                        'open' => $ticketing['total_open'],
+                        'resolved' => $ticketing['total_resolved'],
+                    ],
+                ],
+                'campaigns_people' => [
+                    'campaigns_running' => $campaign['campaigns_running'],
+                    'opened_pct' => $campaign['opened_pct'],
+                    'completed_pct' => $campaign['completed_pct'],
+                    'no_action_pct' => $campaign['no_action_pct'],
+                    'active_employees' => $campaign['active_employees'],
+                    'segments' => [
+                        'completed' => $campaign['completed'],
+                        'opened' => max(0, $campaign['opened'] - $campaign['completed']),
+                        'no_action' => $campaign['no_action'],
+                    ],
+                ],
+            ],
             'counts' => [
                 'users' => User::query()->where('tenant_id', (string) tenant('id'))->count(),
-                'targets' => Target::query()->count(),
+                'targets' => $targetsQuery->count(),
                 'groups' => Group::query()->count(),
-                'campaigns' => Campaign::query()->count(),
-                'enrollments' => Enrollment::query()->count(),
+                'campaigns' => $campaign['campaigns'],
+                'enrollments' => $training['total'],
                 'checklist_templates' => ChecklistTemplate::query()->count(),
-                'checklist_instances' => ChecklistInstance::query()->count(),
+                'checklist_instances' => $checklists['total'],
                 'tickets_open' => $ticketing['total_open'],
                 'tickets_resolved' => $ticketing['total_resolved'],
             ],
-            'company' => $this->companyPayload(),
-            'training_by_status' => Enrollment::query()
-                ->selectRaw('status, count(*) as c')
-                ->groupBy('status')
-                ->pluck('c', 'status'),
-            'checklists_by_status' => ChecklistInstance::query()
-                ->selectRaw('status, count(*) as c')
-                ->groupBy('status')
-                ->pluck('c', 'status'),
+            'company' => $this->companyPayload($departmentId),
+            'training_by_status' => $training['by_status'],
+            'checklists_by_status' => $checklists['by_status'],
             'ticketing' => $ticketing,
+        ];
+    }
+
+    /**
+     * @return array{
+     *   assigned: int,
+     *   in_progress: int,
+     *   completed: int,
+     *   total: int,
+     *   completion_rate: float,
+     *   by_status: array<string, int>,
+     *   segments: array<string, int>
+     * }
+     */
+    private function trainingBlock(?int $departmentId, ?Carbon $from, ?Carbon $to): array
+    {
+        $query = Enrollment::query();
+        if ($departmentId) {
+            $query->whereHas('target', fn (Builder $t) => $t->where('department_id', $departmentId));
+        }
+        if ($from) {
+            $query->where('created_at', '>=', $from);
+        }
+        if ($to) {
+            $query->where('created_at', '<=', $to);
+        }
+
+        $byStatus = (clone $query)
+            ->selectRaw('status, count(*) as c')
+            ->groupBy('status')
+            ->pluck('c', 'status')
+            ->map(fn ($c) => (int) $c)
+            ->all();
+
+        $assigned = (int) ($byStatus['assigned'] ?? 0);
+        $inProgress = (int) ($byStatus['in_progress'] ?? 0);
+        $completed = (int) ($byStatus['completed'] ?? 0);
+        $total = array_sum($byStatus);
+
+        return [
+            'assigned' => $assigned,
+            'in_progress' => $inProgress,
+            'completed' => $completed,
+            'total' => $total,
+            'completion_rate' => $total > 0 ? round(($completed / $total) * 100, 1) : 0.0,
+            'by_status' => $byStatus,
+            'segments' => [
+                'assigned' => $assigned,
+                'in_progress' => $inProgress,
+                'completed' => $completed,
+            ],
+        ];
+    }
+
+    /**
+     * @return array{
+     *   open: int,
+     *   completed: int,
+     *   total: int,
+     *   completion_rate: float,
+     *   by_status: array<string, int>,
+     *   segments: array<string, int>
+     * }
+     */
+    private function checklistsBlock(?int $departmentId, ?Carbon $from, ?Carbon $to): array
+    {
+        $query = ChecklistInstance::query();
+        if ($departmentId) {
+            $query->whereHas('target', fn (Builder $t) => $t->where('department_id', $departmentId));
+        }
+        if ($from) {
+            $query->where('created_at', '>=', $from);
+        }
+        if ($to) {
+            $query->where('created_at', '<=', $to);
+        }
+
+        $byStatus = (clone $query)
+            ->selectRaw('status, count(*) as c')
+            ->groupBy('status')
+            ->pluck('c', 'status')
+            ->map(fn ($c) => (int) $c)
+            ->all();
+
+        $open = (int) ($byStatus[ChecklistInstance::STATUS_NOT_STARTED] ?? 0)
+            + (int) ($byStatus[ChecklistInstance::STATUS_IN_PROGRESS] ?? 0);
+        $completed = (int) ($byStatus[ChecklistInstance::STATUS_COMPLETED] ?? 0);
+        $total = array_sum($byStatus);
+        $eligible = $open + $completed;
+
+        return [
+            'open' => $open,
+            'completed' => $completed,
+            'total' => $total,
+            'completion_rate' => $eligible > 0 ? round(($completed / $eligible) * 100, 1) : 0.0,
+            'by_status' => $byStatus,
+            'segments' => $byStatus,
         ];
     }
 
@@ -74,7 +210,7 @@ class BuildOrgDetailedReport
      * @param  array<string, mixed>  $filters
      * @return array<string, mixed>
      */
-    public function section(string $section, array $filters = [], int $page = 1, int $perPage = 25): array
+    public function section(string $section, array $filters = [], int $page = 1, int $perPage = 5): array
     {
         $section = strtolower($section);
         if (! in_array($section, self::SECTIONS, true)) {
@@ -87,7 +223,9 @@ class BuildOrgDetailedReport
         return match ($section) {
             'company' => [
                 'section' => 'company',
-                'data' => $this->companyPayload(),
+                'data' => $this->companyPayload(
+                    isset($filters['department_id']) ? (int) $filters['department_id'] : null,
+                ),
             ],
             'users' => $this->paginateSection('users', $this->usersQuery($filters), $page, $perPage, fn (User $user) => $this->mapUser($user)),
             'targets' => $this->paginateSection('targets', $this->targetsQuery($filters), $page, $perPage, fn (Target $target) => $this->mapTarget($target)),
@@ -96,24 +234,16 @@ class BuildOrgDetailedReport
             'training' => $this->paginateSection('training', $this->trainingQuery($filters), $page, $perPage, fn (Enrollment $row) => $this->mapEnrollment($row)),
             'checklists' => [
                 'section' => 'checklists',
-                'summary' => [
-                    'by_category' => ChecklistTemplate::query()
-                        ->selectRaw('category, count(*) as c')
-                        ->groupBy('category')
-                        ->pluck('c', 'category'),
-                    'by_status' => ChecklistInstance::query()
-                        ->selectRaw('status, count(*) as c')
-                        ->groupBy('status')
-                        ->pluck('c', 'status'),
-                    'templates' => ChecklistTemplate::query()->count(),
-                    'instances' => ChecklistInstance::query()->count(),
-                ],
+                'summary' => $this->checklistsSectionSummary($filters),
                 ...$this->paginateSection('checklists', $this->checklistsQuery($filters), $page, $perPage, fn (ChecklistInstance $row) => $this->mapChecklistInstance($row)),
             ],
             'ticketing' => [
                 'section' => 'ticketing',
                 'summary' => $this->ticketingReports->summary(
                     isset($filters['desk_id']) ? (int) $filters['desk_id'] : null,
+                    $filters['from'] ?? null,
+                    $filters['to'] ?? null,
+                    isset($filters['department_id']) ? (int) $filters['department_id'] : null,
                 ),
                 ...$this->paginateSection('ticketing', $this->ticketingQuery($filters), $page, $perPage, fn (SdTicket $row) => $this->mapTicket($row)),
             ],
@@ -137,7 +267,10 @@ class BuildOrgDetailedReport
             $out = fopen('php://output', 'w');
 
             match ($section) {
-                'company' => $this->writeCompanyCsv($out),
+                'company' => $this->writeCompanyCsv(
+                    $out,
+                    isset($filters['department_id']) ? (int) $filters['department_id'] : null,
+                ),
                 'users' => $this->writeMappedCsv(
                     $out,
                     ['id', 'name', 'email', 'roles', 'mfa_enabled'],
@@ -156,7 +289,7 @@ class BuildOrgDetailedReport
                 'campaigns' => $this->writeCampaignsCsv($out, $filters),
                 'recipients' => $this->writeMappedCsv(
                     $out,
-                    ['id', 'campaign_id', 'campaign_name', 'email', 'name', 'department', 'status', 'sent_at', 'opened_at', 'clicked_at', 'submitted_at', 'reported_at'],
+                    ['id', 'campaign_id', 'campaign_name', 'email', 'name', 'department', 'status', 'sent_at', 'opened_at', 'completed'],
                     $this->recipientsQuery($filters)->limit(5000)->get()->map(fn (CampaignRecipient $r) => $this->mapRecipient($r)),
                 ),
                 'training' => $this->writeMappedCsv(
@@ -184,7 +317,7 @@ class BuildOrgDetailedReport
     /**
      * @return array<string, mixed>
      */
-    private function companyPayload(): array
+    private function companyPayload(?int $departmentId = null): array
     {
         $row = DB::table('organization_settings')->first();
         $meta = [];
@@ -192,7 +325,12 @@ class BuildOrgDetailedReport
             $meta = json_decode((string) ($row->meta ?? '{}'), true) ?: [];
         }
 
-        $byDepartment = Target::query()
+        $targetsBase = Target::query();
+        if ($departmentId) {
+            $targetsBase->where('department_id', $departmentId);
+        }
+
+        $byDepartment = (clone $targetsBase)
             ->selectRaw("coalesce(nullif(trim(department), ''), 'Unassigned') as department_label, count(*) as targets")
             ->groupBy('department_label')
             ->orderByDesc('targets')
@@ -206,8 +344,11 @@ class BuildOrgDetailedReport
                     'targets' => (int) $item->targets,
                     'sent' => $recipientStats['sent'],
                     'opened' => $recipientStats['opened'],
-                    'clicked' => $recipientStats['clicked'],
-                    'click_rate' => $recipientStats['click_rate'],
+                    'completed' => $recipientStats['completed'],
+                    'no_action' => $recipientStats['no_action'],
+                    'opened_pct' => $recipientStats['opened_pct'],
+                    'completed_pct' => $recipientStats['completed_pct'],
+                    'no_action_pct' => $recipientStats['no_action_pct'],
                 ];
             })
             ->values()
@@ -259,7 +400,15 @@ class BuildOrgDetailedReport
     }
 
     /**
-     * @return array{sent: int, opened: int, clicked: int, click_rate: float}
+     * @return array{
+     *   sent: int,
+     *   opened: int,
+     *   completed: int,
+     *   no_action: int,
+     *   opened_pct: float,
+     *   completed_pct: float,
+     *   no_action_pct: float
+     * }
      */
     private function recipientFunnelForDepartment(?string $department): array
     {
@@ -273,16 +422,23 @@ class BuildOrgDetailedReport
             }
         });
 
-        $recipients = $query->get(['sent_at', 'opened_at', 'clicked_at']);
+        $recipients = $query->get(['sent_at', 'opened_at', 'status']);
+        $total = max(1, $recipients->count());
         $sent = $recipients->whereNotNull('sent_at')->count();
-        $opened = $recipients->whereNotNull('opened_at')->count();
-        $clicked = $recipients->whereNotNull('clicked_at')->count();
+        $opened = $recipients->filter(
+            fn ($r) => $r->opened_at !== null || $r->status === 'completed' || $r->status === 'opened'
+        )->count();
+        $completed = $recipients->where('status', 'completed')->count();
+        $noAction = max(0, $recipients->count() - $opened);
 
         return [
             'sent' => $sent,
             'opened' => $opened,
-            'clicked' => $clicked,
-            'click_rate' => $sent > 0 ? round(($clicked / $sent) * 100, 1) : 0.0,
+            'completed' => $completed,
+            'no_action' => $noAction,
+            'opened_pct' => round(($opened / $total) * 100, 1),
+            'completed_pct' => round(($completed / $total) * 100, 1),
+            'no_action_pct' => round(($noAction / $total) * 100, 1),
         ];
     }
 
@@ -301,6 +457,26 @@ class BuildOrgDetailedReport
             $query->where(function (Builder $inner) use ($q): void {
                 $inner->where('name', 'like', $q)->orWhere('email', 'like', $q);
             });
+        }
+        if (! empty($filters['name'])) {
+            $query->where('name', 'like', '%'.addcslashes((string) $filters['name'], '%_\\').'%');
+        }
+        if (! empty($filters['email'])) {
+            $query->where('email', 'like', '%'.addcslashes((string) $filters['email'], '%_\\').'%');
+        }
+        if (! empty($filters['roles'])) {
+            $role = '%'.addcslashes((string) $filters['roles'], '%_\\').'%';
+            $query->whereHas('roles', fn (Builder $q) => $q->where('name', 'like', $role));
+        }
+        if (! empty($filters['mfa'])) {
+            $mfa = strtolower(trim((string) $filters['mfa']));
+            if (in_array($mfa, ['yes', '1', 'true'], true)) {
+                $query->where('mfa_enabled', true);
+            } elseif (in_array($mfa, ['no', '0', 'false'], true)) {
+                $query->where(function (Builder $inner): void {
+                    $inner->where('mfa_enabled', false)->orWhereNull('mfa_enabled');
+                });
+            }
         }
 
         return $query;
@@ -322,8 +498,24 @@ class BuildOrgDetailedReport
                     ->orWhere('last_name', 'like', $q);
             });
         }
+        if (! empty($filters['email'])) {
+            $query->where('email', 'like', '%'.addcslashes((string) $filters['email'], '%_\\').'%');
+        }
+        if (! empty($filters['name'])) {
+            $name = '%'.addcslashes((string) $filters['name'], '%_\\').'%';
+            $query->where(function (Builder $inner) use ($name): void {
+                $inner->where('first_name', 'like', $name)->orWhere('last_name', 'like', $name);
+            });
+        }
+        if (! empty($filters['department_id'])) {
+            $query->where('department_id', (int) $filters['department_id']);
+        }
         if (! empty($filters['department'])) {
-            $query->where('department', (string) $filters['department']);
+            $query->where('department', 'like', '%'.addcslashes((string) $filters['department'], '%_\\').'%');
+        }
+        if (! empty($filters['groups'])) {
+            $group = '%'.addcslashes((string) $filters['groups'], '%_\\').'%';
+            $query->whereHas('groups', fn (Builder $q) => $q->where('name', 'like', $group));
         }
         if (! empty($filters['group_id'])) {
             $groupId = (int) $filters['group_id'];
@@ -331,6 +523,9 @@ class BuildOrgDetailedReport
         }
         if (! empty($filters['status'])) {
             $query->where('status', (string) $filters['status']);
+        }
+        if (! empty($filters['risk'])) {
+            $query->where('risk_score', (int) $filters['risk']);
         }
 
         return $query;
@@ -348,11 +543,39 @@ class BuildOrgDetailedReport
             $q = '%'.addcslashes((string) $filters['q'], '%_\\').'%';
             $query->where('name', 'like', $q);
         }
+        if (! empty($filters['campaign']) || ! empty($filters['name'])) {
+            $name = (string) ($filters['campaign'] ?? $filters['name']);
+            $query->where('name', 'like', '%'.addcslashes($name, '%_\\').'%');
+        }
         if (! empty($filters['status'])) {
             $query->where('status', (string) $filters['status']);
         }
         if (! empty($filters['type'])) {
             $query->where('type', (string) $filters['type']);
+        }
+        if (! empty($filters['department_id'])) {
+            $departmentId = (int) $filters['department_id'];
+            $query->whereHas('recipients.target', fn (Builder $t) => $t->where('department_id', $departmentId));
+        }
+        if (! empty($filters['from']) && $filters['from'] instanceof Carbon) {
+            $from = $filters['from'];
+            $query->where(function (Builder $q) use ($from): void {
+                $q->whereHas('recipients', fn (Builder $r) => $r->where('sent_at', '>=', $from))
+                    ->orWhere(function (Builder $fallback) use ($from): void {
+                        $fallback->whereDoesntHave('recipients', fn (Builder $r) => $r->whereNotNull('sent_at'))
+                            ->where('starts_at', '>=', $from);
+                    });
+            });
+        }
+        if (! empty($filters['to']) && $filters['to'] instanceof Carbon) {
+            $to = $filters['to'];
+            $query->where(function (Builder $q) use ($to): void {
+                $q->whereHas('recipients', fn (Builder $r) => $r->where('sent_at', '<=', $to))
+                    ->orWhere(function (Builder $fallback) use ($to): void {
+                        $fallback->whereDoesntHave('recipients', fn (Builder $r) => $r->whereNotNull('sent_at'))
+                            ->where('starts_at', '<=', $to);
+                    });
+            });
         }
 
         return $query;
@@ -370,6 +593,16 @@ class BuildOrgDetailedReport
 
         if (! empty($filters['campaign_id'])) {
             $query->where('campaign_id', (int) $filters['campaign_id']);
+        }
+        if (! empty($filters['department_id'])) {
+            $departmentId = (int) $filters['department_id'];
+            $query->whereHas('target', fn (Builder $t) => $t->where('department_id', $departmentId));
+        }
+        if (! empty($filters['from']) && $filters['from'] instanceof Carbon) {
+            $query->where('sent_at', '>=', $filters['from']);
+        }
+        if (! empty($filters['to']) && $filters['to'] instanceof Carbon) {
+            $query->where('sent_at', '<=', $filters['to']);
         }
         if (! empty($filters['q'])) {
             $q = '%'.addcslashes((string) $filters['q'], '%_\\').'%';
@@ -401,6 +634,16 @@ class BuildOrgDetailedReport
         }
         if (! empty($filters['status'])) {
             $query->where('status', (string) $filters['status']);
+        }
+        if (! empty($filters['department_id'])) {
+            $departmentId = (int) $filters['department_id'];
+            $query->whereHas('target', fn (Builder $t) => $t->where('department_id', $departmentId));
+        }
+        if (! empty($filters['from']) && $filters['from'] instanceof Carbon) {
+            $query->where('created_at', '>=', $filters['from']);
+        }
+        if (! empty($filters['to']) && $filters['to'] instanceof Carbon) {
+            $query->where('created_at', '<=', $filters['to']);
         }
         if (! empty($filters['q'])) {
             $q = '%'.addcslashes((string) $filters['q'], '%_\\').'%';
@@ -435,6 +678,16 @@ class BuildOrgDetailedReport
             $category = (string) $filters['category'];
             $query->whereHas('template', fn (Builder $q) => $q->where('category', $category));
         }
+        if (! empty($filters['department_id'])) {
+            $departmentId = (int) $filters['department_id'];
+            $query->whereHas('target', fn (Builder $t) => $t->where('department_id', $departmentId));
+        }
+        if (! empty($filters['from']) && $filters['from'] instanceof Carbon) {
+            $query->where('created_at', '>=', $filters['from']);
+        }
+        if (! empty($filters['to']) && $filters['to'] instanceof Carbon) {
+            $query->where('created_at', '<=', $filters['to']);
+        }
         if (! empty($filters['q'])) {
             $q = '%'.addcslashes((string) $filters['q'], '%_\\').'%';
             $query->where(function (Builder $inner) use ($q): void {
@@ -464,11 +717,53 @@ class BuildOrgDetailedReport
         if (! empty($filters['desk_id'])) {
             $query->where('desk_id', (int) $filters['desk_id']);
         }
+        if (! empty($filters['department_id'])) {
+            $departmentId = (int) $filters['department_id'];
+            $query->whereHas('requesterTarget', fn (Builder $t) => $t->where('department_id', $departmentId));
+        }
+        if (! empty($filters['from']) && $filters['from'] instanceof Carbon) {
+            $query->where('created_at', '>=', $filters['from']);
+        }
+        if (! empty($filters['to']) && $filters['to'] instanceof Carbon) {
+            $query->where('created_at', '<=', $filters['to']);
+        }
         if (! empty($filters['q'])) {
             $q = '%'.addcslashes((string) $filters['q'], '%_\\').'%';
             $query->where(function (Builder $inner) use ($q): void {
                 $inner->where('summary', 'like', $q)->orWhere('number', 'like', $q);
             });
+        }
+        if (! empty($filters['number'])) {
+            $query->where('number', 'like', '%'.addcslashes((string) $filters['number'], '%_\\').'%');
+        }
+        if (! empty($filters['summary'])) {
+            $query->where('summary', 'like', '%'.addcslashes((string) $filters['summary'], '%_\\').'%');
+        }
+        if (! empty($filters['desk'])) {
+            $desk = '%'.addcslashes((string) $filters['desk'], '%_\\').'%';
+            $query->whereHas('desk', fn (Builder $q) => $q->where('name', 'like', $desk));
+        }
+        if (! empty($filters['stage'])) {
+            $stage = '%'.addcslashes((string) $filters['stage'], '%_\\').'%';
+            $query->whereHas('stage', fn (Builder $q) => $q->where('name', 'like', $stage));
+        }
+        if (! empty($filters['priority'])) {
+            $priority = '%'.addcslashes((string) $filters['priority'], '%_\\').'%';
+            $query->whereHas('priority', fn (Builder $q) => $q->where('name', 'like', $priority));
+        }
+        if (! empty($filters['status'])) {
+            $status = '%'.addcslashes((string) $filters['status'], '%_\\').'%';
+            $query->whereHas('status', fn (Builder $q) => $q->where('name', 'like', $status));
+        }
+        if (! empty($filters['sla'])) {
+            $sla = strtolower(trim((string) $filters['sla']));
+            if (in_array($sla, ['breach', 'breached', 'yes'], true)) {
+                $query->where(function (Builder $b): void {
+                    $b->where('sla_response_breached', true)->orWhere('sla_resolve_breached', true);
+                });
+            } elseif (in_array($sla, ['ok', 'no'], true)) {
+                $query->where('sla_response_breached', false)->where('sla_resolve_breached', false);
+            }
         }
 
         return $query;
@@ -545,7 +840,7 @@ class BuildOrgDetailedReport
     private function campaignsSection(array $filters, int $page, int $perPage): array
     {
         $paginator = $this->campaignsQuery($filters)->paginate($perPage, ['*'], 'page', $page);
-        $stats = $this->campaignFunnelByIds(collect($paginator->items())->pluck('id')->all());
+        $stats = $this->campaignFunnelByIds(collect($paginator->items())->pluck('id')->all(), $filters);
 
         return [
             'section' => 'campaigns',
@@ -566,53 +861,91 @@ class BuildOrgDetailedReport
      * @param  array<string, mixed>  $filters
      * @param  resource  $out
      */
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return array<string, mixed>
+     */
+    private function checklistsSectionSummary(array $filters): array
+    {
+        $departmentId = isset($filters['department_id']) ? (int) $filters['department_id'] : null;
+        $from = ($filters['from'] ?? null) instanceof Carbon ? $filters['from'] : null;
+        $to = ($filters['to'] ?? null) instanceof Carbon ? $filters['to'] : null;
+        $block = $this->checklistsBlock($departmentId, $from, $to);
+
+        return [
+            'by_category' => ChecklistTemplate::query()
+                ->selectRaw('category, count(*) as c')
+                ->groupBy('category')
+                ->pluck('c', 'category'),
+            'by_status' => $block['by_status'],
+            'templates' => ChecklistTemplate::query()->count(),
+            'instances' => $block['total'],
+        ];
+    }
+
     private function writeCampaignsCsv($out, array $filters): void
     {
         $campaigns = $this->campaignsQuery($filters)->limit(5000)->get();
-        $stats = $this->campaignFunnelByIds($campaigns->pluck('id')->all());
+        $stats = $this->campaignFunnelByIds($campaigns->pluck('id')->all(), $filters);
         $this->writeMappedCsv(
             $out,
-            ['id', 'name', 'type', 'status', 'recipients', 'sent', 'opened', 'clicked', 'submitted', 'reported', 'click_rate'],
+            ['id', 'name', 'type', 'status', 'recipients', 'sent', 'opened', 'completed', 'no_action', 'opened_pct', 'completed_pct', 'no_action_pct'],
             $campaigns->map(fn (Campaign $c) => $this->mapCampaign($c, $stats[$c->id] ?? null)),
         );
     }
 
     /**
      * @param  list<int>  $campaignIds
-     * @return array<int, array{recipients: int, sent: int, opened: int, clicked: int, submitted: int, reported: int}>
+     * @param  array<string, mixed>  $filters
+     * @return array<int, array{recipients: int, sent: int, opened: int, completed: int, no_action: int}>
      */
-    private function campaignFunnelByIds(array $campaignIds): array
+    private function campaignFunnelByIds(array $campaignIds, array $filters = []): array
     {
         if ($campaignIds === []) {
             return [];
         }
 
-        return CampaignRecipient::query()
-            ->whereIn('campaign_id', $campaignIds)
+        $query = CampaignRecipient::query()->whereIn('campaign_id', $campaignIds);
+        if (! empty($filters['department_id'])) {
+            $departmentId = (int) $filters['department_id'];
+            $query->whereHas('target', fn (Builder $t) => $t->where('department_id', $departmentId));
+        }
+        if (! empty($filters['from']) && $filters['from'] instanceof Carbon) {
+            $query->where('sent_at', '>=', $filters['from']);
+        }
+        if (! empty($filters['to']) && $filters['to'] instanceof Carbon) {
+            $query->where('sent_at', '<=', $filters['to']);
+        }
+
+        return $query
             ->selectRaw('campaign_id')
             ->selectRaw('count(*) as recipients')
             ->selectRaw('sum(case when sent_at is not null then 1 else 0 end) as sent')
-            ->selectRaw('sum(case when opened_at is not null then 1 else 0 end) as opened')
-            ->selectRaw('sum(case when clicked_at is not null then 1 else 0 end) as clicked')
-            ->selectRaw('sum(case when submitted_at is not null then 1 else 0 end) as submitted')
-            ->selectRaw('sum(case when reported_at is not null then 1 else 0 end) as reported')
+            ->selectRaw("sum(case when opened_at is not null or status in ('opened', 'completed') then 1 else 0 end) as opened")
+            ->selectRaw("sum(case when status = 'completed' then 1 else 0 end) as completed")
             ->groupBy('campaign_id')
             ->get()
-            ->mapWithKeys(fn ($row) => [
-                (int) $row->campaign_id => [
-                    'recipients' => (int) $row->recipients,
-                    'sent' => (int) $row->sent,
-                    'opened' => (int) $row->opened,
-                    'clicked' => (int) $row->clicked,
-                    'submitted' => (int) $row->submitted,
-                    'reported' => (int) $row->reported,
-                ],
-            ])
+            ->mapWithKeys(function ($row) {
+                $attrs = $row->getAttributes();
+                $recipients = (int) ($attrs['recipients'] ?? 0);
+                $opened = (int) ($attrs['opened'] ?? 0);
+                $completed = (int) ($attrs['completed'] ?? 0);
+
+                return [
+                    (int) $row->campaign_id => [
+                        'recipients' => $recipients,
+                        'sent' => (int) ($attrs['sent'] ?? 0),
+                        'opened' => $opened,
+                        'completed' => $completed,
+                        'no_action' => max(0, $recipients - $opened),
+                    ],
+                ];
+            })
             ->all();
     }
 
     /**
-     * @param  array{recipients: int, sent: int, opened: int, clicked: int, submitted: int, reported: int}|null  $stats
+     * @param  array{recipients: int, sent: int, opened: int, completed: int, no_action: int}|null  $stats
      * @return array<string, mixed>
      */
     private function mapCampaign(Campaign $campaign, ?array $stats = null): array
@@ -621,12 +954,13 @@ class BuildOrgDetailedReport
             'recipients' => 0,
             'sent' => 0,
             'opened' => 0,
-            'clicked' => 0,
-            'submitted' => 0,
-            'reported' => 0,
+            'completed' => 0,
+            'no_action' => 0,
         ];
-        $total = $stats['recipients'];
-        $clicked = $stats['clicked'];
+        $total = max(1, $stats['recipients']);
+        $opened = $stats['opened'];
+        $completed = $stats['completed'];
+        $noAction = $stats['no_action'];
 
         return [
             'id' => $campaign->id,
@@ -634,13 +968,14 @@ class BuildOrgDetailedReport
             'type' => $campaign->type,
             'status' => $campaign->status,
             'course' => $campaign->course?->title,
-            'recipients' => $total,
+            'recipients' => $stats['recipients'],
             'sent' => $stats['sent'],
-            'opened' => $stats['opened'],
-            'clicked' => $clicked,
-            'submitted' => $stats['submitted'],
-            'reported' => $stats['reported'],
-            'click_rate' => $total > 0 ? round(($clicked / $total) * 100, 1) : 0.0,
+            'opened' => $opened,
+            'completed' => $completed,
+            'no_action' => $noAction,
+            'opened_pct' => round(($opened / $total) * 100, 1),
+            'completed_pct' => round(($completed / $total) * 100, 1),
+            'no_action_pct' => round(($noAction / $total) * 100, 1),
         ];
     }
 
@@ -661,9 +996,7 @@ class BuildOrgDetailedReport
             'status' => $row->status,
             'sent_at' => optional($row->sent_at)?->toIso8601String(),
             'opened_at' => optional($row->opened_at)?->toIso8601String(),
-            'clicked_at' => optional($row->clicked_at)?->toIso8601String(),
-            'submitted_at' => optional($row->submitted_at)?->toIso8601String(),
-            'reported_at' => optional($row->reported_at)?->toIso8601String(),
+            'completed' => $row->status === 'completed',
         ];
     }
 
@@ -756,9 +1089,9 @@ class BuildOrgDetailedReport
     /**
      * @param  resource  $out
      */
-    private function writeCompanyCsv($out): void
+    private function writeCompanyCsv($out, ?int $departmentId = null): void
     {
-        $company = $this->companyPayload();
+        $company = $this->companyPayload($departmentId);
 
         fputcsv($out, ['section', 'key', 'value']);
         foreach ($company['profile'] as $key => $value) {
@@ -766,9 +1099,19 @@ class BuildOrgDetailedReport
         }
 
         fputcsv($out, []);
-        fputcsv($out, ['department', 'targets', 'sent', 'opened', 'clicked', 'click_rate']);
+        fputcsv($out, ['department', 'targets', 'sent', 'opened', 'completed', 'no_action', 'opened_pct', 'completed_pct', 'no_action_pct']);
         foreach ($company['by_department'] as $row) {
-            fputcsv($out, [$row['department'], $row['targets'], $row['sent'], $row['opened'], $row['clicked'], $row['click_rate']]);
+            fputcsv($out, [
+                $row['department'],
+                $row['targets'],
+                $row['sent'],
+                $row['opened'],
+                $row['completed'],
+                $row['no_action'],
+                $row['opened_pct'],
+                $row['completed_pct'],
+                $row['no_action_pct'],
+            ]);
         }
 
         fputcsv($out, []);

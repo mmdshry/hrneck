@@ -55,6 +55,59 @@ test('org can launch training campaign by group_ids', function () {
     Tenancy::end();
 });
 
+test('org can assign multiple courses via course_ids', function () {
+    Mail::fake();
+
+    Tenancy::initialize($this->tenant);
+    $targetIds = Target::query()->limit(2)->pluck('id')->all();
+    $courseA = Course::query()->create([
+        'title' => 'Multi assign A',
+        'description' => null,
+        'duration_minutes' => 5,
+        'is_sample' => false,
+    ]);
+    $courseB = Course::query()->create([
+        'title' => 'Multi assign B',
+        'description' => null,
+        'duration_minutes' => 5,
+        'is_sample' => false,
+    ]);
+    $courseIds = [$courseA->id, $courseB->id];
+    Tenancy::end();
+
+    $response = $this->actingAs(orgAdmin())
+        ->withHeader('X-Tenant', 'itneck')
+        ->postJson('/api/v1/org/training/assign', [
+            'name' => 'Multi course wave',
+            'course_ids' => $courseIds,
+            'target_ids' => $targetIds,
+            'launch' => true,
+        ])
+        ->assertCreated()
+        ->json('data');
+
+    expect($response['assigned_target_ids'])->toHaveCount(count($targetIds));
+    expect($response['campaigns'])->toHaveCount(2);
+    expect($response['courses'])->toHaveCount(2);
+    expect($response['campaign']['status'])->toBe('running');
+    expect($response['course']['id'])->toBe($courseIds[0]);
+
+    Tenancy::initialize($this->tenant);
+    expect(
+        Enrollment::query()
+            ->whereIn('course_id', $courseIds)
+            ->whereIn('target_id', $targetIds)
+            ->count()
+    )->toBe(count($courseIds) * count($targetIds));
+    expect(
+        Campaign::query()
+            ->whereIn('course_id', $courseIds)
+            ->where('status', 'running')
+            ->count()
+    )->toBe(2);
+    Tenancy::end();
+});
+
 test('org can assign single article content to targets', function () {
     Mail::fake();
 

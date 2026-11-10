@@ -26,10 +26,10 @@ return [
                 'localhost,localhost:3000,127.0.0.1,127.0.0.1:8000,::1',
                 Sanctum::currentApplicationUrlWithPort(),
             ))),
-            // Tunnel wildcards and request-host trust only in local/staging.
+            // Tunnel / local wildcards; production also trusts tenant hosts under hrneck.com.
             in_array(env('APP_ENV', 'production'), ['local', 'staging'], true)
                 ? ['*.hrneck.test', '*.loca.lt', '*.trycloudflare.com', Sanctum::$currentRequestHostPlaceholder]
-                : [],
+                : ['hrneck.com', '*.hrneck.com'],
         ),
     )))),
 

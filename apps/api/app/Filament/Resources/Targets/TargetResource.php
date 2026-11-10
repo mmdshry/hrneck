@@ -23,7 +23,7 @@ class TargetResource extends Resource
 
     protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-user-group';
 
-    protected static ?string $navigationLabel = 'Targets';
+    protected static ?string $navigationLabel = 'Employees';
 
     protected static string|\UnitEnum|null $navigationGroup = 'Tenant ops';
 
@@ -35,7 +35,12 @@ class TargetResource extends Resource
             TextInput::make('email')->email()->required()->unique(ignoreRecord: true),
             TextInput::make('first_name')->maxLength(120),
             TextInput::make('last_name')->maxLength(120),
-            TextInput::make('department')->maxLength(120),
+            Select::make('department_id')
+                ->label('Department')
+                ->relationship('departmentRecord', 'name')
+                ->searchable()
+                ->preload()
+                ->nullable(),
             Select::make('status')->options([
                 'active' => 'active',
                 'inactive' => 'inactive',

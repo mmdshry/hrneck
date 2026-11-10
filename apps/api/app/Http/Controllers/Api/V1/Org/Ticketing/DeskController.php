@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api\V1\Org\Ticketing;
 
 use App\Domains\Audit\Actions\LogOrgActivity;
+use App\Domains\Realtime\Support\LiveTopics;
+use App\Domains\Realtime\Support\PublishLive;
 use App\Domains\Ticketing\Models\SdCategory;
 use App\Domains\Ticketing\Models\SdDesk;
 use App\Domains\Ticketing\Models\SdPriority;
@@ -14,6 +16,7 @@ use App\Domains\Ticketing\Models\SdStatus;
 use App\Domains\Ticketing\Support\TicketingPayload;
 use App\Http\Controllers\Controller;
 use App\Support\ApiPagination;
+use App\Support\ListQuery;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -22,7 +25,22 @@ class DeskController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $rows = SdDesk::query()->orderBy('name')->paginate(ApiPagination::perPage($request));
+        $query = SdDesk::query();
+        ListQuery::applySearch($query, $request, ['name', 'slug', 'type']);
+        ListQuery::applyLikeFilters($query, $request, [
+            'name' => 'name',
+            'slug' => 'slug',
+            'type' => 'type',
+        ]);
+        ListQuery::applyBooleanFilters($query, $request, [
+            'active' => 'is_active',
+        ]);
+        ListQuery::applySort($query, $request, [
+            'name' => 'name',
+            'type' => 'type',
+        ], 'name', 'asc');
+
+        $rows = $query->paginate(ApiPagination::perPage($request));
 
         return response()->json([
             'data' => collect($rows->items())->map(fn (SdDesk $d) => TicketingPayload::desk($d))->values(),
@@ -35,6 +53,8 @@ class DeskController extends Controller
         $model = SdDesk::query()
             ->with(['stages', 'statuses', 'priorities', 'severities', 'categories', 'procedures', 'slaPolicies'])
             ->findOrFail($desk);
+
+        PublishLive::org([LiveTopics::DESKS, LiveTopics::TICKETS]);
 
         return response()->json(['data' => TicketingPayload::desk($model, detailed: true)]);
     }
@@ -64,6 +84,8 @@ class DeskController extends Controller
             'type' => $desk->type,
         ]);
 
+        PublishLive::org([LiveTopics::DESKS, LiveTopics::TICKETS]);
+
         return response()->json(['data' => TicketingPayload::desk($desk)], 201);
     }
 
@@ -87,6 +109,8 @@ class DeskController extends Controller
             'before' => $before,
             'after' => $model->only(['name', 'number_prefix', 'is_active']),
         ]);
+
+        PublishLive::org([LiveTopics::DESKS, LiveTopics::TICKETS]);
 
         return response()->json(['data' => TicketingPayload::desk($model->fresh() ?? $model)]);
     }

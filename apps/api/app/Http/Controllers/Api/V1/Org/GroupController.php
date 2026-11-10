@@ -8,6 +8,7 @@ use App\Domains\Realtime\Support\PublishLive;
 use App\Domains\TargetsGroups\Models\Group;
 use App\Http\Controllers\Controller;
 use App\Support\ApiPagination;
+use App\Support\ListQuery;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -15,10 +16,33 @@ class GroupController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $rows = Group::query()->withCount('targets')->latest()->paginate(ApiPagination::perPage($request, max: 500));
+        $query = Group::query()
+            ->with(['targets:id'])
+            ->withCount('targets');
+
+        ListQuery::applySearch($query, $request, ['name']);
+        ListQuery::applyLikeFilters($query, $request, [
+            'name' => 'name',
+            'source' => 'source',
+        ]);
+        ListQuery::applySort($query, $request, [
+            'name' => 'name',
+            'targets_count' => 'targets_count',
+        ], 'id', 'desc');
+
+        $rows = $query->paginate(ApiPagination::perPage($request, max: 500));
 
         return response()->json([
-            'data' => collect($rows->items())->values(),
+            'data' => collect($rows->items())->map(static function (Group $group): array {
+                $payload = $group->makeHidden('targets')->toArray();
+                $payload['target_ids'] = $group->targets
+                    ->pluck('id')
+                    ->map(static fn ($id) => (int) $id)
+                    ->values()
+                    ->all();
+
+                return $payload;
+            })->values(),
             'meta' => ApiPagination::meta($rows),
         ]);
     }
@@ -42,7 +66,12 @@ class GroupController extends Controller
             'target_ids' => $data['target_ids'] ?? [],
         ]);
 
-        PublishLive::org([LiveTopics::TRAINING_CAMPAIGNS]);
+        PublishLive::org([
+            LiveTopics::GROUPS,
+            LiveTopics::TRAINING_CAMPAIGNS,
+            LiveTopics::TRAINING,
+            LiveTopics::REPORTS_DETAILED,
+        ]);
 
         return response()->json(['data' => $group->load('targets')], 201);
     }
@@ -77,7 +106,12 @@ class GroupController extends Controller
             ],
         ]);
 
-        PublishLive::org([LiveTopics::TRAINING_CAMPAIGNS]);
+        PublishLive::org([
+            LiveTopics::GROUPS,
+            LiveTopics::TRAINING_CAMPAIGNS,
+            LiveTopics::TRAINING,
+            LiveTopics::REPORTS_DETAILED,
+        ]);
 
         return response()->json(['data' => $group->load('targets')->loadCount('targets')]);
     }
@@ -92,7 +126,12 @@ class GroupController extends Controller
             'group' => $snapshot,
         ]);
 
-        PublishLive::org([LiveTopics::TRAINING_CAMPAIGNS]);
+        PublishLive::org([
+            LiveTopics::GROUPS,
+            LiveTopics::TRAINING_CAMPAIGNS,
+            LiveTopics::TRAINING,
+            LiveTopics::REPORTS_DETAILED,
+        ]);
 
         return response()->json(['message' => 'Deleted']);
     }

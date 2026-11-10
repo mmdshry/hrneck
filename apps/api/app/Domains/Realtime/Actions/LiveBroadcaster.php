@@ -84,14 +84,98 @@ class LiveBroadcaster
         }
     }
 
+    public function snapshotLearnUser(string $tenantId, int $userId): void
+    {
+        $this->withTenant($tenantId, function () use ($tenantId, $userId): void {
+            broadcast(new LiveTopicBroadcast(
+                LiveTopics::learnChannel($tenantId, $userId),
+                'snapshot',
+                $this->builder->forLearnUser($userId),
+            ));
+        });
+    }
+
+    public function updatedLearnUser(string $tenantId, int $userId): void
+    {
+        $this->withTenant($tenantId, function () use ($tenantId, $userId): void {
+            broadcast(new LiveTopicBroadcast(
+                LiveTopics::learnChannel($tenantId, $userId),
+                'updated',
+                $this->builder->forLearnUser($userId),
+            ));
+        });
+    }
+
+    public function snapshotPortalUser(string $tenantId, int $userId): void
+    {
+        $this->withTenant($tenantId, function () use ($tenantId, $userId): void {
+            broadcast(new LiveTopicBroadcast(
+                LiveTopics::portalChannel($tenantId, $userId),
+                'snapshot',
+                $this->builder->forPortalUser($userId),
+            ));
+        });
+    }
+
+    public function updatedPortalUser(string $tenantId, int $userId): void
+    {
+        $this->withTenant($tenantId, function () use ($tenantId, $userId): void {
+            broadcast(new LiveTopicBroadcast(
+                LiveTopics::portalChannel($tenantId, $userId),
+                'updated',
+                $this->builder->forPortalUser($userId),
+            ));
+        });
+    }
+
+    public function snapshotNotificationsUser(string $tenantId, int $userId): void
+    {
+        $this->withTenant($tenantId, function () use ($tenantId, $userId): void {
+            broadcast(new LiveTopicBroadcast(
+                LiveTopics::notificationsChannel($tenantId, $userId),
+                'snapshot',
+                $this->builder->forNotificationsUser($userId),
+            ));
+        });
+    }
+
+    public function updatedNotificationsUser(string $tenantId, int $userId): void
+    {
+        $this->withTenant($tenantId, function () use ($tenantId, $userId): void {
+            broadcast(new LiveTopicBroadcast(
+                LiveTopics::notificationsChannel($tenantId, $userId),
+                'updated',
+                $this->builder->forNotificationsUser($userId),
+            ));
+        });
+    }
+
     /**
      * Schedule snapshot after the auth HTTP response so the WS subscription is ready.
      */
-    public function scheduleSnapshotAfterResponse(string $channel, string $tenantId, ?string $topic): void
+    public function scheduleSnapshotAfterResponse(string $channel, string $tenantId, ?string $topic, ?int $userId = null): void
     {
-        app()->terminating(function () use ($channel, $tenantId, $topic): void {
+        app()->terminating(function () use ($channel, $tenantId, $topic, $userId): void {
             if ($channel === LiveTopics::mspChannel()) {
                 $this->snapshotMsp();
+
+                return;
+            }
+
+            if ($userId !== null && str_ends_with($channel, '.learn.'.$userId)) {
+                $this->snapshotLearnUser($tenantId, $userId);
+
+                return;
+            }
+
+            if ($userId !== null && str_ends_with($channel, '.portal.'.$userId)) {
+                $this->snapshotPortalUser($tenantId, $userId);
+
+                return;
+            }
+
+            if ($userId !== null && str_ends_with($channel, '.notifications.'.$userId)) {
+                $this->snapshotNotificationsUser($tenantId, $userId);
 
                 return;
             }

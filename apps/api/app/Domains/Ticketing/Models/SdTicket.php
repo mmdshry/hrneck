@@ -2,6 +2,7 @@
 
 namespace App\Domains\Ticketing\Models;
 
+use App\Domains\TargetsGroups\Models\Target;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -110,6 +111,12 @@ class SdTicket extends Model
     public function category(): BelongsTo
     {
         return $this->belongsTo(SdCategory::class, 'category_id');
+    }
+
+    /** @return BelongsTo<Target, $this> */
+    public function requesterTarget(): BelongsTo
+    {
+        return $this->belongsTo(Target::class, 'requester_target_id');
     }
 
     /** @return HasMany<SdTicketNote, $this> */

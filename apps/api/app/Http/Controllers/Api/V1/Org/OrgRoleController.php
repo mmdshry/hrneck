@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api\V1\Org;
 use App\Domains\Audit\Actions\LogOrgActivity;
 use App\Domains\IdentityAccess\Actions\ManageOrgRole;
 use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
+use App\Domains\Realtime\Support\LiveTopics;
+use App\Domains\Realtime\Support\PublishLive;
 use App\Http\Controllers\Controller;
 use App\Models\Role;
 use App\Support\ApiPagination;
@@ -25,6 +27,21 @@ class OrgRoleController extends Controller
         $roles = $manageOrgRole->list((string) tenant('id'))
             ->map(fn (Role $role): array => $this->serialize($role))
             ->values();
+
+        $q = trim((string) $request->input('q', ''));
+        $name = trim((string) $request->input('name', ''));
+        if ($q !== '') {
+            $needle = mb_strtolower($q);
+            $roles = $roles->filter(
+                fn (array $role): bool => str_contains(mb_strtolower((string) ($role['name'] ?? '')), $needle)
+            )->values();
+        }
+        if ($name !== '') {
+            $needle = mb_strtolower($name);
+            $roles = $roles->filter(
+                fn (array $role): bool => str_contains(mb_strtolower((string) ($role['name'] ?? '')), $needle)
+            )->values();
+        }
 
         $perPage = ApiPagination::perPage($request);
         $page = max(1, (int) $request->input('page', 1));
@@ -62,6 +79,8 @@ class OrgRoleController extends Controller
             'permissions' => $data['permissions'],
         ]);
 
+        PublishLive::org([LiveTopics::ROLES, LiveTopics::USERS]);
+
         return response()->json(['data' => $this->serialize($role)], 201);
     }
 
@@ -86,6 +105,8 @@ class OrgRoleController extends Controller
             'after' => $this->serialize($updated),
         ]);
 
+        PublishLive::org([LiveTopics::ROLES, LiveTopics::USERS]);
+
         return response()->json(['data' => $this->serialize($updated)]);
     }
 
@@ -97,6 +118,8 @@ class OrgRoleController extends Controller
         $audit->handle('roles', 'deleted', 'Role deleted', null, [
             'role' => $snapshot,
         ]);
+
+        PublishLive::org([LiveTopics::ROLES, LiveTopics::USERS]);
 
         return response()->json(['message' => 'Deleted']);
     }

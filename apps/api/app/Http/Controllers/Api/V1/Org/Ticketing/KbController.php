@@ -3,12 +3,15 @@
 namespace App\Http\Controllers\Api\V1\Org\Ticketing;
 
 use App\Domains\Audit\Actions\LogOrgActivity;
+use App\Domains\Realtime\Support\LiveTopics;
+use App\Domains\Realtime\Support\PublishLive;
 use App\Domains\Ticketing\Models\SdDesk;
 use App\Domains\Ticketing\Models\SdKbArticle;
 use App\Domains\Ticketing\Support\TicketingPayload;
 use App\Domains\Ticketing\Support\TicketNumberAllocator;
 use App\Http\Controllers\Controller;
 use App\Support\ApiPagination;
+use App\Support\ListQuery;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -17,12 +20,12 @@ class KbController extends Controller
     public function index(Request $request): JsonResponse
     {
         $query = SdKbArticle::query()->latest();
-        if ($request->filled('q')) {
-            $q = '%'.str_replace(['%', '_'], ['\\%', '\\_'], (string) $request->input('q')).'%';
-            $query->where(function ($b) use ($q): void {
-                $b->where('summary', 'like', $q)->orWhere('description', 'like', $q)->orWhere('number', 'like', $q);
-            });
-        }
+        ListQuery::applySearch($query, $request, ['summary', 'description', 'number']);
+        ListQuery::applyLikeFilters($query, $request, [
+            'number' => 'number',
+            'summary' => 'summary',
+            'description' => 'description',
+        ]);
         if ($request->has('published')) {
             $query->where('is_published', $request->boolean('published'));
         }
@@ -64,12 +67,16 @@ class KbController extends Controller
             'number' => $article->number,
         ]);
 
+        PublishLive::org([LiveTopics::KB]);
+
         return response()->json(['data' => TicketingPayload::kb($article)], 201);
     }
 
     public function show(int $article): JsonResponse
     {
         $model = SdKbArticle::query()->findOrFail($article);
+
+        PublishLive::org([LiveTopics::KB]);
 
         return response()->json(['data' => TicketingPayload::kb($model)]);
     }
@@ -90,6 +97,8 @@ class KbController extends Controller
         $audit->handle('ticketing', 'kb_updated', 'KB article updated', $model, [
             'number' => $model->number,
         ]);
+
+        PublishLive::org([LiveTopics::KB]);
 
         return response()->json(['data' => TicketingPayload::kb($model)]);
     }

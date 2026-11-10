@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api\V1\Org\Ticketing;
 
 use App\Domains\Audit\Actions\LogOrgActivity;
+use App\Domains\Realtime\Support\LiveTopics;
+use App\Domains\Realtime\Support\PublishLive;
 use App\Domains\Ticketing\Actions\ConvertTicketToKb;
 use App\Domains\Ticketing\Actions\CreateTicket;
 use App\Domains\Ticketing\Actions\ImportExportTickets;
@@ -17,6 +19,7 @@ use App\Domains\Ticketing\Support\TicketingPayload;
 use App\Http\Controllers\Controller;
 use App\Support\ApiPagination;
 use App\Support\Images\ConvertUploadedImageToWebp;
+use App\Support\ListQuery;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -48,12 +51,39 @@ class TicketController extends Controller
             $query->where('stage_id', (int) $request->input('stage_id'));
         }
         if ($request->filled('q')) {
-            $q = '%'.str_replace(['%', '_'], ['\\%', '\\_'], (string) $request->input('q')).'%';
+            $q = ListQuery::likePattern(trim((string) $request->input('q')));
             $query->where(function ($builder) use ($q): void {
                 $builder->where('summary', 'like', $q)
                     ->orWhere('number', 'like', $q)
                     ->orWhere('description', 'like', $q);
             });
+        }
+
+        ListQuery::applyLikeFilters($query, $request, [
+            'number' => 'number',
+            'summary' => 'summary',
+        ]);
+        if ($request->filled('stage')) {
+            $stage = trim((string) $request->input('stage'));
+            $query->whereHas('stage', fn ($q) => $q->where('name', 'like', ListQuery::likePattern($stage)));
+        }
+        if ($request->filled('priority')) {
+            $priority = trim((string) $request->input('priority'));
+            $query->whereHas('priority', fn ($q) => $q->where('name', 'like', ListQuery::likePattern($priority)));
+        }
+        if ($request->filled('desk')) {
+            $desk = trim((string) $request->input('desk'));
+            $query->whereHas('desk', fn ($q) => $q->where('name', 'like', ListQuery::likePattern($desk)));
+        }
+        if ($request->filled('sla')) {
+            $sla = strtolower(trim((string) $request->input('sla')));
+            if (in_array($sla, ['breach', 'breached', 'yes'], true)) {
+                $query->where(function ($b): void {
+                    $b->where('sla_response_breached', true)->orWhere('sla_resolve_breached', true);
+                });
+            } elseif (in_array($sla, ['ok', 'no'], true)) {
+                $query->where('sla_response_breached', false)->where('sla_resolve_breached', false);
+            }
         }
 
         $prefs = SdUserPreference::query()->where('user_id', $request->user()?->id)->first();
@@ -174,6 +204,12 @@ class TicketController extends Controller
             ]);
         }
 
+        PublishLive::org([
+            LiveTopics::TICKETS,
+            LiveTopics::TICKETING_REPORTS,
+            LiveTopics::REPORTS_DETAILED,
+        ], throttled: true);
+
         return response()->json($result);
     }
 
@@ -198,6 +234,8 @@ class TicketController extends Controller
             $request->user()?->id,
         );
 
+        $this->publishTicketLive($copy);
+
         return response()->json(['data' => TicketingPayload::ticket($copy, detailed: true)], 201);
     }
 
@@ -209,6 +247,9 @@ class TicketController extends Controller
         ]);
 
         $article = $action->handle($model, $request->user()?->id, (bool) ($data['publish'] ?? false));
+
+        PublishLive::org([LiveTopics::KB, LiveTopics::TICKETS], throttled: true);
+        $this->publishTicketLive($model);
 
         return response()->json(['data' => TicketingPayload::kb($article)], 201);
     }
@@ -232,6 +273,8 @@ class TicketController extends Controller
             $model->first_responded_at = now();
             $model->save();
         }
+
+        $this->publishTicketLive($model);
 
         return response()->json(['data' => $note], 201);
     }
@@ -257,6 +300,8 @@ class TicketController extends Controller
             'completed_at' => ! empty($data['is_completed']) ? now() : null,
         ]);
 
+        $this->publishTicketLive($model);
+
         return response()->json(['data' => $task], 201);
     }
 
@@ -277,6 +322,11 @@ class TicketController extends Controller
         }
         $model->fill(collect($data)->except('is_completed')->all());
         $model->save();
+
+        $ticketModel = SdTicket::query()->find($ticket);
+        if ($ticketModel) {
+            $this->publishTicketLive($ticketModel);
+        }
 
         return response()->json(['data' => $model]);
     }
@@ -310,6 +360,8 @@ class TicketController extends Controller
             'size' => strlen($converted['contents']),
             'uploaded_by' => $request->user()?->id,
         ]);
+
+        $this->publishTicketLive($model);
 
         return response()->json(['data' => $attachment], 201);
     }
@@ -369,5 +421,18 @@ class TicketController extends Controller
         );
 
         return response()->json(['data' => $prefs]);
+    }
+
+    private function publishTicketLive(SdTicket $ticket): void
+    {
+        PublishLive::org([
+            LiveTopics::TICKETS,
+            LiveTopics::TICKETING_REPORTS,
+            LiveTopics::REPORTS_DETAILED,
+        ], throttled: true);
+
+        if ($ticket->requester_user_id) {
+            PublishLive::portalUser((int) $ticket->requester_user_id);
+        }
     }
 }

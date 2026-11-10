@@ -5,6 +5,7 @@ namespace App\Domains\Realtime\Support;
 use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Support\StaffTenant;
 
 final class LiveChannelGate
 {
@@ -21,6 +22,10 @@ final class LiveChannelGate
 
         if (! Tenant::query()->whereKey($tenantId)->exists()) {
             return false;
+        }
+
+        if ($user->isPlatformStaff() && StaffTenant::matches($tenantId)) {
+            return true;
         }
 
         if ($user->tenant_id !== $tenantId) {

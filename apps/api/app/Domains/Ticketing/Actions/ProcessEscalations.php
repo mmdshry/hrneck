@@ -2,6 +2,8 @@
 
 namespace App\Domains\Ticketing\Actions;
 
+use App\Domains\Realtime\Support\LiveTopics;
+use App\Domains\Realtime\Support\PublishLive;
 use App\Domains\Ticketing\Models\SdTicket;
 use Illuminate\Support\Carbon;
 
@@ -28,6 +30,13 @@ class ProcessEscalations
                     $count++;
                 }
             });
+
+        if ($count > 0) {
+            PublishLive::org([
+                LiveTopics::TICKETS,
+                LiveTopics::TICKETING_REPORTS,
+            ], throttled: true);
+        }
 
         return $count;
     }

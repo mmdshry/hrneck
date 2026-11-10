@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\User;
+use App\Support\StaffTenant;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -22,10 +23,14 @@ class EnsureOrgMembership
             abort(400, 'Tenant context is required.');
         }
 
-        if ($user->tenant_id !== $tenantId) {
-            abort(403, 'You do not belong to this organization.');
+        if ($user->tenant_id === $tenantId) {
+            return $next($request);
         }
 
-        return $next($request);
+        if ($user->isPlatformStaff() && StaffTenant::matches($tenantId)) {
+            return $next($request);
+        }
+
+        abort(403, 'You do not belong to this organization.');
     }
 }

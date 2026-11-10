@@ -6,22 +6,34 @@ use App\Domains\Audit\Actions\LogOrgActivity;
 use App\Domains\Notifications\Actions\FanOutAnnouncement;
 use App\Domains\Notifications\Models\OrgAnnouncement;
 use App\Domains\Notifications\Support\NotificationPayload;
+use App\Domains\Realtime\Support\LiveTopics;
+use App\Domains\Realtime\Support\PublishLive;
 use App\Http\Controllers\Controller;
+use App\Support\ApiPagination;
+use App\Support\ListQuery;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class AnnouncementController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $rows = OrgAnnouncement::query()
-            ->orderByDesc('published_at')
-            ->orderByDesc('id')
-            ->limit(50)
-            ->get();
+        $query = OrgAnnouncement::query();
+        ListQuery::applySearch($query, $request, ['title', 'body']);
+        ListQuery::applyLikeFilters($query, $request, [
+            'title' => 'title',
+            'body' => 'body',
+        ]);
+        ListQuery::applySort($query, $request, [
+            'title' => 'title',
+            'published_at' => 'published_at',
+        ], 'published_at', 'desc');
+
+        $rows = $query->orderByDesc('id')->paginate(ApiPagination::perPage($request));
 
         return response()->json([
-            'data' => $rows->map(fn (OrgAnnouncement $row) => NotificationPayload::announcement($row))->values()->all(),
+            'data' => collect($rows->items())->map(fn (OrgAnnouncement $row) => NotificationPayload::announcement($row))->values()->all(),
+            'meta' => ApiPagination::meta($rows),
         ]);
     }
 
@@ -41,6 +53,8 @@ class AnnouncementController extends Controller
         $audit->handle('announcements', 'created', 'Announcement published', $announcement, [
             'title' => $announcement->title,
         ]);
+
+        PublishLive::org([LiveTopics::ANNOUNCEMENTS]);
 
         return response()->json([
             'data' => NotificationPayload::announcement($announcement),
@@ -63,6 +77,8 @@ class AnnouncementController extends Controller
             'after' => $model->only(['title', 'body']),
         ]);
 
+        PublishLive::org([LiveTopics::ANNOUNCEMENTS]);
+
         return response()->json([
             'data' => NotificationPayload::announcement($model),
         ]);
@@ -77,6 +93,8 @@ class AnnouncementController extends Controller
         $audit->handle('announcements', 'deleted', 'Announcement deleted', null, [
             'announcement' => $snapshot,
         ]);
+
+        PublishLive::org([LiveTopics::ANNOUNCEMENTS]);
 
         return response()->json(['message' => 'Deleted']);
     }
