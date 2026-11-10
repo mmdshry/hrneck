@@ -71,6 +71,7 @@ repl = {
     "DB_PASSWORD": json.dumps(os.environ["HRNECK_DB_PASSWORD"]),
     "SESSION_DRIVER": "redis",
     "SESSION_DOMAIN": ".hrneck.com",
+    "SESSION_SECURE_COOKIE": "true",
     "SANCTUM_STATEFUL_DOMAINS": "hrneck.com,www.hrneck.com,app.hrneck.com,admin.hrneck.com,itneck.hrneck.com,test.hrneck.com,company.hrneck.com",
     "BROADCAST_CONNECTION": "reverb",
     "QUEUE_CONNECTION": "redis",
