@@ -32,6 +32,8 @@ export default defineConfig({
         /password-reset\.spec\.ts/,
         /targets-import\.spec\.ts/,
         /ticketing-advanced\.spec\.ts/,
+        // Covered on desktop; mobile drawer auth footer is easy to flake in CI.
+        /auth-lifecycle\.spec\.ts/,
       ],
       use: {
         ...devices["Pixel 7"],

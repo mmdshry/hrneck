@@ -49,11 +49,32 @@ export function visibleRole(
 
 /** Prefer the visible control — desktop sidebar and mobile drawer both mount Sign out. */
 export async function signOutFromOrgShell(page: Page): Promise<void> {
-  await openOrgNavIfNeeded(page);
-  const mobileNav = page.locator("#org-mobile-nav");
-  const signOut = (await mobileNav.isVisible())
-    ? mobileNav.getByRole("button", { name: /sign out/i })
-    : page.getByRole("button", { name: /sign out/i }).locator("visible=true");
-  await expect(signOut.first()).toBeVisible({ timeout: 15_000 });
-  await signOut.first().click();
+  const openNav = page.getByRole("button", { name: /open navigation menu/i });
+  // Shell auth footer hydrates after /org; wait for either mobile menu or desktop Sign out.
+  await expect
+    .poll(async () => {
+      if (await openNav.isVisible().catch(() => false)) return "mobile";
+      if (
+        await page
+          .getByRole("button", { name: /sign out/i })
+          .locator("visible=true")
+          .count()
+      ) {
+        return "desktop";
+      }
+      return "";
+    }, { timeout: 20_000 })
+    .not.toBe("");
+
+  if (await openNav.isVisible()) {
+    await openNav.click();
+    const signOut = page.locator("#org-mobile-nav").getByRole("button", { name: /sign out/i });
+    await expect(signOut).toBeAttached({ timeout: 15_000 });
+    await signOut.scrollIntoViewIfNeeded();
+    await expect(signOut).toBeVisible({ timeout: 15_000 });
+    await signOut.click();
+    return;
+  }
+
+  await page.getByRole("button", { name: /sign out/i }).locator("visible=true").first().click();
 }
