@@ -13,6 +13,20 @@ class MockDirectorySyncDriver implements DirectorySyncDriver
             JSON_THROW_ON_ERROR,
         );
 
+        $tenantId = is_string(tenant('id')) ? (string) tenant('id') : 'central';
+
+        // Only uniquify emails for central User provisioning; external_ids stay as in the fixture
+        // (they are already unique within each tenant database).
+        foreach ($fixture['users'] as &$user) {
+            $email = (string) ($user['email'] ?? '');
+            if ($email === '') {
+                continue;
+            }
+            [$local, $domain] = array_pad(explode('@', $email, 2), 2, 'example.test');
+            $user['email'] = $local.'+'.$tenantId.'@'.$domain;
+        }
+        unset($user);
+
         return $fixture;
     }
 }

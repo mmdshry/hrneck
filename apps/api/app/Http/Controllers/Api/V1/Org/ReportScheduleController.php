@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1\Org;
 
 use App\Domains\AnalyticsReporting\Models\ReportSchedule;
 use App\Domains\Audit\Actions\LogOrgActivity;
+use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -26,6 +27,8 @@ class ReportScheduleController extends Controller
             'recipient_email' => ['required', 'email'],
         ]);
 
+        $this->ensurePdfExportPermission($request, $data['format']);
+
         $schedule = ReportSchedule::query()->create($data + [
             'next_run_at' => now(),
         ]);
@@ -46,6 +49,9 @@ class ReportScheduleController extends Controller
             'format' => ['sometimes', 'in:csv,pdf'],
             'recipient_email' => ['sometimes', 'email'],
         ]);
+
+        $nextFormat = (string) ($data['format'] ?? $schedule->format);
+        $this->ensurePdfExportPermission($request, $nextFormat);
 
         $before = $schedule->only(['name', 'cadence', 'format', 'recipient_email']);
         $schedule->fill($data)->save();
@@ -68,5 +74,18 @@ class ReportScheduleController extends Controller
         ]);
 
         return response()->json(['message' => 'Deleted']);
+    }
+
+    private function ensurePdfExportPermission(Request $request, string $format): void
+    {
+        if ($format !== 'pdf') {
+            return;
+        }
+
+        abort_unless(
+            $request->user()?->can(OrgPermissionCatalog::REPORTS_EXPORT) === true,
+            403,
+            'PDF report schedules require org.reports.export.',
+        );
     }
 }

@@ -14,7 +14,7 @@ class Campaign extends Model
 {
     protected $fillable = [
         'name', 'type', 'status', 'course_id',
-        'scheduled_at', 'starts_at', 'ends_at', 'randomize_send', 'meta',
+        'scheduled_at', 'starts_at', 'ends_at',
     ];
 
     protected function casts(): array
@@ -23,8 +23,6 @@ class Campaign extends Model
             'scheduled_at' => 'datetime',
             'starts_at' => 'datetime',
             'ends_at' => 'datetime',
-            'randomize_send' => 'boolean',
-            'meta' => 'array',
         ];
     }
 

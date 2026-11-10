@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1\Org;
 
 use App\Domains\Audit\Actions\LogOrgActivity;
 use App\Domains\Checklists\Actions\AssignAutoChecklistPacks;
+use App\Domains\IdentityAccess\Actions\ProvisionEmployeePair;
 use App\Domains\Realtime\Support\LiveTopics;
 use App\Domains\Realtime\Support\PublishLive;
 use App\Domains\TargetsGroups\Models\Department;
@@ -60,8 +61,12 @@ class TargetController extends Controller
         return response()->json(['data' => $model]);
     }
 
-    public function store(Request $request, LogOrgActivity $audit, AssignAutoChecklistPacks $autoAssign): JsonResponse
-    {
+    public function store(
+        Request $request,
+        LogOrgActivity $audit,
+        AssignAutoChecklistPacks $autoAssign,
+        ProvisionEmployeePair $provision,
+    ): JsonResponse {
         $data = $request->validate([
             'email' => ['required', 'email', 'unique:targets,email'],
             'first_name' => ['nullable', 'string', 'max:120'],
@@ -77,8 +82,11 @@ class TargetController extends Controller
             array_key_exists('department', $data),
         );
 
+        $tenantId = (string) tenant('id');
+        $email = $provision->normalizeEmail($data['email']);
+
         $target = Target::query()->create([
-            'email' => $data['email'],
+            'email' => $email,
             'first_name' => $data['first_name'] ?? null,
             'last_name' => $data['last_name'] ?? null,
             'department_id' => $departmentFields['department_id'],
@@ -86,11 +94,14 @@ class TargetController extends Controller
             'status' => 'active',
         ]);
 
+        $pair = $provision->ensureUserForTarget($target, $tenantId, queueInvite: true);
+
         $autoAssigned = $autoAssign->handle($target, $request->user()?->id);
 
         $audit->handle('targets', 'created', 'Target created', $target, [
             'email' => $target->email,
             'auto_assigned_instance_count' => $autoAssigned,
+            'login_invited' => $pair['invited'],
         ]);
 
         PublishLive::org([
@@ -106,12 +117,17 @@ class TargetController extends Controller
             'data' => $target,
             'meta' => [
                 'auto_assigned_instance_count' => $autoAssigned,
+                'login_invited' => $pair['invited'],
             ],
         ], 201);
     }
 
-    public function update(Request $request, Target $target, LogOrgActivity $audit): JsonResponse
-    {
+    public function update(
+        Request $request,
+        Target $target,
+        LogOrgActivity $audit,
+        ProvisionEmployeePair $provision,
+    ): JsonResponse {
         $data = $request->validate([
             'email' => ['sometimes', 'email', 'unique:targets,email,'.$target->id],
             'first_name' => ['sometimes', 'nullable', 'string', 'max:120'],
@@ -122,6 +138,7 @@ class TargetController extends Controller
         ]);
 
         $before = $target->only(['email', 'first_name', 'last_name', 'department', 'department_id', 'status']);
+        $tenantId = (string) tenant('id');
 
         if (array_key_exists('department_id', $data) || array_key_exists('department', $data)) {
             $departmentFields = $this->resolveDepartmentFields(
@@ -134,7 +151,20 @@ class TargetController extends Controller
             $data['department'] = $departmentFields['department'];
         }
 
+        if (array_key_exists('email', $data)) {
+            $data['email'] = $provision->normalizeEmail($data['email']);
+            $provision->syncUserEmailFromTarget($tenantId, (string) $before['email'], $data['email']);
+        }
+
         $target->fill($data)->save();
+
+        if (($data['status'] ?? null) === 'inactive' && $before['status'] !== 'inactive') {
+            $provision->onTargetDeactivated($target, $tenantId);
+        }
+
+        if (($data['status'] ?? null) === 'active' && $before['status'] !== 'active') {
+            $provision->ensureUserForTarget($target, $tenantId, queueInvite: false);
+        }
 
         $event = ($data['status'] ?? null) === 'inactive' && $before['status'] !== 'inactive'
             ? 'archived'
@@ -156,11 +186,16 @@ class TargetController extends Controller
         return response()->json(['data' => $target->load('groups')]);
     }
 
-    public function destroy(Target $target, LogOrgActivity $audit): JsonResponse
-    {
+    public function destroy(
+        Target $target,
+        LogOrgActivity $audit,
+        ProvisionEmployeePair $provision,
+    ): JsonResponse {
         $snapshot = $target->only(['id', 'email', 'status']);
+        $tenantId = (string) tenant('id');
         $target->groups()->detach();
         $target->delete();
+        $provision->onTargetDeleted((string) $snapshot['email'], $tenantId);
 
         $audit->handle('targets', 'deleted', 'Target deleted', null, [
             'target' => $snapshot,
@@ -177,13 +212,19 @@ class TargetController extends Controller
         return response()->json(['message' => 'Deleted']);
     }
 
-    public function importCsv(Request $request, LogOrgActivity $audit, AssignAutoChecklistPacks $autoAssign): JsonResponse
-    {
+    public function importCsv(
+        Request $request,
+        LogOrgActivity $audit,
+        AssignAutoChecklistPacks $autoAssign,
+        ProvisionEmployeePair $provision,
+    ): JsonResponse {
         $request->validate(['file' => ['required', 'file', 'mimes:csv,txt']]);
         $handle = fopen($request->file('file')->getRealPath(), 'r');
         $header = fgetcsv($handle) ?: [];
         $created = 0;
         $autoAssigned = 0;
+        $invited = 0;
+        $tenantId = (string) tenant('id');
         while (($row = fgetcsv($handle)) !== false) {
             if (count($header) !== count($row)) {
                 continue;
@@ -200,7 +241,7 @@ class TargetController extends Controller
                 true,
             );
 
-            $email = trim((string) $item['email']);
+            $email = $provision->normalizeEmail((string) $item['email']);
             $target = Target::query()->firstOrNew(['email' => $email]);
             $isNew = ! $target->exists;
             $target->fill([
@@ -213,6 +254,11 @@ class TargetController extends Controller
             $target->save();
             $created++;
 
+            $pair = $provision->ensureUserForTarget($target, $tenantId, queueInvite: true);
+            if ($pair['invited']) {
+                $invited++;
+            }
+
             if ($isNew) {
                 $autoAssigned += $autoAssign->handle($target, $request->user()?->id);
             }
@@ -222,6 +268,7 @@ class TargetController extends Controller
         $audit->handle('targets', 'imported', 'Targets CSV imported', null, [
             'imported' => $created,
             'auto_assigned_instance_count' => $autoAssigned,
+            'login_invited' => $invited,
         ]);
 
         PublishLive::org([
@@ -237,6 +284,7 @@ class TargetController extends Controller
             'imported' => $created,
             'meta' => [
                 'auto_assigned_instance_count' => $autoAssigned,
+                'login_invited' => $invited,
             ],
         ]);
     }

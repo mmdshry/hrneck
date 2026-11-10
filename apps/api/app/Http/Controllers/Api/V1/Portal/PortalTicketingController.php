@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api\V1\Portal;
 
 use App\Domains\Realtime\Support\LiveTopics;
 use App\Domains\Realtime\Support\PublishLive;
-use App\Domains\TargetsGroups\Models\Target;
+use App\Domains\TargetsGroups\Support\ResolveActiveTarget;
 use App\Domains\Ticketing\Actions\CreateTicket;
 use App\Domains\Ticketing\Models\SdDesk;
 use App\Domains\Ticketing\Models\SdKbArticle;
@@ -19,8 +19,12 @@ use Illuminate\Http\Request;
 
 class PortalTicketingController extends Controller
 {
-    public function desks(): JsonResponse
+    public function __construct(private readonly ResolveActiveTarget $targets) {}
+
+    public function desks(Request $request): JsonResponse
     {
+        $this->targets->assertEmployeeAccessAllowed($request->user());
+
         $desks = SdDesk::query()
             ->where('is_active', true)
             ->whereIn('type', ['incident', 'service_request'])
@@ -32,8 +36,10 @@ class PortalTicketingController extends Controller
 
     public function index(Request $request): JsonResponse
     {
+        $this->targets->assertEmployeeAccessAllowed($request->user());
+
         $userId = $request->user()?->id;
-        $targetId = Target::query()->where('email', $request->user()?->email)->value('id');
+        $targetId = $this->targets->idForUser($request->user());
 
         $query = SdTicket::query()
             ->with(['desk', 'stage', 'status', 'priority'])
@@ -69,6 +75,8 @@ class PortalTicketingController extends Controller
 
     public function store(Request $request, CreateTicket $action): JsonResponse
     {
+        $this->targets->assertEmployeeAccessAllowed($request->user());
+
         $data = $request->validate([
             'desk_id' => ['required', 'integer'],
             'summary' => ['required', 'string', 'max:500'],
@@ -82,7 +90,7 @@ class PortalTicketingController extends Controller
             abort(422, 'Portal tickets are limited to incident and service request desks.');
         }
 
-        $targetId = Target::query()->where('email', $request->user()?->email)->value('id');
+        $targetId = $this->targets->idForUser($request->user());
 
         $ticket = $action->handle([
             ...$data,
@@ -95,6 +103,8 @@ class PortalTicketingController extends Controller
 
     public function show(Request $request, int $ticket): JsonResponse
     {
+        $this->targets->assertEmployeeAccessAllowed($request->user());
+
         $model = $this->ownedTicket($request, $ticket)
             ->load(['desk', 'stage', 'status', 'priority', 'notes' => fn ($q) => $q->where('is_public', true)]);
 
@@ -111,6 +121,8 @@ class PortalTicketingController extends Controller
 
     public function addNote(Request $request, int $ticket): JsonResponse
     {
+        $this->targets->assertEmployeeAccessAllowed($request->user());
+
         $model = $this->ownedTicket($request, $ticket);
         $data = $request->validate([
             'body' => ['required', 'string'],
@@ -135,6 +147,8 @@ class PortalTicketingController extends Controller
 
     public function kb(Request $request): JsonResponse
     {
+        $this->targets->assertEmployeeAccessAllowed($request->user());
+
         $query = SdKbArticle::query()->where('is_published', true)->latest();
         ListQuery::applySearch($query, $request, ['summary', 'description', 'number']);
         ListQuery::applyLikeFilters($query, $request, [
@@ -154,7 +168,7 @@ class PortalTicketingController extends Controller
     private function ownedTicket(Request $request, int $ticketId): SdTicket
     {
         $userId = $request->user()?->id;
-        $targetId = Target::query()->where('email', $request->user()?->email)->value('id');
+        $targetId = $this->targets->idForUser($request->user());
 
         return SdTicket::query()
             ->active()

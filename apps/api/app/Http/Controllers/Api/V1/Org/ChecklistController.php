@@ -270,6 +270,7 @@ class ChecklistController extends Controller
         $model = ChecklistInstance::query()->findOrFail($instance);
         $data = $request->validate([
             'status' => ['sometimes', 'string', 'in:not_started,in_progress,completed,cancelled'],
+            'reopen' => ['sometimes', 'boolean'],
             'answers' => ['sometimes', 'array'],
             'answers.*.item_key' => ['required', 'string', 'max:120'],
             'answers.*.value' => ['nullable'],

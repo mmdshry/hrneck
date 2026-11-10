@@ -29,6 +29,11 @@ class SendTrainingReminderJob implements ShouldQueue
             return;
         }
 
+        $campaignStatus = (string) ($recipient->campaign?->status ?? '');
+        if (in_array($campaignStatus, ['cancelled', 'archived'], true)) {
+            return;
+        }
+
         $learnUrl = rtrim((string) config('brand.frontend_url', config('app.url')), '/')
             .'/learn?course='.$enrollment->course_id
             .'&enrollment='.$enrollment->id

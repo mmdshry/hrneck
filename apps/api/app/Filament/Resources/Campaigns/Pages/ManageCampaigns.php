@@ -30,7 +30,6 @@ class ManageCampaigns extends ManageTenantRecords
                     $campaign = Campaign::query()->create($data + [
                         'type' => 'training',
                         'status' => 'draft',
-                        'randomize_send' => false,
                     ]);
 
                     if ($launch && $targetIds !== []) {

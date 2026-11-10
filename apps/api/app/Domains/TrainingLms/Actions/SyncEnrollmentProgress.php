@@ -2,6 +2,7 @@
 
 namespace App\Domains\TrainingLms\Actions;
 
+use App\Domains\Campaigns\Actions\MaybeCompleteTrainingCampaign;
 use App\Domains\Campaigns\Models\Campaign;
 use App\Domains\Campaigns\Models\CampaignRecipient;
 use App\Domains\TrainingLms\Models\Enrollment;
@@ -85,6 +86,8 @@ class SyncEnrollmentProgress
             ->where('target_id', $enrollment->target_id)
             ->get();
 
+        $touchedCampaignIds = [];
+
         foreach ($recipients as $recipient) {
             $updates = [];
             if ($opened && $recipient->opened_at === null) {
@@ -99,6 +102,14 @@ class SyncEnrollmentProgress
             }
             if ($updates !== []) {
                 $recipient->forceFill($updates)->save();
+                $touchedCampaignIds[] = (int) $recipient->campaign_id;
+            }
+        }
+
+        if ($completed && $touchedCampaignIds !== []) {
+            $completer = app(MaybeCompleteTrainingCampaign::class);
+            foreach (array_unique($touchedCampaignIds) as $campaignId) {
+                $completer->handle($campaignId);
             }
         }
     }

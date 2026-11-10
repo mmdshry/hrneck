@@ -19,6 +19,7 @@ class UpdateChecklistInstance
     /**
      * @param  array{
      *     status?: string,
+     *     reopen?: bool,
      *     answers?: list<array{
      *         item_key: string,
      *         value?: mixed,
@@ -30,7 +31,9 @@ class UpdateChecklistInstance
      */
     public function handle(ChecklistInstance $instance, array $data, ?int $actorId = null): ChecklistInstance
     {
-        if ($instance->status === ChecklistInstance::STATUS_CANCELLED) {
+        $reopen = (bool) ($data['reopen'] ?? false);
+
+        if ($instance->status === ChecklistInstance::STATUS_CANCELLED && ! $reopen) {
             throw ValidationException::withMessages([
                 'status' => ['Cancelled checklists cannot be updated.'],
             ]);
@@ -127,6 +130,8 @@ class UpdateChecklistInstance
                     $this->assertRequiredComplete($schema, $answersByKey);
                     $instance->completed_at = now();
                     $instance->progress_pct = 100;
+                } elseif ($oldStatus === ChecklistInstance::STATUS_COMPLETED) {
+                    $instance->completed_at = null;
                 }
                 if ($status === ChecklistInstance::STATUS_IN_PROGRESS && $instance->started_at === null) {
                     $instance->started_at = now();

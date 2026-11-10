@@ -105,12 +105,17 @@ final class ChecklistSchemaValidator
                 ];
             }
 
+            $required = (bool) ($raw['required'] ?? false);
+            if (! in_array($type, ChecklistItemTypes::answerable(), true)) {
+                $required = false;
+            }
+
             $normalized[] = [
                 'key' => $key,
                 'type' => $type,
                 'label' => $label,
                 'help' => isset($raw['help']) ? (string) $raw['help'] : null,
-                'required' => (bool) ($raw['required'] ?? false),
+                'required' => $required,
                 'order' => (int) ($raw['order'] ?? ($index + 1)),
                 'options' => $options,
                 'media' => $media,

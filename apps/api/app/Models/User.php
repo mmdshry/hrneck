@@ -24,7 +24,7 @@ use Stancl\Tenancy\Database\Concerns\CentralConnection;
  * @property array<int, string>|null $mfa_recovery_codes
  * @property string|null $mfa_secret
  */
-#[Fillable(['name', 'email', 'password', 'tenant_id'])]
+#[Fillable(['name', 'email', 'password', 'tenant_id', 'must_set_password', 'disabled_at'])]
 #[Hidden(['password', 'remember_token', 'mfa_secret', 'mfa_recovery_codes'])]
 class User extends Authenticatable implements FilamentUser, HasAppAuthentication, HasAppAuthenticationRecovery
 {
@@ -123,6 +123,8 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'must_set_password' => 'boolean',
+            'disabled_at' => 'datetime',
             'mfa_enabled' => 'boolean',
             'mfa_confirmed_at' => 'datetime',
             'mfa_recovery_codes' => 'array',

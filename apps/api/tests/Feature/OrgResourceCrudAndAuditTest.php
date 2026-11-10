@@ -71,7 +71,14 @@ test('org admin can update archive and delete targets and groups with audit', fu
     $this->actingAs($admin)
         ->withHeader('X-Tenant', 'itneck')
         ->deleteJson('/api/v1/org/groups/'.$groupId)
-        ->assertOk();
+        ->assertOk()
+        ->assertJsonPath('data.status', 'inactive');
+
+    $this->actingAs($admin)
+        ->withHeader('X-Tenant', 'itneck')
+        ->getJson('/api/v1/org/groups')
+        ->assertOk()
+        ->assertJsonMissing(['id' => $groupId]);
 
     $this->actingAs($admin)
         ->withHeader('X-Tenant', 'itneck')
@@ -81,7 +88,7 @@ test('org admin can update archive and delete targets and groups with audit', fu
     Tenancy::initialize('itneck');
     expect(Activity::query()->inLog('targets')->where('event', 'archived')->count())->toBeGreaterThan(0);
     expect(Activity::query()->inLog('targets')->where('event', 'deleted')->count())->toBeGreaterThan(0);
-    expect(Activity::query()->inLog('groups')->where('event', 'deleted')->count())->toBeGreaterThan(0);
+    expect(Activity::query()->inLog('groups')->where('event', 'archived')->count())->toBeGreaterThan(0);
     expect(Target::query()->find($targetId))->toBeNull();
     Tenancy::end();
 });

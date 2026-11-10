@@ -2,6 +2,7 @@
 
 namespace App\Domains\Notifications\Actions;
 
+use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
 use App\Domains\Notifications\Models\OrgAnnouncement;
 use App\Domains\Notifications\Models\UserNotification;
 use App\Models\User;
@@ -25,20 +26,19 @@ class FanOutAnnouncement
             return $announcement;
         }
 
-        $userIds = User::query()
+        $users = User::query()
             ->where('tenant_id', $tenantId)
-            ->pluck('id')
-            ->map(fn ($id) => (int) $id)
-            ->all();
+            ->whereNull('disabled_at')
+            ->get(['id', 'tenant_id']);
 
-        foreach ($userIds as $userId) {
+        foreach ($users as $user) {
             $this->notify->handle(
-                $userId,
+                (int) $user->id,
                 UserNotification::TYPE_ANNOUNCEMENT,
                 $title,
                 $body,
                 [
-                    'link' => '/org',
+                    'link' => $this->announcementLinkFor($user, $tenantId),
                     'entity_id' => $announcement->id,
                     'announcement_id' => $announcement->id,
                 ],
@@ -46,5 +46,32 @@ class FanOutAnnouncement
         }
 
         return $announcement;
+    }
+
+    private function announcementLinkFor(User $user, string $tenantId): string
+    {
+        setPermissionsTeamId($tenantId);
+        try {
+            $roles = $user->getRoleNames()->values()->all();
+            $isLearnerOnly = $roles === [OrgPermissionCatalog::LEARNER]
+                || ($roles === [] && $user->can(OrgPermissionCatalog::TICKETING_PORTAL));
+            $hasOrgAccess = false;
+            foreach ($roles as $role) {
+                if ($role !== OrgPermissionCatalog::LEARNER) {
+                    $hasOrgAccess = true;
+                    break;
+                }
+            }
+            if ($hasOrgAccess) {
+                return '/org';
+            }
+            if ($isLearnerOnly || $user->can(OrgPermissionCatalog::TICKETING_PORTAL)) {
+                return '/portal';
+            }
+        } finally {
+            setPermissionsTeamId(null);
+        }
+
+        return '/portal';
     }
 }

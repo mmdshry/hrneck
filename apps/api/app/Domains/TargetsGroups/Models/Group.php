@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Group extends Model
 {
-    protected $fillable = ['name', 'source', 'external_id'];
+    protected $fillable = ['name', 'status', 'source', 'external_id'];
 
     public function targets(): BelongsToMany
     {

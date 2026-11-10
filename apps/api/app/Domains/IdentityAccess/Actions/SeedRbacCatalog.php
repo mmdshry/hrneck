@@ -22,13 +22,14 @@ class SeedRbacCatalog
         foreach ([
             OrgPermissionCatalog::PLATFORM_SUPER_ADMIN,
             OrgPermissionCatalog::PLATFORM_AGENT,
-            OrgPermissionCatalog::LEARNER,
         ] as $roleName) {
             Role::findOrCreate($roleName, OrgPermissionCatalog::GUARD);
         }
 
-        $learner = Role::findOrCreate(OrgPermissionCatalog::LEARNER, OrgPermissionCatalog::GUARD);
-        $learner->syncPermissions([OrgPermissionCatalog::TICKETING_PORTAL]);
+        // Reserved global learner name (no team): keep empty. Tenant-scoped learner
+        // with org.ticketing.portal is created via ensureLearnerRole().
+        $globalLearner = Role::findOrCreate(OrgPermissionCatalog::LEARNER, OrgPermissionCatalog::GUARD);
+        $globalLearner->syncPermissions([]);
 
         // Migrate legacy global role names if present.
         $this->renameLegacyRole(OrgPermissionCatalog::LEGACY_PARTNER_ADMIN, OrgPermissionCatalog::PLATFORM_SUPER_ADMIN);
@@ -63,6 +64,22 @@ class SeedRbacCatalog
             $sdRole->syncPermissions($permissions);
         }
 
+        $this->ensureLearnerRole($tenantId);
+
+        setPermissionsTeamId(null);
+
+        return $role;
+    }
+
+    public function ensureLearnerRole(string $tenantId): Role
+    {
+        setPermissionsTeamId(null);
+        Permission::findOrCreate(OrgPermissionCatalog::TICKETING_PORTAL, OrgPermissionCatalog::GUARD);
+        app()[PermissionRegistrar::class]->forgetCachedPermissions();
+
+        setPermissionsTeamId($tenantId);
+        $role = Role::findOrCreate(OrgPermissionCatalog::LEARNER, OrgPermissionCatalog::GUARD);
+        $role->syncPermissions([OrgPermissionCatalog::TICKETING_PORTAL]);
         setPermissionsTeamId(null);
 
         return $role;

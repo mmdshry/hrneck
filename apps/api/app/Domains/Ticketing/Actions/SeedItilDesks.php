@@ -121,7 +121,7 @@ class SeedItilDesks
                 ['Logged', 0, 60, false],
                 ['Assigned', 1, 240, false],
                 ['Working', 2, 480, false],
-                ['Resolved', 3, null, false],
+                ['Resolved', 3, null, true],
                 ['Closed', 4, null, true],
             ],
         };

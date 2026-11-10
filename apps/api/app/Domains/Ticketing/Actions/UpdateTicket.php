@@ -6,6 +6,7 @@ use App\Domains\Notifications\Actions\NotifyTicketAssignee;
 use App\Domains\Realtime\Support\LiveTopics;
 use App\Domains\Realtime\Support\PublishLive;
 use App\Domains\Ticketing\Models\SdStage;
+use App\Domains\Ticketing\Models\SdStatus;
 use App\Domains\Ticketing\Models\SdTicket;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
@@ -40,15 +41,30 @@ class UpdateTicket
             }
         }
 
+        $stage = null;
         if (array_key_exists('stage_id', $data) && (int) $data['stage_id'] !== (int) $previousStage) {
             $stage = SdStage::query()->find((int) $data['stage_id']);
             $ticket->escalation_level = 0;
             $ticket->escalation_due_at = $stage?->default_escalation_minutes
                 ? Carbon::now()->addMinutes((int) $stage->default_escalation_minutes)
                 : null;
+        }
+
+        $marksResolved = false;
+        if (array_key_exists('stage_id', $data)) {
+            $stage ??= SdStage::query()->find((int) $ticket->stage_id);
             if ($stage?->is_terminal) {
-                $ticket->resolved_at ??= Carbon::now();
+                $marksResolved = true;
             }
+        }
+        if (array_key_exists('status_id', $data)) {
+            $status = SdStatus::query()->find((int) $ticket->status_id);
+            if ($status?->is_closed) {
+                $marksResolved = true;
+            }
+        }
+        if ($marksResolved) {
+            $ticket->resolved_at ??= Carbon::now();
         }
 
         if (! empty($data['mark_responded']) && ! $ticket->first_responded_at) {

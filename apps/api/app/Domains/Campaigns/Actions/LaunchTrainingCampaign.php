@@ -11,7 +11,6 @@ use App\Domains\Notifications\Support\ResolveUsersFromTargets;
 use App\Domains\Realtime\Support\PublishLive;
 use App\Domains\TargetsGroups\Models\Target;
 use App\Domains\TrainingLms\Models\Enrollment;
-use Illuminate\Support\Str;
 
 class LaunchTrainingCampaign
 {
@@ -22,7 +21,6 @@ class LaunchTrainingCampaign
     {
         $targets = Target::query()->whereIn('id', $targetIds)->get();
         $courseId = (int) $campaign->course_id;
-        $tenantPrefix = (string) (tenant('id') ?: 'central');
 
         foreach ($targets as $target) {
             $enrollment = Enrollment::query()->firstOrCreate(
@@ -40,7 +38,6 @@ class LaunchTrainingCampaign
             $recipient = CampaignRecipient::query()->create([
                 'campaign_id' => $campaign->id,
                 'target_id' => $target->id,
-                'tracking_token' => $tenantPrefix.'.train.'.Str::random(32),
                 'status' => 'pending',
             ]);
 

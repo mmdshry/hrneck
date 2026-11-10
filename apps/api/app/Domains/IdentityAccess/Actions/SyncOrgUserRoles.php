@@ -4,11 +4,18 @@ namespace App\Domains\IdentityAccess\Actions;
 
 use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
 use App\Models\Role;
+use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Validation\ValidationException;
+use Stancl\Tenancy\Facades\Tenancy;
 
 class SyncOrgUserRoles
 {
+    public function __construct(
+        private readonly SeedRbacCatalog $rbac,
+        private readonly ProvisionEmployeePair $provision,
+    ) {}
+
     /**
      * @param  list<string>  $roleNames
      */
@@ -18,6 +25,10 @@ class SyncOrgUserRoles
             throw ValidationException::withMessages([
                 'user' => ['User does not belong to this organization.'],
             ]);
+        }
+
+        if (in_array(OrgPermissionCatalog::LEARNER, $roleNames, true)) {
+            $this->rbac->ensureLearnerRole($tenantId);
         }
 
         setPermissionsTeamId($tenantId);
@@ -35,6 +46,23 @@ class SyncOrgUserRoles
         $user->syncRoles($roles);
 
         setPermissionsTeamId(null);
+
+        if (in_array(OrgPermissionCatalog::LEARNER, $roleNames, true)) {
+            $was = tenant('id');
+            if ($was !== $tenantId) {
+                $tenant = Tenant::query()->find($tenantId);
+                if ($tenant) {
+                    Tenancy::initialize($tenant);
+                }
+            }
+            try {
+                $this->provision->ensureTargetForLearner($user);
+            } finally {
+                if ($was !== $tenantId) {
+                    Tenancy::end();
+                }
+            }
+        }
 
         return $user->fresh(['roles']);
     }

@@ -8,7 +8,7 @@ use App\Domains\Campaigns\Actions\ResolveCampaignAudience;
 use App\Domains\Campaigns\Models\Campaign;
 use App\Domains\Realtime\Support\LiveTopics;
 use App\Domains\Realtime\Support\PublishLive;
-use App\Domains\TargetsGroups\Models\Target;
+use App\Domains\TargetsGroups\Support\ResolveActiveTarget;
 use App\Domains\TrainingLms\Actions\SyncEnrollmentProgress;
 use App\Domains\TrainingLms\Models\Course;
 use App\Domains\TrainingLms\Models\Enrollment;
@@ -491,7 +491,6 @@ class TrainingController extends Controller
                 'type' => 'training',
                 'status' => 'draft',
                 'course_id' => $course->id,
-                'randomize_send' => false,
             ]);
 
             if ($shouldLaunch) {
@@ -768,6 +767,8 @@ class TrainingController extends Controller
 
     public function myAssignments(Request $request): JsonResponse
     {
+        app(ResolveActiveTarget::class)->assertEmployeeAccessAllowed($request->user());
+
         $targetId = $this->ownedTargetId($request);
         if ($targetId === null) {
             $this->abortWithoutLearnerProfile();
@@ -795,14 +796,7 @@ class TrainingController extends Controller
 
     private function ownedTargetId(Request $request): ?int
     {
-        $email = $request->user()?->email;
-        if (! is_string($email) || $email === '') {
-            return null;
-        }
-
-        $id = Target::query()->where('email', $email)->value('id');
-
-        return $id !== null ? (int) $id : null;
+        return app(ResolveActiveTarget::class)->idForUser($request->user());
     }
 
     private function ownedEnrollment(Request $request, int $enrollmentId): Enrollment

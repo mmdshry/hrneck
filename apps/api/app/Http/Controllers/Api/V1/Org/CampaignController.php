@@ -116,7 +116,6 @@ class CampaignController extends Controller
             'status' => $status,
             'course_id' => $data['course_id'] ?? Course::query()->value('id'),
             'scheduled_at' => $data['scheduled_at'] ?? null,
-            'randomize_send' => false,
         ]);
 
         if ($request->boolean('launch', true)) {

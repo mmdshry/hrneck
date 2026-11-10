@@ -33,6 +33,22 @@ class AuthController extends Controller
         /** @var User $user */
         $user = $request->user();
 
+        if ($user->disabled_at !== null) {
+            Auth::guard('web')->logout();
+
+            throw ValidationException::withMessages([
+                'email' => ['This account has been disabled.'],
+            ]);
+        }
+
+        if ($user->must_set_password) {
+            Auth::guard('web')->logout();
+
+            throw ValidationException::withMessages([
+                'email' => ['Please use the invite link in your email to set a password before signing in.'],
+            ]);
+        }
+
         if ($user->email_verified_at === null) {
             Auth::guard('web')->logout();
 
@@ -184,6 +200,8 @@ class AuthController extends Controller
                 $user->forceFill([
                     'password' => $password,
                     'remember_token' => Str::random(60),
+                    'must_set_password' => false,
+                    'disabled_at' => null,
                 ])->save();
 
                 event(new PasswordReset($user));
@@ -217,6 +235,7 @@ class AuthController extends Controller
         $user->forceFill([
             'password' => $data['password'],
             'remember_token' => Str::random(60),
+            'must_set_password' => false,
         ])->save();
 
         StaffTenant::clear();
