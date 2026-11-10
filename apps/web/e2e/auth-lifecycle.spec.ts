@@ -1,5 +1,9 @@
 import { test, expect } from "@playwright/test";
-import { loginAsOrgAdmin, loginAsPlatformAdmin } from "./helpers/auth";
+import {
+  loginAsOrgAdmin,
+  loginAsPlatformAdmin,
+  openOrgNavIfNeeded,
+} from "./helpers/auth";
 
 test.describe("Auth lifecycle", () => {
   test("unauthenticated /org redirects to login", async ({ page }) => {
@@ -15,6 +19,7 @@ test.describe("Auth lifecycle", () => {
   test("org admin can sign out", async ({ page }) => {
     test.setTimeout(90_000);
     await loginAsOrgAdmin(page);
+    await openOrgNavIfNeeded(page);
     await page.getByRole("button", { name: /sign out/i }).first().click();
     await expect(page).toHaveURL(/\/login/, { timeout: 20_000 });
   });
@@ -27,6 +32,7 @@ test.describe("Auth lifecycle", () => {
     await expect(page.getByText(/viewing as platform staff/i)).toBeVisible({
       timeout: 20_000,
     });
+    await openOrgNavIfNeeded(page);
     await expect(page.getByRole("link", { name: "Users" }).first()).toBeVisible({
       timeout: 15_000,
     });

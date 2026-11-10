@@ -14,7 +14,12 @@ test.describe("DataTable filters", () => {
     await page.waitForURL(/\/org\/ticketing\/tickets\/\d+/, { timeout: 30_000 });
     await page.goto("/org/ticketing");
     await expect(page.getByLabel("Search table")).toBeVisible();
-    await expect(page.getByLabel("Filter Number")).toBeVisible();
+    // Column filters sit in a desktop table row; on mobile they live in a sheet.
+    const filterNumber = page.getByLabel("Filter Number");
+    if (!(await filterNumber.first().isVisible())) {
+      await page.getByRole("button", { name: /^Filters/i }).click();
+    }
+    await expect(filterNumber.first()).toBeVisible();
     await page.getByLabel("Search table").fill("INC");
     await expect(page.getByLabel("Search table")).toHaveValue("INC");
   });

@@ -28,3 +28,12 @@ export async function loginAsPlatformAdmin(page: Page): Promise<void> {
   await loginAs(page, "admin@hrneck.test");
   await page.waitForURL(/\/msp(?:\/|$)/, { timeout: 20_000 });
 }
+
+/** Desktop keeps the sidebar open; mobile needs the hamburger drawer. */
+export async function openOrgNavIfNeeded(page: Page): Promise<void> {
+  const openNav = page.getByRole("button", { name: /open navigation menu/i });
+  if (await openNav.isVisible()) {
+    await openNav.click();
+    await expect(page.locator("#org-mobile-nav")).toBeVisible();
+  }
+}
