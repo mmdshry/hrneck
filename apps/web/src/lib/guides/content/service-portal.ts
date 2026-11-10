@@ -16,16 +16,16 @@ export const servicePortalGuide: GuideModule = {
   ],
   openInAppHref: "/portal/tickets",
   overview:
-    "The service portal is the employee-facing side of ticketing. Users with org.ticketing.portal (including the seeded learner role) open /portal to list and submit tickets, add notes on their own requests, and browse published KB articles. Technicians still work the queue in /org/ticketing. The portal header links My tickets, Knowledge base, Learn, and Technician (org queue) when the signed-in user also has operator permissions.",
+    "The service portal is the employee-facing side of ticketing. Tenant access uses org.ticketing.portal—the seeded learner role includes only that permission—so paired employee Users can open /portal to list and submit tickets, add notes on their own requests, and browse published KB articles. Technicians still work the queue in /org/ticketing. The portal header always links My tickets, Knowledge base, and Learn; Technician appears only when the signed-in user also has org.ticketing.tickets or org.ticketing.admin (not for learner-only accounts).",
   example: {
     title: "Employee reports a suspicious invoice",
     narrative:
-      "Alex signs in, opens /portal/tickets, submits “Suspicious invoice PDF” with a short description, later adds a note with a screenshot, then finds the published KB article “How to report phishing” under /portal/kb after the service desk converts INC-1842.",
+      "Alex signs in with a learner account, opens /portal/tickets, submits “Suspicious invoice PDF” with a short description, later adds a note with a screenshot, then finds the published KB article “How to report phishing” under /portal/kb after the service desk converts INC-1842.",
   },
   steps: [
     {
       title: "Sign in",
-      body: "Use your tenant account. Portal access requires org.ticketing.portal (learners typically have this).",
+      body: "Use your tenant account. Portal APIs require org.ticketing.portal; the seeded learner role grants exactly that (no org queue access).",
       href: "/login",
     },
     {
@@ -62,7 +62,7 @@ export const servicePortalGuide: GuideModule = {
         },
         {
           title: "Header shortcuts",
-          body: "Use Learn for training assignments and Technician when your account also has org ticketing permissions.",
+          body: "Use Learn for training assignments. Technician only shows when you have org.ticketing.tickets or org.ticketing.admin—learner-only users stay in /portal.",
         },
       ],
     },

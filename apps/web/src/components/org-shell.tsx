@@ -16,6 +16,7 @@ import {
   Megaphone,
   Menu,
   Settings2,
+  Shield,
   Target,
   Ticket,
   GraduationCap,
@@ -71,6 +72,7 @@ const NAV: NavItem[] = [
   { href: "/org/reports/export", label: "Export", icon: Download, permission: "org.reports.export" },
   { href: "/org/announcements", label: "Announcements", icon: Megaphone, permission: "org.announcements.manage" },
   { href: "/org/settings", label: "Settings", icon: Settings2, permission: "org.settings.manage" },
+  { href: "/org/settings/mfa", label: "Account / MFA", icon: Shield },
   { href: "/docs", label: "Guides", icon: BookOpen },
 ];
 

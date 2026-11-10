@@ -17,6 +17,7 @@ import { api, ensureCsrf } from "@/lib/api";
 import { orgLiveChannel } from "@/lib/live-topics";
 import { resolveTenant } from "@/lib/tenant";
 import {
+  ANSWERABLE,
   ITEM_TYPES,
   newItemKey,
   type ChecklistItem,
@@ -90,7 +91,14 @@ export function ChecklistBuilderClient({ templateId }: { templateId: number }) {
   function updateSelected(patch: Partial<ChecklistItem>) {
     if (!selectedKey) return;
     setItems((prev) =>
-      prev.map((item) => (item.key === selectedKey ? { ...item, ...patch } : item)),
+      prev.map((item) => {
+        if (item.key !== selectedKey) return item;
+        const next = { ...item, ...patch };
+        if (patch.type && !ANSWERABLE.has(patch.type)) {
+          next.required = false;
+        }
+        return next;
+      }),
     );
   }
 
@@ -148,6 +156,7 @@ export function ChecklistBuilderClient({ templateId }: { templateId: number }) {
       const normalized = items.map((item, index) => ({
         ...item,
         order: index + 1,
+        required: ANSWERABLE.has(item.type) ? Boolean(item.required) : false,
         options: item.options ?? [],
         requires: item.requires ?? [],
         visible_when: item.visible_when?.item_key ? item.visible_when : null,
@@ -342,14 +351,16 @@ export function ChecklistBuilderClient({ templateId }: { templateId: number }) {
                     onChange={(e) => updateSelected({ help: e.target.value })}
                   />
                 </div>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(selected.required)}
-                    onChange={(e) => updateSelected({ required: e.target.checked })}
-                  />
-                  Required
-                </label>
+                {ANSWERABLE.has(selected.type) ? (
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(selected.required)}
+                      onChange={(e) => updateSelected({ required: e.target.checked })}
+                    />
+                    Required
+                  </label>
+                ) : null}
                 {(selected.type === "single_select" || selected.type === "multi_select") && (
                   <div className="space-y-1.5 sm:col-span-2">
                     <Label>Options (value:label per line)</Label>

@@ -1,12 +1,31 @@
 "use client";
 
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { BrandMark } from "@/components/brand-mark";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { ensureCsrf, fetchSessionUser } from "@/lib/api";
+import { hasPermission, type SessionUser } from "@/lib/session";
 
 export function PortalChrome({ children }: { children: ReactNode }) {
+  const [session, setSession] = useState<SessionUser | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        await ensureCsrf();
+        setSession(await fetchSessionUser());
+      } catch {
+        setSession(null);
+      }
+    })();
+  }, []);
+
+  const canTechnician =
+    hasPermission(session, "org.ticketing.tickets") ||
+    hasPermission(session, "org.ticketing.admin");
+
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
       <header className="border-b border-[var(--border)]">
@@ -26,9 +45,11 @@ export function PortalChrome({ children }: { children: ReactNode }) {
               <Link href="/learn" className="hover:underline">
                 Learn
               </Link>
-              <Link href="/org/ticketing" className="hover:underline">
-                Technician
-              </Link>
+              {canTechnician ? (
+                <Link href="/org/ticketing" className="hover:underline">
+                  Technician
+                </Link>
+              ) : null}
             </nav>
             <NotificationBell />
             <ThemeToggle />

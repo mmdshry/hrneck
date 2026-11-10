@@ -29,7 +29,7 @@ import {
   type PageSize,
   type PaginationMeta,
 } from "@/lib/pagination";
-import { hasPermission } from "@/lib/session";
+import { hasPermission, type SessionUser } from "@/lib/session";
 import { resolveTenant } from "@/lib/tenant";
 import { toastSuccess } from "@/lib/toast";
 import {
@@ -111,7 +111,9 @@ export function TrainingHubClient() {
   const [busy, setBusy] = useState(false);
   const [exporting, setExporting] = useState<"csv" | "pdf" | "png" | null>(null);
   const [loading, setLoading] = useState(true);
+  const [session, setSession] = useState<SessionUser | null>(null);
   const viewingReportRef = useRef<HTMLDivElement>(null);
+  const canManageCampaigns = hasPermission(session, "org.campaigns.manage");
 
   const enrollmentFilters = useMemo(
     () => ({
@@ -172,6 +174,7 @@ export function TrainingHubClient() {
         setError("Sign in required to manage training.");
         return;
       }
+      setSession(me);
       const t = resolveTenant();
       const canTargets = hasPermission(me, "org.targets.manage");
       const canGroups = hasPermission(me, "org.groups.manage");
@@ -396,9 +399,11 @@ export function TrainingHubClient() {
             <LinkButton href="/org/courses" variant="secondary">
               Courses
             </LinkButton>
-            <LinkButton href="/org/training/campaigns" variant="secondary">
-              Campaigns
-            </LinkButton>
+            {canManageCampaigns ? (
+              <LinkButton href="/org/training/campaigns" variant="secondary">
+                Campaigns
+              </LinkButton>
+            ) : null}
             <LinkButton href="/learn">Learner portal</LinkButton>
           </div>
         }

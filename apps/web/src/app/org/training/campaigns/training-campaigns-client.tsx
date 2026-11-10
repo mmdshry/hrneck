@@ -66,11 +66,16 @@ type TrainingCampaignsPayload = {
 
 const STATUS_OPTIONS = [
   { label: "Draft", value: "draft" },
+  { label: "Scheduled", value: "scheduled" },
   { label: "Running", value: "running" },
   { label: "Completed", value: "completed" },
   { label: "Cancelled", value: "cancelled" },
   { label: "Archived", value: "archived" },
 ];
+
+const CANCELABLE_STATUSES = new Set(["draft", "scheduled", "running"]);
+const ARCHIVE_VIA_DELETE = new Set(["running", "completed"]);
+const ARCHIVE_VIA_PATCH = new Set(["draft", "scheduled", "cancelled"]);
 
 function alertVariantForMessage(message: string): "destructive" | "success" | "default" {
   const m = message.toLowerCase();
@@ -81,7 +86,12 @@ function alertVariantForMessage(message: string): "destructive" | "success" | "d
   ) {
     return "destructive";
   }
-  if (m.includes("launched") || m.includes("reminders queued")) {
+  if (
+    m.includes("launched") ||
+    m.includes("reminders queued") ||
+    m.includes("cancelled") ||
+    m.includes("archived")
+  ) {
     return "success";
   }
   if (m.includes("select") || m.includes("no targets")) return "default";
@@ -291,6 +301,13 @@ export function TrainingCampaignsClient() {
 
   const statusLabel = liveStatusLabel(status);
 
+  async function refreshAfterMutation() {
+    await refreshAuxiliary();
+    if (liveCampaigns === null) {
+      await refreshCampaignsFromApi(page, perPage, filters);
+    }
+  }
+
   async function createCampaign() {
     setMessage(null);
     try {
@@ -317,12 +334,65 @@ export function TrainingCampaignsClient() {
       });
       setName("");
       setMessage("Training campaign launched; reminders queued.");
-      await refreshAuxiliary();
-      if (liveCampaigns === null) {
-        await refreshCampaignsFromApi(page, perPage, filters);
-      }
+      await refreshAfterMutation();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Create failed");
+    }
+  }
+
+  async function cancelCampaign(campaign: Campaign) {
+    setMessage(null);
+    try {
+      await ensureCsrf();
+      await api(`/api/v1/org/campaigns/${campaign.id}`, {
+        method: "PATCH",
+        tenant: resolveTenant(),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "cancelled" }),
+      });
+      setLiveCampaigns((prev) =>
+        prev
+          ? prev.map((row) =>
+              row.id === campaign.id ? { ...row, status: "cancelled" } : row,
+            )
+          : prev,
+      );
+      setMessage(`Campaign “${campaign.name}” cancelled.`);
+      await refreshAfterMutation();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Cancel failed");
+    }
+  }
+
+  async function archiveCampaign(campaign: Campaign) {
+    setMessage(null);
+    try {
+      await ensureCsrf();
+      const t = resolveTenant();
+      if (ARCHIVE_VIA_DELETE.has(campaign.status)) {
+        await api(`/api/v1/org/campaigns/${campaign.id}`, {
+          method: "DELETE",
+          tenant: t,
+        });
+      } else {
+        await api(`/api/v1/org/campaigns/${campaign.id}`, {
+          method: "PATCH",
+          tenant: t,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "archived" }),
+        });
+      }
+      setLiveCampaigns((prev) =>
+        prev
+          ? prev.map((row) =>
+              row.id === campaign.id ? { ...row, status: "archived" } : row,
+            )
+          : prev,
+      );
+      setMessage(`Campaign “${campaign.name}” archived.`);
+      await refreshAfterMutation();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Archive failed");
     }
   }
 
@@ -356,6 +426,44 @@ export function TrainingCampaignsClient() {
       filter: "none",
       enableSorting: false,
       cell: (campaign) => campaign.recipients?.length ?? 0,
+    },
+    {
+      id: "actions",
+      header: "Actions",
+      filter: "none",
+      enableSorting: false,
+      enableGlobalFilter: false,
+      cell: (campaign) => {
+        const canCancel = CANCELABLE_STATUSES.has(campaign.status);
+        const canArchive =
+          ARCHIVE_VIA_DELETE.has(campaign.status) ||
+          ARCHIVE_VIA_PATCH.has(campaign.status);
+        if (!canCancel && !canArchive) return "—";
+        return (
+          <div className="flex flex-wrap items-center gap-2">
+            {canCancel ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-0 px-2 py-1 text-xs"
+                onClick={() => void cancelCampaign(campaign)}
+              >
+                Cancel
+              </Button>
+            ) : null}
+            {canArchive ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-0 px-2 py-1 text-xs"
+                onClick={() => void archiveCampaign(campaign)}
+              >
+                Archive
+              </Button>
+            ) : null}
+          </div>
+        );
+      },
     },
   ];
 

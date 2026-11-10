@@ -13,9 +13,10 @@ import { Panel } from "@/components/ui/panel";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { liveStatusLabel, useLiveTopic } from "@/hooks/use-live-topic";
-import { api, ensureCsrf } from "@/lib/api";
+import { api, ensureCsrf, fetchSessionUser } from "@/lib/api";
 import { downloadAuthenticated } from "@/lib/download";
 import { orgLiveChannel } from "@/lib/live-topics";
+import { hasPermission, type SessionUser } from "@/lib/session";
 import { resolveTenant } from "@/lib/tenant";
 import type { SdDesk, SdTicket } from "../../ticketing-types";
 
@@ -126,6 +127,7 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
   const [copyLink, setCopyLink] = useState(true);
   const [copyIncludeNotes, setCopyIncludeNotes] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [session, setSession] = useState<SessionUser | null>(null);
 
   const refreshDetail = useCallback(async () => {
     await ensureCsrf();
@@ -173,6 +175,8 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
     void (async () => {
       try {
         await ensureCsrf();
+        const me = await fetchSessionUser();
+        setSession(me);
         const deskList = await api<{ data: SdDesk[] }>("/api/v1/org/ticketing/desks?per_page=100", {
           tenant: resolveTenant(),
         });
@@ -184,6 +188,7 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
   }, []);
 
   const statusLabel = liveStatusLabel(status);
+  const canConvertKb = hasPermission(session, "org.ticketing.kb");
 
   async function saveDetails(event: FormEvent) {
     event.preventDefault();
@@ -463,9 +468,11 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
             <LinkButton href="/org/ticketing" variant="outline">
               Back to queue
             </LinkButton>
-            <Button type="button" variant="outline" onClick={() => void convertKb()}>
-              Convert to KB
-            </Button>
+            {canConvertKb ? (
+              <Button type="button" variant="outline" onClick={() => void convertKb()}>
+                Convert to KB
+              </Button>
+            ) : null}
           </div>
         }
       />

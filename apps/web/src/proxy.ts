@@ -29,6 +29,33 @@ function apiOrigin(): string {
   return process.env.API_ORIGIN ?? "http://127.0.0.1:8000";
 }
 
+/**
+ * Public browser origin for Sanctum stateful checks.
+ * Behind Apache ProxyPass, request.nextUrl.origin is often http://127.0.0.1:3100,
+ * which Sanctum does not treat as stateful — /auth/me then returns { data: null }
+ * and the gate bounces authenticated users back to /login.
+ */
+function publicOrigin(request: NextRequest): string {
+  const configured = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "");
+  if (configured) {
+    return configured;
+  }
+  const forwardedHost = (
+    request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? ""
+  )
+    .split(",")[0]
+    ?.trim();
+  const proto = (
+    request.headers.get("x-forwarded-proto") ?? "https"
+  )
+    .split(",")[0]
+    ?.trim();
+  if (forwardedHost && proto) {
+    return `${proto}://${forwardedHost}`;
+  }
+  return request.nextUrl.origin;
+}
+
 type MeUser = {
   email?: unknown;
   tenant_id?: unknown;
@@ -41,13 +68,14 @@ function staffGateUser(user: MeUser): StaffGateUser {
 
 async function sessionUser(request: NextRequest): Promise<MeUser | null> {
   try {
+    const origin = publicOrigin(request);
     const response = await fetch(`${apiOrigin()}/api/v1/auth/me`, {
       method: "GET",
       headers: {
         Accept: "application/json",
         Cookie: request.headers.get("cookie") ?? "",
-        Origin: request.nextUrl.origin,
-        Referer: request.nextUrl.href,
+        Origin: origin,
+        Referer: `${origin}${request.nextUrl.pathname}${request.nextUrl.search}`,
         "X-Requested-With": "XMLHttpRequest",
       },
       cache: "no-store",

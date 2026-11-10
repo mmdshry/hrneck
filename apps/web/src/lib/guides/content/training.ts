@@ -21,11 +21,11 @@ export const trainingGuide: GuideModule = {
   ],
   openInAppHref: "/org/training",
   overview:
-    "Courses holds the library (article, video, and PDF lessons plus quizzes). Training assigns one or more courses to employees and/or groups, runs campaigns with email reminders through SMTP and sending profiles, and reviews per-lesson progress with CSV or PDF export. Learners consume assigned content in the learner portal at /learn—not in the org queue. A secondary sample list at /org/campaigns exists for quick demos; the operator workflow lives under Training → Campaigns.",
+    "Courses holds the library (article, video, and PDF lessons plus quizzes). Training assigns one or more courses to employees and/or groups, runs campaigns that queue a one-shot email reminder per recipient on launch (via SMTP and sending profiles), and reviews per-lesson progress with CSV or PDF export. Learners consume assigned content in the learner portal at /learn—not in the org queue. A secondary sample list at /org/campaigns exists for quick demos; the operator workflow lives under Training → Campaigns.",
   example: {
     title: "Acme Finance Q4 awareness campaign",
     narrative:
-      "Ops builds Phishing Essentials with three lessons and a required quiz (80% pass, 15-minute limit, one essay). From Training they assign the course to the Finance group (186 people), launch Security Awareness Q4 with weekly reminders, watch completion climb from 12% to 86%, then export the viewing report PDF for leadership.",
+      "Ops builds Phishing Essentials with three lessons and a required quiz (80% pass, 15-minute limit, one essay). From Training they assign the course to the Finance group (186 people), launch Security Awareness Q4 (one reminder email queued per recipient), watch completion climb from 12% to 86%, then export the viewing report PDF for leadership.",
   },
   steps: [
     {
@@ -40,12 +40,12 @@ export const trainingGuide: GuideModule = {
     },
     {
       title: "Create a campaign",
-      body: "Name the campaign, pick content, choose group_ids and/or targets, and enable reminder cadence. Confirm SMTP and the sending profile first.",
+      body: "Name the campaign, pick content, choose group_ids and/or targets, and launch. Launch queues one reminder job per recipient—there is no weekly reminder cadence. Confirm SMTP and the sending profile first.",
       href: "/org/training/campaigns",
     },
     {
       title: "Monitor and export",
-      body: "Track enrollment, lesson status, watch time, and timestamps. Download CSV or PDF from the viewing report, then cancel or archive campaigns when the wave ends.",
+      body: "Track enrollment, lesson status, watch time, and timestamps. Download CSV or PDF from the viewing report, then cancel (stops pending reminder jobs) or archive campaigns when the wave ends.",
     },
   ],
   sections: [
@@ -98,11 +98,11 @@ export const trainingGuide: GuideModule = {
     },
     {
       title: "Campaigns and reminders",
-      body: "Campaigns wrap content + audience + mail cadence. Statuses include draft, running, completed, cancelled, and archived.",
+      body: "Campaigns wrap content + audience + a one-shot reminder on launch. Statuses include draft, scheduled, running, completed, cancelled, and archived.",
       steps: [
         {
           title: "Launch from Training → Campaigns",
-          body: "Name the wave, attach course content, select groups/employees, and set reminder frequency. This is the primary operator path.",
+          body: "Name the wave, attach course content, select groups/employees, and launch. Each recipient gets one reminder job—no recurring weekly cadence.",
           href: "/org/training/campaigns",
         },
         {
@@ -116,7 +116,7 @@ export const trainingGuide: GuideModule = {
         },
         {
           title: "Cancel or archive",
-          body: "Cancel a running wave to stop reminders; archive finished campaigns to keep the list clean without deleting history.",
+          body: "Cancel a draft, scheduled, or running wave so pending reminder jobs no-op; archive (PATCH or DELETE for running/completed) to keep the list clean without deleting history.",
         },
         {
           title: "Know the sample campaigns page",
@@ -150,7 +150,7 @@ export const trainingGuide: GuideModule = {
     stats: [
       { label: "Completion", value: "86%" },
       { label: "Assigned", value: "186" },
-      { label: "Reminders", value: "Weekly" },
+      { label: "Reminders", value: "One-shot" },
     ],
     highlight: {
       title: "Security Awareness Q4",
@@ -164,7 +164,7 @@ export const trainingGuide: GuideModule = {
     ],
     annotations: [
       { label: "Campaign card", note: "Funnel metrics update as learners finish lessons." },
-      { label: "Reminders", note: "Email job uses SMTP + the org sending profile." },
+      { label: "Reminders", note: "One job per recipient on launch; cancel stops pending sends." },
     ],
   },
   related: ["learner-portal", "targets-groups", "settings", "reporting"],

@@ -28,6 +28,7 @@ import {
   type PageSize,
   type PaginationMeta,
 } from "@/lib/pagination";
+import { hasPermission, type SessionUser } from "@/lib/session";
 import { resolveTenant } from "@/lib/tenant";
 import { toastSuccess } from "@/lib/toast";
 import {
@@ -99,6 +100,8 @@ export function CoursesClient() {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [confirmDeleteCourse, setConfirmDeleteCourse] = useState(false);
+  const [session, setSession] = useState<SessionUser | null>(null);
+  const canManageCampaigns = hasPermission(session, "org.campaigns.manage");
 
   const selected = courses.find((c) => c.id === selectedId) ?? null;
 
@@ -143,6 +146,7 @@ export function CoursesClient() {
         setError("Sign in required to manage courses.");
         return;
       }
+      setSession(me);
       const t = resolveTenant();
       const courseRes = await api(
         `/api/v1/org/training/courses?${paginationQuery(nextCoursesPage, nextCoursesPerPage, nextFilters)}`,
@@ -444,9 +448,11 @@ export function CoursesClient() {
             <LinkButton href="/org/training" variant="secondary">
               Training
             </LinkButton>
-            <LinkButton href="/org/training/campaigns" variant="secondary">
-              Campaigns
-            </LinkButton>
+            {canManageCampaigns ? (
+              <LinkButton href="/org/training/campaigns" variant="secondary">
+                Campaigns
+              </LinkButton>
+            ) : null}
           </div>
         }
       />

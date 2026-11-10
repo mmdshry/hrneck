@@ -64,10 +64,12 @@ type OrgSettings = {
   } | null;
 };
 
-const LINKS = [
+const ACCOUNT_LINKS = [{ href: "/org/settings/mfa", label: "Account / MFA" }];
+
+const ADMIN_LINKS = [
   { href: "/org/settings/sending-profiles", label: "Sending profiles" },
   { href: "/org/settings/integrations", label: "Integrations" },
-  { href: "/org/settings/mfa", label: "MFA setup" },
+  { href: "/org/settings/mfa", label: "Account / MFA" },
 ];
 
 export function SettingsClient() {
@@ -202,14 +204,26 @@ export function SettingsClient() {
     return <PageSkeleton className="max-w-3xl" variant="form" rows={6} />;
   }
 
-  if (session && !hasPermission(session, "org.settings.manage")) {
+  const canManageSettings = hasPermission(session, "org.settings.manage");
+
+  if (session && !canManageSettings) {
     return (
       <div className="mx-auto w-full max-w-3xl flex-1 space-y-4 px-4 py-8 sm:px-6">
         <PageHeader
           title="Organization settings"
-          description="White-label branding, domains, and related setup pages."
+          description="Account security is available to every signed-in org user. Organization-wide branding requires org.settings.manage."
         />
-        <Alert>You need org.settings.manage to change organization settings.</Alert>
+        <nav className="flex flex-wrap gap-2" aria-label="Account settings">
+          {ACCOUNT_LINKS.map((link) => (
+            <LinkButton key={link.href} href={link.href} variant="secondary" size="sm">
+              {link.label}
+            </LinkButton>
+          ))}
+        </nav>
+        <Alert>
+          You need org.settings.manage to change organization branding and domains. Your
+          Account / MFA page remains available.
+        </Alert>
       </div>
     );
   }
@@ -223,7 +237,7 @@ export function SettingsClient() {
         description="White-label branding, domains, and related setup pages."
       />
       <nav className="mt-6 flex flex-wrap gap-2" aria-label="Settings links">
-        {LINKS.map((link) => (
+        {ADMIN_LINKS.map((link) => (
           <LinkButton key={link.href} href={link.href} variant="secondary" size="sm">
             {link.label}
           </LinkButton>

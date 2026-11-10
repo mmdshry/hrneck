@@ -18,7 +18,7 @@ export const targetsGroupsGuide: GuideModule = {
   ],
   openInAppHref: "/org/targets",
   overview:
-    "Employees are the training and checklist audience—they are not RBAC users. Manage employees on Employees (CSV and directory sync), open an employee profile to see connected checklists, keep departments as a managed list for forms, then organize them into Groups with a member picker so campaigns can address whole departments. Published checklist packs with auto-assign create instances when a new employee is added.",
+    "Employees (Targets) are the training and checklist audience and are paired with login Users (typically the learner role)—they are not org operators. Manage employees on Employees (CSV and directory sync), open an employee profile to see connected checklists, keep departments as a managed list for forms, then organize them into Groups with a member picker so campaigns can address whole departments. Soft-archive a group via status=inactive. Published checklist packs with auto-assign create instances when a new employee is added.",
   example: {
     title: "Finance CSV import before Q4",
     narrative:
