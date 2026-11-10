@@ -428,7 +428,7 @@ export function OrgShell({ children }: { children: ReactNode }) {
             role="dialog"
             aria-modal="true"
             aria-labelledby={drawerTitleId}
-            className="absolute inset-y-0 left-0 flex w-[min(20rem,88vw)] flex-col border-r border-[var(--border)] bg-[var(--card)] px-3 py-4 shadow-[var(--shadow-md)]"
+            className="absolute inset-y-0 left-0 flex w-[min(20rem,88vw)] flex-col overflow-y-auto border-r border-[var(--border)] bg-[var(--card)] px-3 py-4 shadow-[var(--shadow-md)]"
           >
             <div className="mb-4 flex items-start justify-between gap-2">
               <div id={drawerTitleId}>{brandBlock}</div>
@@ -443,19 +443,21 @@ export function OrgShell({ children }: { children: ReactNode }) {
                 <X className="h-5 w-5" aria-hidden />
               </Button>
             </div>
-            <NavLinks
-              pathname={pathname}
-              items={navItems}
-              onNavigate={() => setMobileOpen(false)}
-              labelledBy={drawerTitleId}
-            />
-            <AuthFooter
-              authChecked={authChecked}
-              userEmail={userEmail}
-              signingOut={signingOut}
-              onSignOut={() => void signOut()}
-              onNavigate={() => setMobileOpen(false)}
-            />
+            <div className="flex min-h-0 flex-1 flex-col">
+              <NavLinks
+                pathname={pathname}
+                items={navItems}
+                onNavigate={() => setMobileOpen(false)}
+                labelledBy={drawerTitleId}
+              />
+              <AuthFooter
+                authChecked={authChecked}
+                userEmail={userEmail}
+                signingOut={signingOut}
+                onSignOut={() => void signOut()}
+                onNavigate={() => setMobileOpen(false)}
+              />
+            </div>
           </aside>
         </div>
       ) : null}

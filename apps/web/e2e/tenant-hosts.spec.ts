@@ -1,6 +1,26 @@
 import { test, expect } from "@playwright/test";
+import dns from "node:dns/promises";
+
+async function tenantHostResolves(hostname: string): Promise<boolean> {
+  try {
+    const addresses = await dns.lookup(hostname);
+    return Boolean(addresses.address);
+  } catch {
+    return false;
+  }
+}
 
 test.describe("tenant host shells", () => {
+  test.beforeAll(async () => {
+    const hostname = new URL(
+      process.env.PLAYWRIGHT_TENANT_URL ?? "http://itneck.hrneck.test",
+    ).hostname;
+    test.skip(
+      !(await tenantHostResolves(hostname)),
+      `Add 127.0.0.1 ${hostname} to the system hosts file (admin) before running tenant-hosts.`,
+    );
+  });
+
   test("itneck org shell requires sign in", async ({ page }) => {
     await page.goto("/org");
     await expect(page).toHaveURL(/\/login/);
