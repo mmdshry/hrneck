@@ -1,5 +1,7 @@
 import { ChecklistFillClient } from "./fill-client";
 
+export const instant = false;
+
 export const metadata = {
   title: "Fill checklist",
   description: "Complete an internal HR checklist for an employee.",

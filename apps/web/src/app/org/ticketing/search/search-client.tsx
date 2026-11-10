@@ -1,12 +1,12 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
 import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
-import { Pagination } from "@/components/ui/pagination";
 import { Panel } from "@/components/ui/panel";
 import { api, ensureCsrf } from "@/lib/api";
 import {
@@ -35,12 +35,12 @@ function parseSearchMeta(meta: unknown, fallbackPerPage: number): SearchMeta {
   };
 }
 
-function searchQuery(page: number, perPage: number, q: string): string {
+function searchQuery(ticketsPage: number, kbPage: number, perPage: number, q: string): string {
   const params = new URLSearchParams();
   params.set("q", q);
   params.set("per_page", String(perPage));
-  params.set("tickets_page", String(Math.max(1, page)));
-  params.set("kb_page", String(Math.max(1, page)));
+  params.set("tickets_page", String(Math.max(1, ticketsPage)));
+  params.set("kb_page", String(Math.max(1, kbPage)));
   return params.toString();
 }
 
@@ -51,39 +51,45 @@ export function SearchClient() {
   const [kb, setKb] = useState<SdKbArticle[]>([]);
   const [ticketsMeta, setTicketsMeta] = useState<PaginationMeta>(emptyMeta());
   const [kbMeta, setKbMeta] = useState<PaginationMeta>(emptyMeta());
-  const [page, setPage] = useState(1);
+  const [ticketsPage, setTicketsPage] = useState(1);
+  const [kbPage, setKbPage] = useState(1);
   const [perPage, setPerPage] = useState<PageSize>(DEFAULT_PAGE_SIZE);
   const [message, setMessage] = useState<string | null>(null);
 
-  async function runSearch(
-    query: string,
-    nextPage = page,
-    nextPerPage = perPage,
-  ) {
-    await ensureCsrf();
-    const res = await api<{
-      data: { tickets: SdTicket[]; kb: SdKbArticle[] };
-      meta: SearchMeta;
-    }>(`/api/v1/org/ticketing/search?${searchQuery(nextPage, nextPerPage, query)}`, {
-      tenant: resolveTenant(),
-    });
-    const parsed = parseSearchMeta(res.meta, nextPerPage);
-    setTickets(res.data?.tickets ?? []);
-    setKb(res.data?.kb ?? []);
-    setTicketsMeta(parsed.tickets);
-    setKbMeta(parsed.kb);
-    setPage(parsed.tickets.current_page);
-  }
+  const runSearch = useCallback(
+    async (
+      query: string,
+      nextTicketsPage: number,
+      nextKbPage: number,
+      nextPerPage: number,
+    ) => {
+      await ensureCsrf();
+      const res = await api<{
+        data: { tickets: SdTicket[]; kb: SdKbArticle[] };
+        meta: SearchMeta;
+      }>(
+        `/api/v1/org/ticketing/search?${searchQuery(nextTicketsPage, nextKbPage, nextPerPage, query)}`,
+        { tenant: resolveTenant() },
+      );
+      const parsed = parseSearchMeta(res.meta, nextPerPage);
+      setTickets(res.data?.tickets ?? []);
+      setKb(res.data?.kb ?? []);
+      setTicketsMeta(parsed.tickets);
+      setKbMeta(parsed.kb);
+      setTicketsPage(parsed.tickets.current_page || nextTicketsPage);
+      setKbPage(parsed.kb.current_page || nextKbPage);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!activeQ) {
       return;
     }
-    void runSearch(activeQ).catch((err: unknown) => {
+    void runSearch(activeQ, ticketsPage, kbPage, perPage).catch((err: unknown) => {
       setMessage(err instanceof Error ? err.message : "Search failed");
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeQ, page, perPage]);
+  }, [activeQ, ticketsPage, kbPage, perPage, runSearch]);
 
   async function onSearch(event: FormEvent) {
     event.preventDefault();
@@ -92,9 +98,77 @@ export function SearchClient() {
     if (!trimmed) {
       return;
     }
-    setPage(1);
+    setTicketsPage(1);
+    setKbPage(1);
     setActiveQ(trimmed);
   }
+
+  const ticketColumns: Array<DataTableColumn<SdTicket>> = [
+    {
+      id: "number",
+      header: "Number",
+      accessorKey: "number",
+      sticky: true,
+      cell: (ticket) => (
+        <a
+          className="font-medium underline-offset-2 hover:underline"
+          href={`/org/ticketing/tickets/${ticket.id}`}
+        >
+          {ticket.number}
+        </a>
+      ),
+    },
+    {
+      id: "summary",
+      header: "Summary",
+      accessorKey: "summary",
+      cell: (ticket) => ticket.summary,
+    },
+    {
+      id: "desk",
+      header: "Desk",
+      filterValue: (ticket) => ticket.desk?.name ?? "",
+      enableSorting: false,
+      cell: (ticket) => ticket.desk?.name ?? "—",
+    },
+    {
+      id: "stage",
+      header: "Stage",
+      filterValue: (ticket) => ticket.stage?.name ?? "",
+      enableSorting: false,
+      cell: (ticket) => ticket.stage?.name ?? "—",
+    },
+    {
+      id: "priority",
+      header: "Priority",
+      filterValue: (ticket) => ticket.priority?.name ?? "",
+      enableSorting: false,
+      cell: (ticket) => ticket.priority?.name ?? "—",
+    },
+  ];
+
+  const kbColumns: Array<DataTableColumn<SdKbArticle>> = [
+    {
+      id: "number",
+      header: "Number",
+      accessorKey: "number",
+      sticky: true,
+      cell: (article) => article.number || "—",
+    },
+    {
+      id: "summary",
+      header: "Summary",
+      accessorKey: "summary",
+      cell: (article) => article.summary,
+    },
+    {
+      id: "description",
+      header: "Body",
+      accessorKey: "description",
+      className: "max-w-md truncate",
+      cell: (article) => article.description || "—",
+    },
+  ];
 
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 space-y-6 px-4 py-8 sm:px-6">
@@ -109,56 +183,54 @@ export function SearchClient() {
         <Button type="submit">Search</Button>
       </form>
       <Panel title={`Tickets (${ticketsMeta.total})`}>
-        <ul className="space-y-2 text-sm">
-          {tickets.map((t) => (
-            <li key={t.id}>
-              <a className="underline-offset-2 hover:underline" href={`/org/ticketing/tickets/${t.id}`}>
-                {t.number} · {t.summary}
-              </a>
-            </li>
-          ))}
-          {activeQ && tickets.length === 0 ? (
-            <li className="text-[var(--muted-foreground)]">No matching tickets.</li>
-          ) : null}
-        </ul>
-        {activeQ ? (
-          <Pagination
-            className="mt-3"
-            page={page}
-            perPage={perPage}
-            total={ticketsMeta.total}
-            onPageChange={setPage}
-            onPerPageChange={(size) => {
-              setPerPage(size);
-              setPage(1);
-            }}
-          />
-        ) : null}
+        <DataTable
+          mode="client"
+          caption="Ticket search results"
+          columns={ticketColumns}
+          rows={tickets}
+          getRowId={(row) => row.id}
+          emptyTitle={activeQ ? "No matching tickets." : "Search to list tickets."}
+          pagination={
+            activeQ
+              ? {
+                  page: ticketsPage,
+                  perPage,
+                  total: ticketsMeta.total,
+                  onPageChange: setTicketsPage,
+                  onPerPageChange: (size) => {
+                    setPerPage(size);
+                    setTicketsPage(1);
+                    setKbPage(1);
+                  },
+                }
+              : undefined
+          }
+        />
       </Panel>
       <Panel title={`Knowledge base (${kbMeta.total})`}>
-        <ul className="space-y-2 text-sm">
-          {kb.map((a) => (
-            <li key={a.id}>
-              {a.number} · {a.summary}
-            </li>
-          ))}
-          {activeQ && kb.length === 0 ? (
-            <li className="text-[var(--muted-foreground)]">No matching articles.</li>
-          ) : null}
-        </ul>
-        {activeQ ? (
-          <Pagination
-            className="mt-3"
-            page={page}
-            perPage={perPage}
-            total={kbMeta.total}
-            onPageChange={setPage}
-            onPerPageChange={(size) => {
-              setPerPage(size);
-              setPage(1);
-            }}
-          />
-        ) : null}
+        <DataTable
+          mode="client"
+          caption="Knowledge base search results"
+          columns={kbColumns}
+          rows={kb}
+          getRowId={(row) => row.id}
+          emptyTitle={activeQ ? "No matching articles." : "Search to list articles."}
+          pagination={
+            activeQ
+              ? {
+                  page: kbPage,
+                  perPage,
+                  total: kbMeta.total,
+                  onPageChange: setKbPage,
+                  onPerPageChange: (size) => {
+                    setPerPage(size);
+                    setTicketsPage(1);
+                    setKbPage(1);
+                  },
+                }
+              : undefined
+          }
+        />
       </Panel>
     </div>
   );

@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LinkButton } from "@/components/ui/link-button";
@@ -11,7 +12,9 @@ import { PageSkeleton } from "@/components/ui/page-skeleton";
 import { Panel } from "@/components/ui/panel";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { liveStatusLabel, useLiveTopic } from "@/hooks/use-live-topic";
 import { api, ensureCsrf } from "@/lib/api";
+import { orgLiveChannel } from "@/lib/live-topics";
 import { resolveTenant } from "@/lib/tenant";
 import {
   ANSWERABLE,
@@ -21,7 +24,49 @@ import {
   type ChecklistItem,
 } from "../../checklist-types";
 
+const auditColumns: Array<DataTableColumn<AuditEvent>> = [
+  {
+    id: "event",
+    header: "Event",
+    accessorKey: "event",
+    sticky: true,
+    cell: (row) => row.event || "—",
+  },
+  {
+    id: "description",
+    header: "Description",
+    accessorKey: "description",
+    className: "max-w-md whitespace-pre-wrap",
+    cell: (row) => row.description,
+  },
+  {
+    id: "created_at",
+    header: "When",
+    accessorKey: "created_at",
+    cell: (row) => row.created_at || "—",
+  },
+  {
+    id: "causer_id",
+    header: "Causer",
+    accessorKey: "causer_id",
+    filterValue: (row) => row.causer_id,
+    cell: (row) => (row.causer_id == null ? "—" : `#${row.causer_id}`),
+  },
+  {
+    id: "properties",
+    header: "Properties",
+    filterValue: (row) => JSON.stringify(row.properties ?? {}),
+    enableGlobalFilter: false,
+    enableSorting: false,
+    className: "max-w-xs",
+    cell: (row) => (
+      <pre className="overflow-x-auto text-xs">{JSON.stringify(row.properties, null, 2)}</pre>
+    ),
+  },
+];
+
 export function ChecklistFillClient({ instanceId }: { instanceId: number }) {
+  const tenant = resolveTenant();
   const [instance, setInstance] = useState<ChecklistInstance | null>(null);
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [files, setFiles] = useState<Record<string, string>>({});
@@ -30,16 +75,31 @@ export function ChecklistFillClient({ instanceId }: { instanceId: number }) {
   const [message, setMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [liveEpoch, setLiveEpoch] = useState(0);
 
-  async function load() {
+  const channel = useMemo(
+    () => (tenant ? orgLiveChannel(tenant, "checklist-instances") : null),
+    [tenant],
+  );
+
+  const onLivePayload = useCallback(() => {
+    setLiveEpoch((n) => n + 1);
+  }, []);
+
+  const { status: liveStatus } = useLiveTopic({
+    channel,
+    onPayload: onLivePayload,
+  });
+
+  const load = useCallback(async () => {
     await ensureCsrf();
-    const tenant = resolveTenant();
+    const t = resolveTenant();
     const [inst, log] = await Promise.all([
       api<{ data: ChecklistInstance }>(`/api/v1/org/checklists/instances/${instanceId}`, {
-        tenant,
+        tenant: t,
       }),
       api<{ data: AuditEvent[] }>(`/api/v1/org/checklists/instances/${instanceId}/audit`, {
-        tenant,
+        tenant: t,
       }),
     ]);
     setInstance(inst.data);
@@ -52,7 +112,7 @@ export function ChecklistFillClient({ instanceId }: { instanceId: number }) {
     setAnswers(map);
     setFiles(fileMap);
     setAudit(log.data ?? []);
-  }
+  }, [instanceId]);
 
   useEffect(() => {
     setLoading(true);
@@ -61,7 +121,9 @@ export function ChecklistFillClient({ instanceId }: { instanceId: number }) {
         setMessage(err instanceof Error ? err.message : "Load failed");
       })
       .finally(() => setLoading(false));
-  }, [instanceId]);
+  }, [instanceId, liveEpoch, load]);
+
+  const statusLabel = liveStatusLabel(liveStatus);
 
   const visibleItems = useMemo(() => {
     const items = instance?.schema_snapshot?.items ?? [];
@@ -155,7 +217,7 @@ export function ChecklistFillClient({ instanceId }: { instanceId: number }) {
               href={item.media.url}
               target="_blank"
               rel="noreferrer"
-              className="text-sm text-[var(--accent)] underline"
+              className="text-sm text-[var(--primary)] underline"
             >
               {item.media.label || item.media.url}
             </a>
@@ -231,7 +293,7 @@ export function ChecklistFillClient({ instanceId }: { instanceId: number }) {
           </Select>
         ) : null}
         {item.type === "multi_select" ? (
-          <div className="space-y-1 rounded-xl border border-[var(--border)] p-2">
+          <div className="space-y-1 rounded-[var(--radius)] border border-[var(--border)] p-2">
             {(item.options ?? []).map((opt) => {
               const selected = Array.isArray(value) ? (value as string[]) : [];
               return (
@@ -287,7 +349,7 @@ export function ChecklistFillClient({ instanceId }: { instanceId: number }) {
     <div className="mx-auto w-full max-w-5xl flex-1 space-y-4 px-4 py-8 sm:px-6">
       <PageHeader
         title={instance.title}
-        description={`${instance.target?.email ?? `Target #${instance.target_id}`} · ${instance.status} · ${instance.progress_pct}%`}
+        description={`${instance.target?.email ?? `Target #${instance.target_id}`} · ${instance.status} · ${instance.progress_pct}%${statusLabel ? ` · ${statusLabel}` : " · Live"}`}
         actions={
           <LinkButton href="/org/checklists/instances" variant="secondary" size="sm">
             Back
@@ -343,23 +405,14 @@ export function ChecklistFillClient({ instanceId }: { instanceId: number }) {
         </Panel>
       ) : (
         <Panel className="space-y-3 p-4">
-          {audit.length === 0 ? (
-            <p className="text-sm text-[var(--muted-foreground)]">No audit events yet.</p>
-          ) : (
-            audit.map((row) => (
-              <div key={row.id} className="border-b border-[var(--border)] pb-3 last:border-0">
-                <p className="text-sm font-medium">
-                  {row.event} · {row.description}
-                </p>
-                <p className="text-xs text-[var(--muted-foreground)]">
-                  {row.created_at} · causer #{row.causer_id ?? "—"}
-                </p>
-                <pre className="mt-1 overflow-x-auto rounded-lg bg-[var(--muted)] p-2 text-xs">
-                  {JSON.stringify(row.properties, null, 2)}
-                </pre>
-              </div>
-            ))
-          )}
+          <DataTable
+            mode="client"
+            caption="Checklist audit"
+            columns={auditColumns}
+            rows={audit}
+            getRowId={(row) => row.id}
+            emptyTitle="No audit events yet."
+          />
         </Panel>
       )}
     </div>

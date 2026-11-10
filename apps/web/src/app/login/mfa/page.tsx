@@ -8,8 +8,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Panel } from "@/components/ui/panel";
 import { api, ensureCsrf } from "@/lib/api";
-import { defaultPostLoginPath, type SessionUser } from "@/lib/session";
+import { resolvePostLoginPath, type SessionUser } from "@/lib/session";
 import { setTenant } from "@/lib/tenant";
+
+function safeNextPath(raw: string | null): string | null {
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) {
+    return null;
+  }
+  return raw;
+}
 
 export default function MfaPage() {
   const router = useRouter();
@@ -34,13 +41,22 @@ export default function MfaPage() {
         body: JSON.stringify({ challenge_token: challenge, code }),
       });
       sessionStorage.removeItem("mfa_challenge");
+      const next = safeNextPath(sessionStorage.getItem("mfa_next"));
+      sessionStorage.removeItem("mfa_next");
       const user = result.data;
       if (user?.tenant_id) {
         setTenant(user.tenant_id);
       }
-      router.push(user ? defaultPostLoginPath(user) : "/org");
+      router.push(user ? resolvePostLoginPath(user, next) : "/org");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Invalid code");
+      const message = err instanceof Error ? err.message : "Invalid code";
+      if (message.toLowerCase().includes("expired") || message.toLowerCase().includes("sign in again")) {
+        sessionStorage.removeItem("mfa_challenge");
+        sessionStorage.removeItem("mfa_next");
+        router.push("/login");
+        return;
+      }
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -52,7 +68,7 @@ export default function MfaPage() {
         Multi-factor authentication
       </h1>
       <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-        Enter the 6-digit code from your authenticator app.
+        Enter a 6-digit authenticator code or a one-time recovery code.
       </p>
       <Panel className="mt-8 p-6">
         <form onSubmit={onSubmit} className="space-y-4">
@@ -61,7 +77,6 @@ export default function MfaPage() {
             <Input
               id="code"
               name="code"
-              inputMode="numeric"
               autoComplete="one-time-code"
               value={code}
               onChange={(e) => setCode(e.target.value)}

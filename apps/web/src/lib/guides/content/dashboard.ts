@@ -30,7 +30,7 @@ export const dashboardGuide: GuideModule = {
     },
     {
       title: "Trust live refresh",
-      body: "When Reverb is running, snapshot/updated events refresh cards without a hard reload.",
+      body: "Reverb snapshot/updated events keep cards live. If the socket drops, the UI shows Live sync unavailable and reconnects automatically—there is no Refresh button.",
     },
   ],
   diagram: {

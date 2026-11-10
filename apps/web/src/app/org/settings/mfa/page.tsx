@@ -1,5 +1,7 @@
 import { MfaSetupClient } from "./mfa-client";
 
+export const instant = false;
+
 export const metadata = {
   title: "MFA setup",
   description: "Enable authenticator MFA for your admin account.",

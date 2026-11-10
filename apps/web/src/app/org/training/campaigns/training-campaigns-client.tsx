@@ -1,19 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
-import { Pagination } from "@/components/ui/pagination";
 import { Panel } from "@/components/ui/panel";
 import { Select } from "@/components/ui/select";
+import { useDataTableQuery } from "@/hooks/use-data-table-query";
 import { liveStatusLabel, useLiveTopic } from "@/hooks/use-live-topic";
-import { api, ensureCsrf } from "@/lib/api";
+import { api, apiOptional, ensureCsrf, fetchSessionUser } from "@/lib/api";
+import { serializeDataTableQuery } from "@/lib/data-table-query";
 import {
   DEFAULT_PAGE_SIZE,
   emptyMeta,
@@ -23,6 +25,7 @@ import {
   type PageSize,
   type PaginationMeta,
 } from "@/lib/pagination";
+import { hasPermission } from "@/lib/session";
 import { resolveTenant } from "@/lib/tenant";
 import {
   AudiencePicker,
@@ -61,6 +64,14 @@ type TrainingCampaignsPayload = {
   groups: AudienceGroup[];
 };
 
+const STATUS_OPTIONS = [
+  { label: "Draft", value: "draft" },
+  { label: "Running", value: "running" },
+  { label: "Completed", value: "completed" },
+  { label: "Cancelled", value: "cancelled" },
+  { label: "Archived", value: "archived" },
+];
+
 function alertVariantForMessage(message: string): "destructive" | "success" | "default" {
   const m = message.toLowerCase();
   if (
@@ -75,6 +86,23 @@ function alertVariantForMessage(message: string): "destructive" | "success" | "d
   }
   if (m.includes("select") || m.includes("no targets")) return "default";
   return "default";
+}
+
+function matchesCells(
+  q: string,
+  columnFilters: Record<string, string>,
+  cells: Record<string, string>,
+): boolean {
+  const needle = q.trim().toLowerCase();
+  if (needle && !Object.values(cells).join(" ").toLowerCase().includes(needle)) {
+    return false;
+  }
+  for (const [key, raw] of Object.entries(columnFilters)) {
+    const value = raw.trim().toLowerCase();
+    if (!value) continue;
+    if (!String(cells[key] ?? "").toLowerCase().includes(value)) return false;
+  }
+  return true;
 }
 
 export function TrainingCampaignsClient() {
@@ -94,12 +122,32 @@ export function TrainingCampaignsClient() {
   const [selectedGroupIds, setSelectedGroupIds] = useState<number[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const tableQuery = useDataTableQuery();
+  const filters = useMemo(
+    () => serializeDataTableQuery(tableQuery.debounced),
+    [tableQuery.debounced],
+  );
+  const filtersKey = useMemo(() => JSON.stringify(filters), [filters]);
+  const filtersKeyRef = useRef(filtersKey);
 
   const channel = useMemo(() => `org.${tenant}.training-campaigns`, [tenant]);
 
   const applyCampaignSlice = useCallback(
-    (items: Campaign[], nextPage: number, nextPerPage: number) => {
-      const sliced = paginateLocal(items, nextPage, nextPerPage);
+    (
+      items: Campaign[],
+      nextPage: number,
+      nextPerPage: number,
+      q: string,
+      columnFilters: Record<string, string>,
+    ) => {
+      const filtered = items.filter((campaign) =>
+        matchesCells(q, columnFilters, {
+          name: campaign.name,
+          status: campaign.status,
+          course: campaign.course?.title ?? "",
+        }),
+      );
+      const sliced = paginateLocal(filtered, nextPage, nextPerPage);
       setCampaigns(sliced.data);
       setCampaignsMeta(sliced.meta);
       setPage(sliced.meta.current_page);
@@ -141,36 +189,60 @@ export function TrainingCampaignsClient() {
 
   const refreshAuxiliary = useCallback(async () => {
     await ensureCsrf();
+    const me = await fetchSessionUser();
     const t = resolveTenant();
+    const canCampaigns = me ? hasPermission(me, "org.campaigns.manage") : false;
+    const canTargets = me ? hasPermission(me, "org.targets.manage") : false;
+    const canGroups = me ? hasPermission(me, "org.groups.manage") : false;
     const [dashRes, coursesRes, targetsRes, groupsRes] = await Promise.all([
-      api<{ data: Dash }>("/api/v1/org/campaigns/dashboard?type=training", { tenant: t }),
-      api(`/api/v1/org/training/courses?${paginationQuery(1, 100)}`, { tenant: t }),
-      api(`/api/v1/org/targets?${paginationQuery(1, 500)}`, { tenant: t }),
-      api(`/api/v1/org/groups?${paginationQuery(1, 500)}`, { tenant: t }),
+      canCampaigns
+        ? apiOptional<{ data: Dash }>("/api/v1/org/campaigns/dashboard?type=training", {
+            tenant: t,
+          })
+        : Promise.resolve(null),
+      apiOptional(`/api/v1/org/training/courses?${paginationQuery(1, 100)}`, { tenant: t }),
+      canTargets
+        ? apiOptional(`/api/v1/org/targets?${paginationQuery(1, 500)}`, { tenant: t })
+        : Promise.resolve(null),
+      canGroups
+        ? apiOptional(`/api/v1/org/groups?${paginationQuery(1, 500)}`, { tenant: t })
+        : Promise.resolve(null),
     ]);
-    const coursesParsed = parsePaginatedResponse<Course>(coursesRes, 100);
-    const targetsParsed = parsePaginatedResponse<AudienceTarget>(targetsRes, 500);
-    const groupsParsed = parsePaginatedResponse<AudienceGroup>(groupsRes, 500);
+    const coursesParsed = coursesRes
+      ? parsePaginatedResponse<Course>(coursesRes, 100)
+      : { data: [] as Course[] };
+    const targetsParsed = targetsRes
+      ? parsePaginatedResponse<AudienceTarget>(targetsRes, 500)
+      : { data: [] as AudienceTarget[] };
+    const groupsParsed = groupsRes
+      ? parsePaginatedResponse<AudienceGroup>(groupsRes, 500)
+      : { data: [] as AudienceGroup[] };
     applyAuxiliary(
-      dashRes.data ?? null,
+      dashRes?.data ?? null,
       coursesParsed.data,
       targetsParsed.data,
       groupsParsed.data,
     );
   }, [applyAuxiliary]);
 
-  const refreshCampaignsFromApi = useCallback(async (nextPage: number, nextPerPage: number) => {
-    await ensureCsrf();
-    const t = resolveTenant();
-    const campaignsRes = await api(
-      `/api/v1/org/campaigns?${paginationQuery(nextPage, nextPerPage, { type: "training" })}`,
-      { tenant: t },
-    );
-    const parsed = parsePaginatedResponse<Campaign>(campaignsRes, nextPerPage);
-    setCampaigns(parsed.data);
-    setCampaignsMeta(parsed.meta);
-    setPage(parsed.meta.current_page);
-  }, []);
+  const refreshCampaignsFromApi = useCallback(
+    async (nextPage: number, nextPerPage: number, nextFilters: Record<string, string>) => {
+      await ensureCsrf();
+      const t = resolveTenant();
+      const campaignsRes = await api(
+        `/api/v1/org/campaigns?${paginationQuery(nextPage, nextPerPage, {
+          type: "training",
+          ...nextFilters,
+        })}`,
+        { tenant: t },
+      );
+      const parsed = parsePaginatedResponse<Campaign>(campaignsRes, nextPerPage);
+      setCampaigns(parsed.data);
+      setCampaignsMeta(parsed.meta);
+      setPage(parsed.meta.current_page);
+    },
+    [],
+  );
 
   const { status, error: liveError } = useLiveTopic<TrainingCampaignsPayload>({
     channel,
@@ -186,14 +258,36 @@ export function TrainingCampaignsClient() {
   }, [refreshAuxiliary]);
 
   useEffect(() => {
+    if (filtersKeyRef.current !== filtersKey) {
+      filtersKeyRef.current = filtersKey;
+      if (page !== 1) {
+        setPage(1);
+        return;
+      }
+    }
     if (liveCampaigns !== null) {
-      applyCampaignSlice(liveCampaigns, page, perPage);
+      applyCampaignSlice(
+        liveCampaigns,
+        page,
+        perPage,
+        tableQuery.debounced.q,
+        tableQuery.debounced.columnFilters,
+      );
       return;
     }
-    void refreshCampaignsFromApi(page, perPage).catch((err: unknown) => {
+    void refreshCampaignsFromApi(page, perPage, filters).catch((err: unknown) => {
       setMessage(err instanceof Error ? err.message : "Load failed");
     });
-  }, [liveCampaigns, page, perPage, applyCampaignSlice, refreshCampaignsFromApi]);
+  }, [
+    liveCampaigns,
+    page,
+    perPage,
+    filters,
+    filtersKey,
+    applyCampaignSlice,
+    refreshCampaignsFromApi,
+    tableQuery.debounced,
+  ]);
 
   const statusLabel = liveStatusLabel(status);
 
@@ -225,14 +319,45 @@ export function TrainingCampaignsClient() {
       setMessage("Training campaign launched; reminders queued.");
       await refreshAuxiliary();
       if (liveCampaigns === null) {
-        await refreshCampaignsFromApi(page, perPage);
+        await refreshCampaignsFromApi(page, perPage, filters);
       }
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Create failed");
     }
   }
 
-  const campaignsListEmpty = campaigns.length === 0 && campaignsMeta.total === 0;
+  const columns: Array<DataTableColumn<Campaign>> = [
+    {
+      id: "name",
+      header: "Name",
+      accessorKey: "name",
+      sticky: true,
+      cell: (campaign) => campaign.name,
+    },
+    {
+      id: "status",
+      header: "Status",
+      filter: "select",
+      filterOptions: STATUS_OPTIONS,
+      accessorKey: "status",
+      cell: (campaign) => campaign.status,
+    },
+    {
+      id: "course",
+      header: "Course",
+      filter: "none",
+      filterValue: (campaign) => campaign.course?.title ?? "",
+      enableSorting: false,
+      cell: (campaign) => campaign.course?.title ?? "—",
+    },
+    {
+      id: "recipients",
+      header: "Assigned",
+      filter: "none",
+      enableSorting: false,
+      cell: (campaign) => campaign.recipients?.length ?? 0,
+    },
+  ];
 
   if (loading) {
     return <PageSkeleton className="max-w-5xl" />;
@@ -248,7 +373,7 @@ export function TrainingCampaignsClient() {
             <span className="self-center text-sm text-[var(--muted-foreground)]">
               {statusLabel ?? "Live"}
             </span>
-            <LinkButton href="/org/training" variant="secondary">
+            <LinkButton href="/org/courses" variant="secondary">
               Course library
             </LinkButton>
             <LinkButton href="/learn" variant="secondary">
@@ -346,40 +471,28 @@ export function TrainingCampaignsClient() {
           {liveError}
         </Alert>
       ) : null}
-      {campaignsListEmpty && status === "live" ? (
-        <EmptyState
-          className="mt-8"
-          title="No training campaigns yet"
-          description="Create a campaign to assign a course to selected targets or groups."
-        />
-      ) : !campaignsListEmpty ? (
-        <>
-          <ul className="mt-8 divide-y divide-[var(--border)] border-y border-[var(--border)]">
-            {campaigns.map((c) => (
-              <li key={c.id} className="flex items-center justify-between py-3">
-                <div>
-                  <p className="font-medium">{c.name}</p>
-                  <p className="text-sm text-[var(--muted-foreground)]">
-                    {c.status} · {c.course?.title ?? "course"}
-                  </p>
-                </div>
-                <p className="text-sm">{c.recipients?.length ?? 0} assigned</p>
-              </li>
-            ))}
-          </ul>
-          <Pagination
-            className="mt-4"
-            page={page}
-            perPage={perPage}
-            total={campaignsMeta.total}
-            onPageChange={setPage}
-            onPerPageChange={(size) => {
-              setPerPage(size);
-              setPage(1);
-            }}
-          />
-        </>
-      ) : null}
+      <DataTable
+        className="mt-8"
+        mode="server"
+        caption="Training campaigns"
+        columns={columns}
+        rows={campaigns}
+        filterState={tableQuery.state}
+        onFilterStateChange={tableQuery.setState}
+        getRowId={(row) => row.id}
+        emptyTitle="No training campaigns yet"
+        emptyDescription="Create a campaign to assign a course to selected employees or groups."
+        pagination={{
+          page,
+          perPage,
+          total: campaignsMeta.total,
+          onPageChange: setPage,
+          onPerPageChange: (size) => {
+            setPerPage(size);
+            setPage(1);
+          },
+        }}
+      />
     </div>
   );
 }

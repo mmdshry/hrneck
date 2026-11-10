@@ -1,5 +1,7 @@
 import { MspClient } from "./msp-client";
 
+export const instant = false;
+
 export const metadata = {
   title: "MSP",
   description: "MSP workspace to provision and open client organizations.",

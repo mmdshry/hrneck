@@ -29,7 +29,7 @@ export function PageSkeleton({
       </div>
 
       {variant === "detail" ? (
-        <div className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
+        <div className="space-y-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4">
           <Skeleton className="h-5 w-40" />
           <Skeleton className="h-4 w-full" />
           <Skeleton className="h-4 w-5/6" />
@@ -42,7 +42,7 @@ export function PageSkeleton({
       ) : null}
 
       {variant === "form" ? (
-        <div className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
+        <div className="space-y-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4">
           {Array.from({ length: Math.max(rows, 3) }).map((_, index) => (
             <div key={index} className="space-y-2">
               <Skeleton className="h-3 w-24" />
@@ -53,7 +53,7 @@ export function PageSkeleton({
       ) : null}
 
       {variant === "list" ? (
-        <div className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]">
+        <div className="divide-y divide-[var(--border)] overflow-hidden rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)]">
           {Array.from({ length: rows }).map((_, index) => (
             <div
               key={index}

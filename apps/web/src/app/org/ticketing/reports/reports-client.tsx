@@ -1,17 +1,19 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
 import { Panel } from "@/components/ui/panel";
+import { liveStatusLabel, useLiveTopic } from "@/hooks/use-live-topic";
 import { api, ensureCsrf, fetchSessionUser } from "@/lib/api";
 import {
   captureElementPng,
   downloadAuthenticated,
 } from "@/lib/download";
+import { orgLiveChannel } from "@/lib/live-topics";
 import { hasPermission, type SessionUser } from "@/lib/session";
 import { resolveTenant } from "@/lib/tenant";
 
@@ -22,34 +24,65 @@ type Summary = {
   sla_resolve_breached: number;
 };
 
+type TicketingReportsPayload = {
+  summary: Summary;
+};
+
 export function ReportsClient() {
+  const tenant = resolveTenant();
+  const channel = tenant ? orgLiveChannel(tenant, "ticketing-reports") : null;
   const [session, setSession] = useState<SessionUser | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
+  const [liveReady, setLiveReady] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [exporting, setExporting] = useState<"csv" | "pdf" | "png" | null>(null);
   const reportRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
 
-  async function refresh() {
+  const onPayload = useCallback((payload: TicketingReportsPayload) => {
+    if (payload.summary) {
+      setSummary(payload.summary);
+      setLiveReady(true);
+    }
+  }, []);
+
+  const refreshFromApi = useCallback(async () => {
     await ensureCsrf();
     const me = await fetchSessionUser();
     setSession(me);
     if (!me) {
       return;
     }
-    const tenant = resolveTenant();
+    const t = resolveTenant();
     const res = await api<{ data: Summary }>(
       "/api/v1/org/ticketing/reports/summary",
-      { tenant },
+      { tenant: t },
     );
     setSummary(res.data);
-  }
+  }, []);
+
+  const { status, error: liveError } = useLiveTopic<TicketingReportsPayload>({
+    channel,
+    onPayload,
+  });
 
   useEffect(() => {
-    void refresh()
+    void fetchSessionUser()
+      .then(setSession)
+      .catch(() => setSession(null));
+  }, []);
+
+  useEffect(() => {
+    if (liveReady) {
+      setLoading(false);
+      return;
+    }
+    void refreshFromApi()
       .catch((err: unknown) => setMessage(err instanceof Error ? err.message : "Load failed"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [liveReady, refreshFromApi]);
+
+  const statusLabel = liveStatusLabel(status);
 
   async function exportReport(format: "csv" | "pdf" | "png") {
     setMessage(null);
@@ -94,7 +127,11 @@ export function ReportsClient() {
     <div className="mx-auto w-full max-w-5xl flex-1 space-y-6 px-4 py-8 sm:px-6">
       <PageHeader
         title="Ticketing reports"
-        description="Open volume and SLA attainment."
+        description={
+          statusLabel
+            ? `Open volume and SLA attainment. · ${statusLabel}`
+            : "Open volume and SLA attainment."
+        }
         actions={
           <div className="flex flex-wrap gap-2">
             <Button
@@ -128,6 +165,7 @@ export function ReportsClient() {
         }
       />
       {message ? <Alert>{message}</Alert> : null}
+      {liveError ? <Alert variant="destructive">{liveError}</Alert> : null}
       <div ref={reportRef} className="space-y-4">
         <h2 className="text-lg font-medium">Ticketing summary</h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

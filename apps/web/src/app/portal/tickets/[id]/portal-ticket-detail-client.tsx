@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
@@ -20,6 +21,25 @@ type Ticket = {
   status?: { name: string } | null;
   notes?: Array<{ id: number; body: string; created_at?: string }>;
 };
+
+type PortalNote = NonNullable<Ticket["notes"]>[number];
+
+const noteColumns: Array<DataTableColumn<PortalNote>> = [
+  {
+    id: "body",
+    header: "Note",
+    accessorKey: "body",
+    sticky: true,
+    className: "max-w-md whitespace-pre-wrap",
+    cell: (note) => note.body,
+  },
+  {
+    id: "created_at",
+    header: "Created",
+    filterValue: (note) => note.created_at ?? "",
+    cell: (note) => note.created_at || "—",
+  },
+];
 
 export function PortalTicketDetailClient({ ticketId }: { ticketId: number }) {
   const [ticket, setTicket] = useState<Ticket | null>(null);
@@ -87,13 +107,16 @@ export function PortalTicketDetailClient({ ticketId }: { ticketId: number }) {
         <p className="whitespace-pre-wrap text-sm">{ticket.description}</p>
       </Panel>
       <Panel title="Conversation">
-        <ul className="mb-4 space-y-3">
-          {(ticket.notes ?? []).map((n) => (
-            <li key={n.id} className="rounded border border-[var(--border)] p-3 text-sm whitespace-pre-wrap">
-              {n.body}
-            </li>
-          ))}
-        </ul>
+        <div className="mb-4">
+          <DataTable
+            mode="client"
+            caption="Ticket notes"
+            columns={noteColumns}
+            rows={ticket.notes ?? []}
+            getRowId={(row) => row.id}
+            emptyTitle="No notes yet."
+          />
+        </div>
         <form className="space-y-2" onSubmit={addNote}>
           <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} required />
           <Button type="submit">Add note</Button>

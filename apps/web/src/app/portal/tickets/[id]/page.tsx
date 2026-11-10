@@ -1,5 +1,7 @@
 import { PortalTicketDetailClient } from "./portal-ticket-detail-client";
 
+export const instant = false;
+
 export const metadata = {
   title: "Ticket",
   description: "Portal ticket detail.",

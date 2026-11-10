@@ -9,7 +9,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
 const contactEmail =
-  process.env.NEXT_PUBLIC_CONTACT_EMAIL ?? "support@itneck.com";
+  process.env.NEXT_PUBLIC_CONTACT_EMAIL ?? "support@hrneck.com";
 
 export function LandingDemoForm() {
   const [submitted, setSubmitted] = useState(false);

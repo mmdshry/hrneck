@@ -54,16 +54,17 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="flex min-h-full flex-col bg-[var(--background)] text-[var(--foreground)]">
         <SkipLink />
-        <Suspense fallback={null}>
-          <ThemeProvider>
-            <BrandingProvider>
-              <main id="main-content" className="flex min-h-full flex-1 flex-col">
+        {/* Keep the main landmark outside Suspense so axe/SSR always see it. */}
+        <main id="main-content" className="flex min-h-full flex-1 flex-col">
+          <Suspense fallback={null}>
+            <ThemeProvider>
+              <BrandingProvider>
                 {children}
-              </main>
-              <AppToaster />
-            </BrandingProvider>
-          </ThemeProvider>
-        </Suspense>
+                <AppToaster />
+              </BrandingProvider>
+            </ThemeProvider>
+          </Suspense>
+        </main>
       </body>
     </html>
   );

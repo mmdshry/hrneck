@@ -8,7 +8,7 @@ export const usersRolesGuide: GuideModule = {
   keywords: ["users", "roles", "rbac", "permissions", "sd_admin", "access"],
   openInAppHref: "/org/users",
   overview:
-    "Org users are operators with RBAC permissions inside a single tenant. Employees (Targets) are not login users. Use Users to invite operators and Roles to compose permissions across training, checklists, ticketing, reports, settings, and announcements. Ticketing ships with preset roles such as sd_admin, sd_technician, sd_user, and kb_admin.",
+    "Org users are operators with RBAC permissions inside a single tenant. Employees are not login users. Use Users to invite operators and Roles to compose permissions across training, checklists, ticketing, reports, settings, and announcements. Ticketing ships with preset roles such as sd_admin, sd_technician, sd_user, and kb_admin.",
   example: {
     title: "Service desk technician role",
     narrative:
@@ -73,7 +73,7 @@ export const usersRolesGuide: GuideModule = {
     ],
     annotations: [
       { label: "Catalog", note: "Permissions are enforced on /api/v1/org/*." },
-      { label: "Targets", note: "Employees never appear in Users—only in Targets." },
+      { label: "Employees", note: "Employees never appear in Users—only on the Employees page." },
     ],
   },
   related: ["ticketing", "settings", "getting-started"],

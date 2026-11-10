@@ -2,7 +2,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import type { HTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
-const alertVariants = cva("rounded-xl border px-3 py-2.5 text-sm", {
+const alertVariants = cva("rounded-[var(--radius)] border px-3 py-2.5 text-sm", {
   variants: {
     variant: {
       default:

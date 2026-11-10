@@ -17,7 +17,7 @@ export function StepList({
       {steps.map((step, index) => (
         <li
           key={`${index}-${step.title}`}
-          className="flex gap-4 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4"
+          className="flex gap-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4"
         >
           <span
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--primary)] text-sm font-semibold text-[var(--primary-foreground)]"

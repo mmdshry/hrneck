@@ -4,54 +4,144 @@ export const trainingGuide: GuideModule = {
   slug: "training",
   title: "Security awareness training",
   summary:
-    "Assign courses and media, run campaigns with reminders, and track lesson progress plus watch time.",
-  keywords: ["training", "lms", "campaign", "course", "quiz", "assign", "reminder"],
+    "Build courses and quizzes, assign content, run reminder campaigns, and export lesson-level progress for stakeholders.",
+  keywords: [
+    "training",
+    "lms",
+    "campaign",
+    "course",
+    "quiz",
+    "assign",
+    "reminder",
+    "watch time",
+    "essay",
+    "pdf export",
+    "cancel",
+    "archive",
+  ],
   openInAppHref: "/org/training",
   overview:
-    "The training hub covers the course library (text, video, PDF lessons and quizzes), direct assignments to targets or groups, and training campaigns with email reminders. Admins review per-lesson progress and export CSV; learners consume assigned content in the learner portal.",
+    "Courses holds the library (article, video, and PDF lessons plus quizzes). Training assigns one or more courses to employees and/or groups, runs campaigns with email reminders through SMTP and sending profiles, and reviews per-lesson progress with CSV or PDF export. Learners consume assigned content in the learner portal at /learn—not in the org queue. A secondary sample list at /org/campaigns exists for quick demos; the operator workflow lives under Training → Campaigns.",
   example: {
     title: "Acme Finance Q4 awareness campaign",
     narrative:
-      "Ops creates campaign “Security Awareness Q4”, selects the Phishing Essentials course, targets the Finance group (186 people), schedules weekly reminders, then watches completion climb from 12% to 86% on the campaign metrics page.",
+      "Ops builds Phishing Essentials with three lessons and a required quiz (80% pass, 15-minute limit, one essay). From Training they assign the course to the Finance group (186 people), launch Security Awareness Q4 with weekly reminders, watch completion climb from 12% to 86%, then export the viewing report PDF for leadership.",
   },
   steps: [
     {
-      title: "Open the training hub",
-      body: "Browse courses, assignments, and progress from Training.",
-      href: "/org/training",
+      title: "Build the course library",
+      body: "Create courses and lessons on Courses before you assign anything. Add quizzes with a pass score, required flag, time limit, multiple choice, and optional essay questions.",
+      href: "/org/courses",
     },
     {
       title: "Assign content",
-      body: "Assign a full course or a single article/video to selected targets and/or groups.",
+      body: "On Training, select one or more courses and assign them to employees and/or groups. Learners see enrollments in /learn after assignment.",
+      href: "/org/training",
     },
     {
       title: "Create a campaign",
-      body: "Name the campaign, pick content, choose group_ids/targets, and enable reminder cadence.",
+      body: "Name the campaign, pick content, choose group_ids and/or targets, and enable reminder cadence. Confirm SMTP and the sending profile first.",
       href: "/org/training/campaigns",
     },
     {
-      title: "Confirm delivery path",
-      body: "Campaign emails use SMTP and the active sending profile. Verify Integrations first if mail is new.",
-      href: "/org/settings/integrations",
+      title: "Monitor and export",
+      body: "Track enrollment, lesson status, watch time, and timestamps. Download CSV or PDF from the viewing report, then cancel or archive campaigns when the wave ends.",
+    },
+  ],
+  sections: [
+    {
+      title: "Course library",
+      body: "Everything learners open later is authored here. Keep titles clear and quizzes aligned to the lessons they follow.",
+      steps: [
+        {
+          title: "Create a course",
+          body: "Set title, description, and expected duration. Courses are the unit you assign and campaign against.",
+          href: "/org/courses",
+        },
+        {
+          title: "Add lessons",
+          body: "Use article/text lessons, video (YouTube/Vimeo URL or uploaded file), or PDF upload. Order lessons in the sequence learners should finish.",
+        },
+        {
+          title: "Configure quizzes",
+          body: "Add one or more quizzes per course. Set pass score, mark required vs optional, optionally add a countdown time limit, mix multiple-choice items, and include unscored essay questions when you need free-text answers.",
+        },
+        {
+          title: "Upload and stream media",
+          body: "Confirm video uploads stream and PDFs open before assigning a large audience so the first reminder does not hit broken content.",
+        },
+      ],
     },
     {
-      title: "Monitor metrics",
-      body: "Track enrollment, lesson progress, watch time, and export CSV for stakeholders.",
+      title: "Assign and track",
+      body: "Assignment creates enrollments. Tracking is per learner and per lesson—not just campaign funnel totals.",
+      steps: [
+        {
+          title: "Assign one or more courses",
+          body: "From Training, pick courses and target employees and/or groups. You can assign a full course library item; campaigns remain the path for timed waves with reminders.",
+          href: "/org/training",
+        },
+        {
+          title: "Open the viewing report",
+          body: "Inspect per-learner lesson status, watch time, opened-at, and completed-at timestamps so you can chase overdue people by name.",
+        },
+        {
+          title: "Export CSV or PDF",
+          body: "Download the viewing report as CSV for spreadsheets or PDF for stakeholder packs. Pair with Reporting for org-wide schedules.",
+        },
+        {
+          title: "Send learners to /learn",
+          body: "Operators stay in /org/training. Learners open the learner portal to read, watch, mark complete, and take quizzes. See the Learner portal guide.",
+          href: "/learn",
+        },
+      ],
+    },
+    {
+      title: "Campaigns and reminders",
+      body: "Campaigns wrap content + audience + mail cadence. Statuses include draft, running, completed, cancelled, and archived.",
+      steps: [
+        {
+          title: "Launch from Training → Campaigns",
+          body: "Name the wave, attach course content, select groups/employees, and set reminder frequency. This is the primary operator path.",
+          href: "/org/training/campaigns",
+        },
+        {
+          title: "Confirm delivery path",
+          body: "Reminder mail uses org SMTP and the active sending profile. Verify Integrations and Sending profiles before the first send.",
+          href: "/org/settings/integrations",
+        },
+        {
+          title: "Read the campaign funnel",
+          body: "Watch enrollments, in progress, completed, opened %, and completed % on the campaign card as learners finish lessons.",
+        },
+        {
+          title: "Cancel or archive",
+          body: "Cancel a running wave to stop reminders; archive finished campaigns to keep the list clean without deleting history.",
+        },
+        {
+          title: "Know the sample campaigns page",
+          body: "/org/campaigns is a secondary “launch sample campaign” list (org.campaigns.manage). It is not in the sidebar; prefer Training → Campaigns for production waves.",
+          href: "/org/campaigns",
+        },
+      ],
     },
   ],
   diagram: {
     title: "Campaign lifecycle",
     nodes: [
-      { id: "library", label: "Course library" },
+      { id: "library", label: "Courses" },
       { id: "audience", label: "Targets / groups" },
       { id: "campaign", label: "Campaign" },
       { id: "mail", label: "Reminders" },
-      { id: "metrics", label: "Progress + CSV" },
+      { id: "learn", label: "Learner portal" },
+      { id: "metrics", label: "Progress + export" },
     ],
     edges: [
       { from: "library", to: "campaign" },
       { from: "audience", to: "campaign" },
       { from: "campaign", to: "mail" },
+      { from: "campaign", to: "learn" },
+      { from: "learn", to: "metrics" },
       { from: "mail", to: "metrics" },
     ],
   },
@@ -69,13 +159,13 @@ export const trainingGuide: GuideModule = {
     },
     rows: [
       { title: "Lesson 1 · Spot the lure", meta: "92% complete · 4m avg watch" },
-      { title: "Quiz · Reporting phishing", meta: "81% pass rate" },
-      { title: "Lesson 3 · Safe links", meta: "74% complete" },
+      { title: "Quiz · Reporting phishing", meta: "81% pass · required · 15m" },
+      { title: "Export viewing report", meta: "CSV + PDF ready" },
     ],
     annotations: [
-      { label: "Campaign card", note: "Metrics update live as learners finish lessons." },
-      { label: "Reminders", note: "Email job uses the org SMTP pipeline." },
+      { label: "Campaign card", note: "Funnel metrics update as learners finish lessons." },
+      { label: "Reminders", note: "Email job uses SMTP + the org sending profile." },
     ],
   },
-  related: ["targets-groups", "settings", "reporting"],
+  related: ["learner-portal", "targets-groups", "settings", "reporting"],
 };

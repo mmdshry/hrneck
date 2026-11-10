@@ -9,9 +9,9 @@ import {
 } from "./pagination";
 
 describe("pagination helpers", () => {
-  it("exposes 25/50/100 with default 25", () => {
-    expect(DEFAULT_PAGE_SIZE).toBe(25);
-    expect(PAGE_SIZE_OPTIONS).toEqual([25, 50, 100]);
+  it("exposes 5/10/25/50/100 with default 5", () => {
+    expect(DEFAULT_PAGE_SIZE).toBe(5);
+    expect(PAGE_SIZE_OPTIONS).toEqual([5, 10, 25, 50, 100]);
   });
 
   it("builds query strings with page and per_page", () => {
@@ -55,6 +55,6 @@ describe("pagination helpers", () => {
     expect(page2.data).toEqual([26, 27, 28, 29, 30]);
     expect(page2.meta.total).toBe(30);
     expect(paginateLocal(items, 99, 25).meta.current_page).toBe(2);
-    expect(emptyMeta().per_page).toBe(25);
+    expect(emptyMeta().per_page).toBe(5);
   });
 });

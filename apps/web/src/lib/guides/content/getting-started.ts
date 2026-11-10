@@ -8,11 +8,11 @@ export const gettingStartedGuide: GuideModule = {
   keywords: ["onboarding", "login", "demo", "roles", "hosts", "start"],
   openInAppHref: "/org",
   overview:
-    "HRNECK tenant workspaces run on {slug}.hrneck.test (or the app.hrneck.test alias). Org admins use the left sidebar to manage training, targets, checklists, ticketing, reporting, users, and settings. Guides stay public so you can review workflows before signing in.",
+    "HRNECK tenant workspaces run on {slug}.hrneck.test (or the app.hrneck.test alias). Org admins use the left sidebar to manage training, employees, checklists, ticketing, reporting, users, and settings. Guides stay public so you can review workflows before signing in.",
   example: {
     title: "Acme Corp first login",
     narrative:
-      "Sara (org_admin@acme.test) opens acme.hrneck.test, signs in with her MFA-backed account, lands on the org dashboard, and uses Guides to confirm SMTP and targets before launching the Q4 awareness campaign.",
+      "Sara (org_admin@acme.test) opens acme.hrneck.test, signs in with her MFA-backed account, lands on the org dashboard, and uses Guides to confirm SMTP and employees before launching the Q4 awareness campaign.",
   },
   steps: [
     {
@@ -21,17 +21,17 @@ export const gettingStartedGuide: GuideModule = {
     },
     {
       title: "Sign in as org admin",
-      body: "Use an org_admin account such as admin@{tenant}.test. Platform staff (admin@hrneck.test) can also enter a tenant context from MSP.",
+      body: "Use an org_admin account such as admin@{tenant}.test. Platform staff (admin@hrneck.test) use MSP → Open tenant admin, which enters a real staff tenant context before /org loads.",
       href: "/login",
     },
     {
       title: "Scan the sidebar",
-      body: "Dashboard, Training, Checklists, Ticketing, Targets & Groups, Users, Roles, Reporting, Announcements, and Settings map 1:1 to tenant capabilities.",
+      body: "Dashboard, Training, Checklists, Ticketing, Employees, Departments, Groups, Users, Roles, Reporting, Announcements, and Settings map 1:1 to tenant capabilities.",
       href: "/org",
     },
     {
       title: "Follow the start-here path",
-      body: "Import targets → verify SMTP → assign a training campaign → open Reporting. Each step has a dedicated guide.",
+      body: "Import employees → verify SMTP → connect onboarding packs/checklists → assign a training campaign → open Reporting. Each step has a dedicated guide.",
     },
     {
       title: "Invite operators with roles",
@@ -43,7 +43,7 @@ export const gettingStartedGuide: GuideModule = {
     title: "Operator first-week path",
     nodes: [
       { id: "login", label: "Sign in" },
-      { id: "targets", label: "Import targets" },
+      { id: "targets", label: "Import employees" },
       { id: "smtp", label: "Verify SMTP" },
       { id: "campaign", label: "Launch campaign" },
       { id: "report", label: "Review reports" },
@@ -58,7 +58,7 @@ export const gettingStartedGuide: GuideModule = {
   mock: {
     chromeTitle: "Acme · Getting started checklist",
     stats: [
-      { label: "Targets", value: "0 → 186" },
+      { label: "Employees", value: "0 → 186" },
       { label: "SMTP", value: "Connected" },
       { label: "Campaigns", value: "Ready" },
     ],
@@ -68,7 +68,7 @@ export const gettingStartedGuide: GuideModule = {
       progress: 75,
     },
     rows: [
-      { title: "Import Finance + Ops targets", meta: "Done · CSV" },
+      { title: "Import Finance + Ops employees", meta: "Done · CSV" },
       { title: "Confirm mail.hrneck.com SMTP", meta: "Done · Integrations" },
       { title: "Create Security Awareness Q4", meta: "Next · Campaigns" },
     ],
@@ -77,5 +77,5 @@ export const gettingStartedGuide: GuideModule = {
       { label: "Open in app", note: "Deep links jump to the live org route when authenticated." },
     ],
   },
-  related: ["targets-groups", "settings", "training"],
+  related: ["auth", "targets-groups", "settings", "training", "msp"],
 };

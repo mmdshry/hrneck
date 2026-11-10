@@ -14,7 +14,7 @@ export const announcementsNotificationsGuide: GuideModule = {
   ],
   openInAppHref: "/org/announcements",
   overview:
-    "Announcements let operators broadcast title/body messages to the organization. The notification bell (in the org shell) aggregates training assigned, checklist assigned, ticket assigned, and announcement events with deep links—via polling plus realtime when available.",
+    "Announcements let operators broadcast title/body messages to the organization. The notification bell (in the org shell) aggregates training assigned, checklist assigned, ticket assigned, and announcement events with deep links—updated live over Reverb with no manual refresh.",
   example: {
     title: "Mandatory training notice",
     narrative:

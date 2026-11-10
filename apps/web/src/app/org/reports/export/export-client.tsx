@@ -1,18 +1,20 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MinimalLoader } from "@/components/ui/minimal-loader";
 import { PageHeader } from "@/components/ui/page-header";
 import { Panel } from "@/components/ui/panel";
-import { Pagination } from "@/components/ui/pagination";
+import { useDataTableQuery } from "@/hooks/use-data-table-query";
 import { liveStatusLabel, useLiveTopic } from "@/hooks/use-live-topic";
 import { api, ensureCsrf } from "@/lib/api";
+import { serializeDataTableQuery } from "@/lib/data-table-query";
 import {
   DEFAULT_PAGE_SIZE,
   emptyMeta,
@@ -44,6 +46,13 @@ type ExportPayload = {
   logs: Archive[];
 };
 
+const SCOPE_OPTIONS = [
+  { label: "Business", value: "business" },
+  { label: "User", value: "user" },
+];
+
+const STATUS_OPTIONS = [{ label: "Ready", value: "ready" }];
+
 function alertVariantForMessage(message: string): "destructive" | "success" | "default" {
   const m = message.toLowerCase();
   if (
@@ -60,6 +69,32 @@ function alertVariantForMessage(message: string): "destructive" | "success" | "d
   return "default";
 }
 
+function matchesCells(
+  q: string,
+  columnFilters: Record<string, string>,
+  cells: Record<string, string>,
+): boolean {
+  const needle = q.trim().toLowerCase();
+  if (needle && !Object.values(cells).join(" ").toLowerCase().includes(needle)) {
+    return false;
+  }
+  for (const [key, raw] of Object.entries(columnFilters)) {
+    const value = raw.trim().toLowerCase();
+    if (!value) continue;
+    if (!String(cells[key] ?? "").toLowerCase().includes(value)) return false;
+  }
+  return true;
+}
+
+function archiveCells(row: Archive): Record<string, string> {
+  return {
+    name: row.name,
+    scope: row.scope,
+    period: row.period_key,
+    status: row.status,
+  };
+}
+
 export function ReportExportClient() {
   const tenant = resolveTenant();
   const [tab, setTab] = useState<"business" | "user">("business");
@@ -74,12 +109,26 @@ export function ReportExportClient() {
   const [periodKey, setPeriodKey] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
+  const tableQuery = useDataTableQuery();
+  const filters = useMemo(
+    () => serializeDataTableQuery(tableQuery.debounced),
+    [tableQuery.debounced],
+  );
+  const filtersKey = useMemo(() => JSON.stringify(filters), [filters]);
+  const filtersKeyRef = useRef(filtersKey);
 
   const channel = useMemo(() => `org.${tenant}.reports-export`, [tenant]);
 
   const applyLogSlice = useCallback(
-    (items: Archive[], nextPage: number, nextPerPage: number) => {
-      const sliced = paginateLocal(items, nextPage, nextPerPage);
+    (
+      items: Archive[],
+      nextPage: number,
+      nextPerPage: number,
+      q: string,
+      columnFilters: Record<string, string>,
+    ) => {
+      const filtered = items.filter((row) => matchesCells(q, columnFilters, archiveCells(row)));
+      const sliced = paginateLocal(filtered, nextPage, nextPerPage);
       setLogs(sliced.data);
       setLogsMeta(sliced.meta);
       setLogsPage(sliced.meta.current_page);
@@ -104,11 +153,13 @@ export function ReportExportClient() {
   );
 
   const refreshFromApi = useCallback(
-    async (nextPage = logsPage, nextPerPage = logsPerPage) => {
+    async (nextPage: number, nextPerPage: number, nextFilters: Record<string, string>) => {
       await ensureCsrf();
       const t = resolveTenant();
       const [archives, cal] = await Promise.all([
-        api(`/api/v1/org/reports/export?${paginationQuery(nextPage, nextPerPage)}`, { tenant: t }),
+        api(`/api/v1/org/reports/export?${paginationQuery(nextPage, nextPerPage, nextFilters)}`, {
+          tenant: t,
+        }),
         api<{ data: Calendar }>("/api/v1/org/reports/export/calendar", { tenant: t }),
       ]);
       applyExportState(cal.data ?? null, null, false);
@@ -117,7 +168,7 @@ export function ReportExportClient() {
       setLogsMeta(parsed.meta);
       setLogsPage(parsed.meta.current_page);
     },
-    [applyExportState, logsPage, logsPerPage],
+    [applyExportState],
   );
 
   const onPayload = useCallback(
@@ -134,14 +185,36 @@ export function ReportExportClient() {
   });
 
   useEffect(() => {
+    if (filtersKeyRef.current !== filtersKey) {
+      filtersKeyRef.current = filtersKey;
+      if (logsPage !== 1) {
+        setLogsPage(1);
+        return;
+      }
+    }
     if (allLogs !== null) {
-      applyLogSlice(allLogs, logsPage, logsPerPage);
+      applyLogSlice(
+        allLogs,
+        logsPage,
+        logsPerPage,
+        tableQuery.debounced.q,
+        tableQuery.debounced.columnFilters,
+      );
       return;
     }
-    void refreshFromApi(logsPage, logsPerPage).catch((err: unknown) => {
+    void refreshFromApi(logsPage, logsPerPage, filters).catch((err: unknown) => {
       setMessage(err instanceof Error ? err.message : "Load failed");
     });
-  }, [allLogs, logsPage, logsPerPage, applyLogSlice, refreshFromApi]);
+  }, [
+    allLogs,
+    logsPage,
+    logsPerPage,
+    filters,
+    filtersKey,
+    applyLogSlice,
+    refreshFromApi,
+    tableQuery.debounced,
+  ]);
 
   const statusLabel = liveStatusLabel(status);
 
@@ -161,7 +234,7 @@ export function ReportExportClient() {
           include_training: includeTraining,
         }),
       });
-      await refreshFromApi(logsPage, logsPerPage);
+      await refreshFromApi(logsPage, logsPerPage, filters);
       setMessage(`Generated ${scope} report for ${key}`);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Generate failed");
@@ -211,13 +284,78 @@ export function ReportExportClient() {
         tenant: resolveTenant(),
       });
       setAllLogs(null);
-      await refreshFromApi(logsPage, logsPerPage);
+      await refreshFromApi(logsPage, logsPerPage, filters);
       setMessage("Archive deleted.");
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Delete failed");
       throw err;
     }
   }
+
+  const columns: Array<DataTableColumn<Archive>> = [
+    {
+      id: "name",
+      header: "Name",
+      accessorKey: "name",
+      sticky: true,
+      cell: (row) => row.name,
+    },
+    {
+      id: "scope",
+      header: "Scope",
+      filter: "select",
+      filterOptions: SCOPE_OPTIONS,
+      accessorKey: "scope",
+      cell: (row) => row.scope,
+    },
+    {
+      id: "period",
+      header: "Period",
+      filterValue: (row) => row.period_key,
+      cell: (row) => row.period_key,
+    },
+    {
+      id: "status",
+      header: "Status",
+      filter: "select",
+      filterOptions: STATUS_OPTIONS,
+      accessorKey: "status",
+      cell: (row) => row.status,
+    },
+    {
+      id: "generated_at",
+      header: "Generated",
+      filter: "none",
+      cell: (row) => (row.generated_at ? new Date(row.generated_at).toLocaleString() : "—"),
+    },
+    {
+      id: "actions",
+      header: "Actions",
+      filter: "none",
+      enableSorting: false,
+      enableGlobalFilter: false,
+      cell: (row) => (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="link"
+            className="min-h-0 px-0"
+            onClick={() => void download(row.id, row.period_key)}
+          >
+            Download
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-0 px-2 py-1 text-xs"
+            onClick={() => setPendingDeleteId(row.id)}
+          >
+            Delete
+          </Button>
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">
@@ -366,60 +504,28 @@ export function ReportExportClient() {
       ) : null}
       <section className="mt-12">
         <h2 className="text-xl font-medium text-[var(--foreground)]">Report log</h2>
-        {logs.length === 0 && logsMeta.total === 0 ? (
-          <EmptyState
-            className="mt-4"
-            title="No exports yet"
-            description="Generate a business or user report to see it listed here."
-          />
-        ) : (
-          <>
-            <ul className="mt-4 divide-y divide-[var(--border)] border-y border-[var(--border)]">
-              {logs.map((row) => (
-                <li
-                  key={row.id}
-                  className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div>
-                    <p className="font-medium">{row.name}</p>
-                    <p className="text-sm text-[var(--muted-foreground)]">
-                      {row.scope} · {row.period_key} · {row.status}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="link"
-                      className="min-h-0 self-start px-0 sm:self-center"
-                      onClick={() => void download(row.id, row.period_key)}
-                    >
-                      Download
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="min-h-0 px-2 py-1 text-xs"
-                      onClick={() => setPendingDeleteId(row.id)}
-                    >
-                      Delete
-                    </Button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-            <Pagination
-              className="mt-4"
-              page={logsPage}
-              perPage={logsPerPage}
-              total={logsMeta.total}
-              onPageChange={setLogsPage}
-              onPerPageChange={(size) => {
-                setLogsPerPage(size);
-                setLogsPage(1);
-              }}
-            />
-          </>
-        )}
+        <DataTable
+          className="mt-4"
+          mode="server"
+          caption="Report log"
+          columns={columns}
+          rows={logs}
+          filterState={tableQuery.state}
+          onFilterStateChange={tableQuery.setState}
+          getRowId={(row) => row.id}
+          emptyTitle="No exports yet"
+          emptyDescription="Generate a business or user report to see it listed here."
+          pagination={{
+            page: logsPage,
+            perPage: logsPerPage,
+            total: logsMeta.total,
+            onPageChange: setLogsPage,
+            onPerPageChange: (size) => {
+              setLogsPerPage(size);
+              setLogsPage(1);
+            },
+          }}
+        />
       </section>
 
       <ConfirmDialog

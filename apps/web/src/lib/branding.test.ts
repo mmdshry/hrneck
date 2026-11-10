@@ -33,6 +33,8 @@ describe("branding helpers", () => {
     applyPrimaryColor("#0f766e");
     expect(setProperty).toHaveBeenCalledWith("--primary", "#0f766e");
     expect(setProperty).toHaveBeenCalledWith("--ring", "#0f766e");
+    expect(setProperty).not.toHaveBeenCalledWith("--brand", expect.anything());
+    expect(setProperty).not.toHaveBeenCalledWith("--spark", expect.anything());
 
     applyPrimaryColor("nope");
     expect(removeProperty).toHaveBeenCalledWith("--primary");

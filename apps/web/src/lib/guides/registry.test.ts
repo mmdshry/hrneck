@@ -25,6 +25,25 @@ describe("guides registry", () => {
     expect(hits.some((guide) => guide.slug === "settings")).toBe(true);
   });
 
+  it("searches section and step bodies", () => {
+    expect(searchGuides("imap").some((guide) => guide.slug === "ticketing")).toBe(
+      true,
+    );
+    expect(
+      searchGuides("exit tenant").some((guide) => guide.slug === "msp"),
+    ).toBe(true);
+    expect(
+      searchGuides("/learn").some((guide) => guide.slug === "learner-portal"),
+    ).toBe(true);
+  });
+
+  it("includes the new surface guides", () => {
+    expect(getGuide("learner-portal")?.title).toMatch(/Learner/i);
+    expect(getGuide("service-portal")?.title).toMatch(/Service portal/i);
+    expect(getGuide("msp")?.title).toMatch(/MSP/i);
+    expect(getGuide("auth")?.title).toMatch(/Sign-in|MFA|password/i);
+  });
+
   it("builds guide hrefs", () => {
     expect(guideHref("getting-started")).toBe("/docs/getting-started");
     expect(getGuide("missing")).toBeUndefined();

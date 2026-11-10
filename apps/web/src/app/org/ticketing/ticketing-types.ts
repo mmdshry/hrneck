@@ -15,7 +15,8 @@ export type SdDesk = {
   }>;
   statuses?: Array<{ id: number; name: string; slug: string; is_closed: boolean }>;
   priorities?: Array<{ id: number; name: string; slug: string; weight: number }>;
-  categories?: Array<{ id: number; name: string; slug: string }>;
+  severities?: Array<{ id: number; name: string; slug: string }>;
+  categories?: Array<{ id: number; name: string; slug: string; parent_id?: number | null }>;
   procedures?: Array<{
     id: number;
     name: string;
@@ -73,6 +74,12 @@ export type SdTicket = {
     related_type: string;
     related_id: number;
     link_type: string;
+  }>;
+  attachments?: Array<{
+    id: number;
+    original_name: string;
+    mime?: string | null;
+    size?: number;
   }>;
   created_at?: string;
 };

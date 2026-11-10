@@ -1,5 +1,7 @@
 import { SearchClient } from "./search-client";
 
+export const instant = false;
+
 export const metadata = {
   title: "Search all",
   description: "Search tickets and knowledge base articles.",

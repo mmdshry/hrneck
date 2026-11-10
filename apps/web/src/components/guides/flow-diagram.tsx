@@ -39,7 +39,7 @@ export function FlowDiagram({
   return (
     <figure
       className={cn(
-        "overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--card)] p-4",
+        "overflow-x-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4",
         className,
       )}
     >

@@ -1,8 +1,12 @@
 import { announcementsNotificationsGuide } from "@/lib/guides/content/announcements-notifications";
+import { authGuide } from "@/lib/guides/content/auth";
 import { checklistsGuide } from "@/lib/guides/content/checklists";
 import { dashboardGuide } from "@/lib/guides/content/dashboard";
 import { gettingStartedGuide } from "@/lib/guides/content/getting-started";
+import { learnerPortalGuide } from "@/lib/guides/content/learner-portal";
+import { mspGuide } from "@/lib/guides/content/msp";
 import { reportingGuide } from "@/lib/guides/content/reporting";
+import { servicePortalGuide } from "@/lib/guides/content/service-portal";
 import { settingsGuide } from "@/lib/guides/content/settings";
 import { targetsGroupsGuide } from "@/lib/guides/content/targets-groups";
 import { ticketingGuide } from "@/lib/guides/content/ticketing";
@@ -25,6 +29,10 @@ const GUIDES: GuideModule[] = [
   usersRolesGuide,
   announcementsNotificationsGuide,
   settingsGuide,
+  learnerPortalGuide,
+  servicePortalGuide,
+  mspGuide,
+  authGuide,
 ];
 
 const BY_SLUG = new Map<GuideSlug, GuideModule>(
@@ -66,11 +74,18 @@ export function searchGuides(query: string): GuideModule[] {
     return GUIDES;
   }
   return GUIDES.filter((guide) => {
+    const sectionText = (guide.sections ?? []).flatMap((section) => [
+      section.title,
+      section.body ?? "",
+      ...section.steps.flatMap((step) => [step.title, step.body]),
+    ]);
     const haystack = [
       guide.title,
       guide.summary,
       guide.overview,
       ...guide.keywords,
+      ...guide.steps.flatMap((step) => [step.title, step.body]),
+      ...sectionText,
     ]
       .join(" ")
       .toLowerCase();

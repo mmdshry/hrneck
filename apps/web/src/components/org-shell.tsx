@@ -10,6 +10,7 @@ import {
   Download,
   KeyRound,
   LayoutDashboard,
+  Layers,
   LogIn,
   LogOut,
   Megaphone,
@@ -18,7 +19,9 @@ import {
   Target,
   Ticket,
   GraduationCap,
+  Library,
   Users,
+  UsersRound,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -30,11 +33,16 @@ import {
   type ReactNode,
 } from "react";
 import { BrandMark } from "@/components/brand-mark";
+import { OrgMembershipGate } from "@/components/org-membership-gate";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
-import { api, ensureCsrf, fetchSessionUser } from "@/lib/api";
-import type { SessionUser } from "@/lib/session";
+import { api, ensureCsrf, fetchSessionUser, signOut as apiSignOut } from "@/lib/api";
+import {
+  hasPermission,
+  matchOrgMembership,
+  type SessionUser,
+} from "@/lib/session";
 import { clearTenant, resolveTenant, setTenant } from "@/lib/tenant";
 import { cn } from "@/lib/utils";
 
@@ -51,9 +59,12 @@ const NAV: NavItem[] = [
   { href: "/org", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { href: "/msp", label: "Organizations", icon: Building2, exact: true, platformOnly: true },
   { href: "/org/training", label: "Training", icon: GraduationCap, permission: "org.training.manage" },
+  { href: "/org/courses", label: "Courses", icon: Library, permission: "org.training.manage" },
   { href: "/org/checklists", label: "Checklists", icon: ClipboardList, permission: "org.checklists.manage" },
   { href: "/org/ticketing", label: "Ticketing", icon: Ticket, permission: "org.ticketing.tickets" },
-  { href: "/org/targets", label: "Targets & Groups", icon: Target, permission: "org.targets.manage" },
+  { href: "/org/targets", label: "Employees", icon: Target, permission: "org.targets.manage" },
+  { href: "/org/departments", label: "Departments", icon: Layers, permission: "org.departments.manage" },
+  { href: "/org/groups", label: "Groups", icon: UsersRound, permission: "org.groups.manage" },
   { href: "/org/users", label: "Users", icon: Users, permission: "org.users.manage" },
   { href: "/org/roles", label: "Roles", icon: KeyRound, permission: "org.roles.manage" },
   { href: "/org/reports", label: "Reporting", icon: BarChart3, permission: "org.reports.view" },
@@ -71,10 +82,7 @@ function visibleNav(user: SessionUser | null): NavItem[] {
     if (!item.permission) {
       return true;
     }
-    if (!user) {
-      return false;
-    }
-    return user.permissions.includes(item.permission);
+    return hasPermission(user, item.permission);
   });
 }
 
@@ -122,9 +130,9 @@ function NavLinks({
             aria-current={active ? "page" : undefined}
             onClick={onNavigate}
             className={cn(
-              "flex min-h-11 items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm transition-colors duration-[var(--motion)]",
+              "flex min-h-11 items-center gap-2.5 rounded-[var(--radius)] px-3 py-2.5 text-sm transition-colors duration-[var(--motion)]",
               active
-                ? "bg-[var(--accent)] font-medium text-[var(--accent-foreground)] shadow-[var(--shadow-sm)]"
+                ? "bg-[var(--primary)] font-medium text-[var(--primary-foreground)] shadow-[var(--shadow-sm)]"
                 : "text-[var(--foreground)] hover:bg-[var(--muted)]",
             )}
           >
@@ -185,7 +193,7 @@ function AuthFooter({
         <Link
           href="/login"
           onClick={onNavigate}
-          className="flex min-h-11 items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-[var(--foreground)] hover:bg-[var(--muted)]"
+          className="flex min-h-11 items-center gap-2.5 rounded-[var(--radius)] px-3 py-2.5 text-sm text-[var(--foreground)] hover:bg-[var(--muted)]"
         >
           <LogIn className="h-4 w-4 shrink-0" aria-hidden />
           Sign in
@@ -197,16 +205,29 @@ function AuthFooter({
 
 export function OrgShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const tenant = resolveTenant();
   const [user, setUser] = useState<SessionUser | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
+  const [leavingTenant, setLeavingTenant] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [navPathname, setNavPathname] = useState(pathname);
+  // Prefer session tenant on SSR; resolve host/query only after mount to avoid hydration mismatch.
+  const [tenant, setResolvedTenant] = useState<string>("");
   const drawerTitleId = useId();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const preferredTenant = user?.staff_tenant_id ?? user?.tenant_id ?? null;
   const navItems = visibleNav(user);
+  const actingInTenant = Boolean(user?.acting_in_tenant && user.staff_tenant_id);
+  const membership = user && tenant ? matchOrgMembership(user, tenant) : null;
+  const isDocsRoute = pathname === "/docs" || pathname.startsWith("/docs/");
+  const isOrgRoute = pathname === "/org" || pathname.startsWith("/org/");
+  // Hard gate is org-workspace only; /msp must stay reachable so staff can enter.
+  const membershipDenied =
+    isOrgRoute && authChecked && user && membership && membership.ok === false
+      ? membership
+      : null;
 
   if (navPathname !== pathname) {
     setNavPathname(pathname);
@@ -216,18 +237,30 @@ export function OrgShell({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    void fetchSessionUser().then((sessionUser) => {
-      setUser(sessionUser);
-      setUserEmail(sessionUser?.email ?? null);
-      setAuthChecked(true);
-      if (sessionUser?.tenant_id) {
-        setTenant(sessionUser.tenant_id);
-      }
-    });
+    setResolvedTenant(resolveTenant(preferredTenant));
+  }, [preferredTenant, pathname]);
+
+  useEffect(() => {
+    void fetchSessionUser()
+      .then((sessionUser) => {
+        setUser(sessionUser);
+        setUserEmail(sessionUser?.email ?? null);
+        setAuthError(null);
+        setAuthChecked(true);
+        if (sessionUser?.staff_tenant_id) {
+          setTenant(sessionUser.staff_tenant_id);
+        } else if (sessionUser?.tenant_id) {
+          setTenant(sessionUser.tenant_id);
+        }
+      })
+      .catch((err) => {
+        setAuthError(err instanceof Error ? err.message : "Unable to verify session");
+        setAuthChecked(true);
+      });
   }, [pathname]);
 
   useEffect(() => {
-    if (!authChecked || user) {
+    if (!authChecked || user || authError) {
       return;
     }
     // Guides stay public; MSP/org require a session (API already enforces this).
@@ -236,7 +269,7 @@ export function OrgShell({ children }: { children: ReactNode }) {
     }
     const next = encodeURIComponent(pathname || "/org");
     window.location.replace(`/login?next=${next}`);
-  }, [authChecked, user, pathname]);
+  }, [authChecked, user, pathname, authError]);
 
   useEffect(() => {
     if (!mobileOpen) {
@@ -259,20 +292,30 @@ export function OrgShell({ children }: { children: ReactNode }) {
     };
   }, [mobileOpen]);
 
+  async function leaveTenantContext() {
+    setLeavingTenant(true);
+    try {
+      await ensureCsrf();
+      await api("/api/v1/msp/tenants/leave", { method: "POST" });
+      clearTenant();
+      window.location.assign("/msp");
+    } catch {
+      setLeavingTenant(false);
+    }
+  }
+
   async function signOut() {
     setSigningOut(true);
     try {
-      await ensureCsrf();
-      await api("/api/v1/auth/logout", { method: "POST" });
-    } catch {
-      /* already signed out */
-    } finally {
+      await apiSignOut();
       setUser(null);
       setUserEmail(null);
       clearTenant();
-      setSigningOut(false);
       setMobileOpen(false);
       window.location.replace("/login");
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : "Sign out failed");
+      setSigningOut(false);
     }
   }
 
@@ -315,8 +358,8 @@ export function OrgShell({ children }: { children: ReactNode }) {
             </p>
           </div>
           <div className="hidden min-w-0 md:block">
-            <p className="text-xs font-medium uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
-              {tenant}
+            <p className="truncate text-xs font-medium uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
+              {user?.name?.trim() || userEmail || ""}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -336,7 +379,41 @@ export function OrgShell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        {children}
+        {actingInTenant ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--muted)] px-4 py-2 text-sm">
+            <p>
+              Viewing as platform staff in <strong>{user?.staff_tenant_id}</strong>
+            </p>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={leavingTenant}
+              onClick={() => void leaveTenantContext()}
+            >
+              {leavingTenant ? "Leaving…" : "Exit tenant"}
+            </Button>
+          </div>
+        ) : null}
+
+        {authError ? (
+          <div className="border-b border-[var(--border)] px-4 py-3 text-sm text-[#991b1b]">
+            {authError}
+          </div>
+        ) : null}
+
+        {membershipDenied ? (
+          <OrgMembershipGate
+            denial={membershipDenied}
+            currentTenant={tenant}
+            pathname={pathname}
+            search={
+              typeof window !== "undefined" ? window.location.search : ""
+            }
+          />
+        ) : isDocsRoute || (authChecked && user) ? (
+          children
+        ) : null}
       </div>
 
       {mobileOpen ? (

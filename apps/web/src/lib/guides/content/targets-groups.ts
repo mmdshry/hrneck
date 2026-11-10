@@ -2,61 +2,85 @@ import type { GuideModule } from "@/lib/guides/types";
 
 export const targetsGroupsGuide: GuideModule = {
   slug: "targets-groups",
-  title: "Targets & groups",
+  title: "Employees, departments & groups",
   summary:
-    "Build the employee audience with CRUD, CSV import, groups, risk scores, and directory sync.",
-  keywords: ["targets", "groups", "csv", "directory", "entra", "audience", "risk"],
+    "Build the employee audience with CRUD, CSV import, departments, groups, risk scores, and directory sync.",
+  keywords: [
+    "employees",
+    "targets",
+    "departments",
+    "groups",
+    "csv",
+    "directory",
+    "entra",
+    "audience",
+    "risk",
+  ],
   openInAppHref: "/org/targets",
   overview:
-    "Targets are employees in the training and checklist audience—they are not RBAC users. Group them by department, import via CSV, run mock Entra/Google directory sync until live credentials exist, and review risk scores before launching campaigns.",
+    "Employees are the training and checklist audience—they are not RBAC users. Manage employees on Employees (CSV and directory sync), open an employee profile to see connected checklists, keep departments as a managed list for forms, then organize them into Groups with a member picker so campaigns can address whole departments. Published checklist packs with auto-assign create instances when a new employee is added.",
   example: {
     title: "Finance CSV import before Q4",
     narrative:
-      "Priya uploads finance-q4.csv (186 rows), maps department to the Finance group, runs directory sync to catch leavers, and flags two High risk targets for mandatory training.",
+      "Priya uploads finance-q4.csv (186 rows) on Employees, creates a Finance department and group, selects members, runs directory sync to catch leavers, and opens a new hire profile to confirm the Welcome Pack checklists were auto-assigned.",
   },
   steps: [
     {
-      title: "Open Targets & Groups",
-      body: "Manage people, departments, and sync from the Targets workspace.",
+      title: "Open Employees",
+      body: "Import employees, review risk scores, and run directory sync from the Employees workspace.",
       href: "/org/targets",
     },
     {
-      title: "Create or import targets",
-      body: "Add individuals manually or upload a CSV with email, name, and department columns.",
+      title: "Manage departments",
+      body: "Create and maintain departments on the Departments page, then select them when adding or importing employees.",
+      href: "/org/departments",
     },
     {
-      title: "Organize groups",
-      body: "Attach targets to groups so campaigns and assignments can target whole departments.",
+      title: "Create or import employees",
+      body: "Add a single person with Add employee, upload a CSV with email, name, and department columns, or run mock directory sync. Auto-assign packs attach onboarding checklists to new rows.",
+    },
+    {
+      title: "Open an employee profile",
+      body: "Use Open on a row to review connected checklists and connect a template or pack from the profile.",
+    },
+    {
+      title: "Open Groups",
+      body: "Create audience groups separately from the employee list.",
+      href: "/org/groups",
+    },
+    {
+      title: "Pick members in the group modal",
+      body: "Name the group and select employees with the member picker so campaigns can target whole departments.",
     },
     {
       title: "Run directory sync",
-      body: "Use the mock Entra/Google sync to refresh users and groups before a campaign. Live Graph credentials come later.",
-    },
-    {
-      title: "Review risk scores",
-      body: "Sort by risk to prioritize high-risk employees in the next training wave.",
+      body: "Use the mock Entra/Google sync on Employees to refresh users and groups before a campaign. Live Graph credentials come later.",
+      href: "/org/targets",
     },
   ],
   diagram: {
     title: "Audience preparation flow",
     nodes: [
       { id: "csv", label: "CSV / CRUD" },
+      { id: "depts", label: "Departments" },
       { id: "sync", label: "Directory sync" },
       { id: "groups", label: "Groups" },
       { id: "risk", label: "Risk scores" },
       { id: "ready", label: "Campaign-ready" },
     ],
     edges: [
-      { from: "csv", to: "groups" },
+      { from: "csv", to: "depts" },
+      { from: "depts", to: "groups" },
       { from: "sync", to: "groups" },
       { from: "groups", to: "risk" },
       { from: "risk", to: "ready" },
     ],
   },
   mock: {
-    chromeTitle: "Acme · Targets & Groups",
+    chromeTitle: "Acme · Employees",
     stats: [
-      { label: "Targets", value: "186" },
+      { label: "Employees", value: "186" },
+      { label: "Departments", value: "6" },
       { label: "Groups", value: "8" },
       { label: "High risk", value: "2" },
     ],
@@ -71,7 +95,7 @@ export const targetsGroupsGuide: GuideModule = {
       { title: "ops-all", meta: "Group · 64 members" },
     ],
     annotations: [
-      { label: "CSV", note: "Import validates emails before creating targets." },
+      { label: "CSV", note: "Import validates emails and creates departments by name when needed." },
       { label: "Sync", note: "Mock drivers return fixture users until cloud creds exist." },
     ],
   },

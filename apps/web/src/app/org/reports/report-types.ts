@@ -25,10 +25,68 @@ export type PaginationMeta = {
   total: number;
 };
 
-export type CampaignSummary = Record<string, number>;
+export type CampaignSummary = {
+  campaigns: number;
+  campaigns_running: number;
+  recipients: number;
+  opened: number;
+  completed: number;
+  no_action: number;
+  opened_pct: number;
+  completed_pct: number;
+  no_action_pct: number;
+  enrollments: number;
+  active_employees: number;
+};
+
+export type StatusSegments = Record<string, number>;
+
+export type TrainingBlock = {
+  assigned: number;
+  in_progress: number;
+  completed: number;
+  total: number;
+  completion_rate: number;
+  by_status: StatusSegments;
+  segments: StatusSegments;
+};
+
+export type ChecklistsBlock = {
+  open: number;
+  completed: number;
+  total: number;
+  completion_rate: number;
+  by_status: StatusSegments;
+  segments: StatusSegments;
+};
+
+export type TicketingBlock = {
+  open: number;
+  resolved: number;
+  sla_response_breached: number;
+  sla_resolve_breached: number;
+  segments: StatusSegments;
+};
+
+export type CampaignsPeopleBlock = {
+  campaigns_running: number;
+  opened_pct: number;
+  completed_pct: number;
+  no_action_pct: number;
+  active_employees: number;
+  segments: StatusSegments;
+};
+
+export type OverviewBlocks = {
+  training: TrainingBlock;
+  checklists: ChecklistsBlock;
+  ticketing: TicketingBlock;
+  campaigns_people: CampaignsPeopleBlock;
+};
 
 export type DetailedOverview = {
   campaign: CampaignSummary;
+  blocks: OverviewBlocks;
   counts: {
     users: number;
     targets: number;
@@ -61,8 +119,11 @@ export type CompanyPayload = {
     targets: number;
     sent: number;
     opened: number;
-    clicked: number;
-    click_rate: number;
+    completed: number;
+    no_action: number;
+    opened_pct: number;
+    completed_pct: number;
+    no_action_pct: number;
   }>;
   by_group: Array<{
     id: number;
@@ -86,6 +147,12 @@ export type TicketingSummary = {
   by_desk: Record<string, number>;
 };
 
+export type ReportSharedFilters = {
+  department_id?: string;
+  from?: string;
+  to?: string;
+};
+
 export type SectionResponse<T> = {
   section: string;
   data: T[] | CompanyPayload;
@@ -97,7 +164,7 @@ export const REPORT_TABS: Array<{ id: ReportTab; label: string }> = [
   { id: "overview", label: "Overview" },
   { id: "company", label: "Company" },
   { id: "users", label: "Users" },
-  { id: "targets", label: "People" },
+  { id: "targets", label: "Employees" },
   { id: "campaigns", label: "Campaigns" },
   { id: "training", label: "Training" },
   { id: "checklists", label: "Checklists" },

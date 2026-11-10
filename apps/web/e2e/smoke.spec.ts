@@ -62,5 +62,16 @@ test.describe("HRNECK smoke", () => {
     await page.goto("/org/settings");
     await expect(page).toHaveURL(/\/login/);
   });
+
+  test("training and learn pages have no Refresh buttons", async ({ page }) => {
+    await page.goto("/org/training");
+    await expect(page.getByRole("button", { name: /^Refresh$/i })).toHaveCount(0);
+    await page.goto("/org/courses");
+    await expect(page.getByRole("button", { name: /^Refresh$/i })).toHaveCount(0);
+    await page.goto("/learn");
+    await expect(
+      page.getByRole("button", { name: /Refresh assignments/i }),
+    ).toHaveCount(0);
+  });
 });
 

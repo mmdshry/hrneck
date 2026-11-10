@@ -1,14 +1,13 @@
 "use client";
 
-import { Menu, ShieldAlert, X } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { HrneckWordmark } from "@/components/hrneck-wordmark";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { LinkButton } from "@/components/ui/link-button";
 import { cn } from "@/lib/utils";
-
-const brand = process.env.NEXT_PUBLIC_BRAND_SHORT ?? "HRNECK";
 
 const ANCHORS = [
   { href: "#how-it-works", label: "How it works" },
@@ -23,17 +22,8 @@ export function LandingHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-[var(--border)] bg-[var(--background)]/95">
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-6 py-4">
-        <Link
-          href="/"
-          className="flex items-center gap-2 font-[family-name:var(--font-display)] text-xl tracking-tight text-[var(--foreground)]"
-        >
-          <span
-            className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--accent)] text-[var(--accent-foreground)]"
-            aria-hidden
-          >
-            <ShieldAlert className="h-4 w-4" strokeWidth={2.25} />
-          </span>
-          {brand}
+        <Link href="/" aria-label="HRneck" className="inline-flex">
+          <HrneckWordmark labelled={false} className="h-8" />
         </Link>
 
         <nav
@@ -44,7 +34,7 @@ export function LandingHeader() {
             <a
               key={item.href}
               href={item.href}
-              className="rounded-xl px-3 py-2.5 text-sm text-[var(--muted-foreground)] transition-colors duration-[var(--motion)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+              className="rounded-[var(--radius)] px-3 py-2.5 text-sm text-[var(--muted-foreground)] transition-colors duration-[var(--motion)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
             >
               {item.label}
             </a>
@@ -98,7 +88,7 @@ export function LandingHeader() {
             <a
               key={item.href}
               href={item.href}
-              className="rounded-xl px-3 py-2.5 text-sm text-[var(--foreground)] hover:bg-[var(--muted)]"
+              className="rounded-[var(--radius)] px-3 py-2.5 text-sm text-[var(--foreground)] hover:bg-[var(--muted)]"
               onClick={() => setOpen(false)}
             >
               {item.label}

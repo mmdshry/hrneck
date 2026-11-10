@@ -38,10 +38,10 @@ export function GuidesHub() {
     <div className="space-y-10">
       <PageHeader
         title="Guides"
-        description="Illustrated operator guides for every org-admin capability—diagrams, annotated mock screens, and real scenarios. No live API calls."
+        description="Illustrated guides for org operators, learners, the service portal, and MSP staff—diagrams, annotated mock screens, and real scenarios. No live API calls."
         actions={
           <span
-            className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--muted)] text-[var(--primary)]"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-[var(--radius)] bg-[var(--muted)] text-[var(--primary)]"
             aria-hidden
           >
             <HubIcon className="h-5 w-5" />
@@ -107,7 +107,7 @@ export function GuidesHub() {
         </div>
         {guides.length === 0 ? (
           <p className="text-sm text-[var(--muted-foreground)]">
-            No guides match “{query}”. Try training, checklist, or SMTP.
+            No guides match “{query}”. Try training, portal, MFA, or SMTP.
           </p>
         ) : (
           <ul className="grid gap-3 sm:grid-cols-2">

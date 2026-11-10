@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Bell } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLiveTopic } from "@/hooks/use-live-topic";
 import { api, ensureCsrf, fetchSessionUser } from "@/lib/api";
 import { getEcho } from "@/lib/echo";
+import { notificationsLiveChannel } from "@/lib/live-topics";
 import {
   type NotificationsResponse,
   type UserNotificationItem,
@@ -14,8 +16,12 @@ import { resolveTenant } from "@/lib/tenant";
 import { toastNotification } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
-const POLL_MS = 45_000;
 const INBOX_PATH = "/org/notifications";
+
+type NotificationsLivePayload = {
+  data?: UserNotificationItem[];
+  meta?: { unread_count?: number; total?: number };
+};
 
 type NotificationBellProps = {
   className?: string;
@@ -32,37 +38,50 @@ export function NotificationBell({
   const [tenant, setTenant] = useState<string | null>(null);
   const onInbox = pathname === INBOX_PATH || pathname.startsWith(`${INBOX_PATH}/`);
 
-  const loadUnread = useCallback(async () => {
-    try {
-      await ensureCsrf();
-      const session = await fetchSessionUser();
-      if (!session) {
-        setUnread(0);
-        setUserId(null);
-        return;
-      }
-      setUserId(session.id);
-      const t = resolveTenant() || session.tenant_id;
-      if (!t) return;
-      setTenant(t);
-      const res = await api<NotificationsResponse>("/api/v1/org/notifications?per_page=1", {
-        tenant: t,
-      });
-      setUnread(res.meta.unread_count);
-    } catch {
-      /* keep last good state */
+  const channel = useMemo(
+    () =>
+      tenant && userId !== null
+        ? notificationsLiveChannel(tenant, userId)
+        : null,
+    [tenant, userId],
+  );
+
+  const onPayload = useCallback((payload: NotificationsLivePayload) => {
+    const count = payload.meta?.unread_count;
+    if (typeof count === "number") {
+      setUnread(count);
     }
   }, []);
 
+  useLiveTopic<NotificationsLivePayload>({
+    channel,
+    onPayload,
+  });
+
   useEffect(() => {
-    void loadUnread();
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible") {
-        void loadUnread();
+    void (async () => {
+      try {
+        await ensureCsrf();
+        const session = await fetchSessionUser();
+        if (!session) {
+          setUnread(0);
+          setUserId(null);
+          return;
+        }
+        setUserId(session.id);
+        const t = resolveTenant() || session.tenant_id;
+        if (!t) return;
+        setTenant(t);
+        const res = await api<NotificationsResponse>(
+          "/api/v1/org/notifications?per_page=1",
+          { tenant: t },
+        );
+        setUnread(res.meta.unread_count);
+      } catch {
+        /* keep last good state */
       }
-    }, POLL_MS);
-    return () => window.clearInterval(timer);
-  }, [loadUnread, pathname]);
+    })();
+  }, [pathname]);
 
   useEffect(() => {
     if (!userId || !tenant) return;
@@ -74,17 +93,23 @@ export function NotificationBell({
         try {
           const echo = await getEcho();
           if (cancelled) return;
-          channelName = `org.${tenant}.notifications.${userId}`;
+          channelName = notificationsLiveChannel(tenant, userId);
           const sub = echo.private(channelName);
-          sub.listen(".notification.created", (payload: { data?: UserNotificationItem }) => {
-            if (cancelled || !payload?.data) return;
-            setUnread((n) => n + 1);
-            if (!onInbox && document.visibilityState === "visible") {
-              toastNotification(payload.data.title, payload.data.body ?? undefined);
-            }
-          });
+          sub.listen(
+            ".notification.created",
+            (payload: { data?: UserNotificationItem }) => {
+              if (cancelled || !payload?.data) return;
+              setUnread((n) => n + 1);
+              if (!onInbox && document.visibilityState === "visible") {
+                toastNotification(
+                  payload.data.title,
+                  payload.data.body ?? undefined,
+                );
+              }
+            },
+          );
         } catch {
-          /* polling covers unread */
+          /* live topic snapshot/updated still covers unread */
         }
       })();
     }, 1500);
@@ -114,8 +139,8 @@ export function NotificationBell({
         aria-label="Notifications"
         aria-current={onInbox ? "page" : undefined}
         className={cn(
-          "relative inline-flex h-11 w-11 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] shadow-[var(--shadow-sm)] transition-colors duration-[var(--motion)] hover:bg-[var(--muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]",
-          onInbox && "border-[var(--accent)] ring-1 ring-[var(--accent)]",
+          "relative inline-flex h-11 w-11 items-center justify-center rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] shadow-[var(--shadow-sm)] transition-colors duration-[var(--motion)] hover:bg-[var(--muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]",
+          onInbox && "border-[var(--primary)] ring-1 ring-[var(--primary)]",
         )}
       >
         <Bell className="h-5 w-5" aria-hidden />

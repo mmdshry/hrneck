@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useBranding } from "@/components/branding-provider";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/ui/empty-state";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LinkButton } from "@/components/ui/link-button";
@@ -20,6 +20,38 @@ type Guidance = {
   domain: string;
   records: { type: string; host: string; value: string; purpose: string }[];
 };
+
+type DnsRecord = Guidance["records"][number];
+
+const dnsColumns: Array<DataTableColumn<DnsRecord>> = [
+  {
+    id: "type",
+    header: "Type",
+    accessorKey: "type",
+    sticky: true,
+    cell: (record) => record.type,
+  },
+  {
+    id: "host",
+    header: "Host",
+    accessorKey: "host",
+    cell: (record) => record.host,
+  },
+  {
+    id: "value",
+    header: "Value",
+    accessorKey: "value",
+    className: "max-w-md break-all",
+    cell: (record) => record.value,
+  },
+  {
+    id: "purpose",
+    header: "Purpose",
+    accessorKey: "purpose",
+    className: "max-w-sm",
+    cell: (record) => record.purpose,
+  },
+];
 
 type OrgSettings = {
   display_name?: string | null;
@@ -42,10 +74,13 @@ export function SettingsClient() {
   const { logoUrl, refresh: refreshBranding } = useBranding();
   const [session, setSession] = useState<SessionUser | null>(null);
   const [displayName, setDisplayName] = useState("");
-  const [primaryColor, setPrimaryColor] = useState("#0f766e");
+  const [primaryColor, setPrimaryColor] = useState("#083a6d");
+  const [timezone, setTimezone] = useState("UTC");
+  const [webhookUrl, setWebhookUrl] = useState("");
   const [sendingDomain, setSendingDomain] = useState("");
   const [guidance, setGuidance] = useState<Guidance | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [testingWebhook, setTestingWebhook] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -66,8 +101,10 @@ export function SettingsClient() {
         const row = settings.data;
         if (row) {
           setDisplayName(row.display_name ?? "");
-          setPrimaryColor(row.primary_color ?? "#0f766e");
+          setPrimaryColor(row.primary_color ?? "#083a6d");
+          setTimezone(row.timezone ?? "UTC");
           setSendingDomain(row.meta?.sending_domain ?? "");
+          setWebhookUrl(row.meta?.webhook_url ?? "");
         }
         setGuidance(domains.data.guidance);
       } catch (err) {
@@ -90,14 +127,18 @@ export function SettingsClient() {
         body: JSON.stringify({
           display_name: displayName,
           primary_color: primaryColor,
+          timezone: timezone.trim() || "UTC",
           sending_domain: sendingDomain,
+          webhook_url: webhookUrl.trim() || null,
         }),
       });
       const row = saved.data;
       if (row) {
         setDisplayName(row.display_name ?? "");
-        setPrimaryColor(row.primary_color ?? "#0f766e");
+        setPrimaryColor(row.primary_color ?? "#083a6d");
+        setTimezone(row.timezone ?? "UTC");
         setSendingDomain(row.meta?.sending_domain ?? "");
+        setWebhookUrl(row.meta?.webhook_url ?? "");
         applyPrimaryColor(row.primary_color);
       }
       const domains = await api<{ data: { guidance: Guidance | null } }>(
@@ -109,6 +150,29 @@ export function SettingsClient() {
       toastSuccess("White-label and sending domain saved.");
     } catch (err) {
       notifyResult(err instanceof Error ? err.message : "Save failed");
+    }
+  }
+
+  async function onTestWebhook() {
+    setTestingWebhook(true);
+    try {
+      await ensureCsrf();
+      const tenant = resolveTenant();
+      await api("/api/v1/org/webhooks/test", {
+        method: "POST",
+        tenant,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: webhookUrl.trim() || undefined,
+          event: "settings.webhook_test",
+          payload: { source: "org.settings" },
+        }),
+      });
+      toastSuccess("Test webhook queued.");
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : "Webhook test failed");
+    } finally {
+      setTestingWebhook(false);
     }
   }
 
@@ -150,7 +214,7 @@ export function SettingsClient() {
     );
   }
 
-  const previewColor = isValidHexColor(primaryColor) ? primaryColor : "#0f766e";
+  const previewColor = isValidHexColor(primaryColor) ? primaryColor : "#083a6d";
 
   return (
     <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-8 sm:px-6">
@@ -180,6 +244,10 @@ export function SettingsClient() {
           <Label htmlFor="settings-primary-color" className="text-[var(--muted-foreground)]">
             Primary color
           </Label>
+          <p className="text-sm text-[var(--muted-foreground)]">
+            Tints buttons, links, the active navigation item, and the focus ring.
+            The HRneck mark stays navy and orange.
+          </p>
           <div className="flex flex-wrap items-center gap-3">
             <input
               type="color"
@@ -235,6 +303,40 @@ export function SettingsClient() {
           </div>
         </div>
         <div className="space-y-1">
+          <Label htmlFor="settings-timezone" className="text-[var(--muted-foreground)]">
+            Timezone
+          </Label>
+          <Input
+            id="settings-timezone"
+            value={timezone}
+            onChange={(e) => setTimezone(e.target.value)}
+            placeholder="UTC"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="settings-webhook-url" className="text-[var(--muted-foreground)]">
+            Webhook URL
+          </Label>
+          <div className="flex flex-wrap gap-2">
+            <Input
+              id="settings-webhook-url"
+              type="url"
+              value={webhookUrl}
+              onChange={(e) => setWebhookUrl(e.target.value)}
+              placeholder="https://example.com/hooks/hrneck"
+              className="min-w-[16rem] flex-1"
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={testingWebhook}
+              onClick={() => void onTestWebhook()}
+            >
+              {testingWebhook ? "Sending…" : "Send test"}
+            </Button>
+          </div>
+        </div>
+        <div className="space-y-1">
           <Label htmlFor="settings-sending-domain" className="text-[var(--muted-foreground)]">
             Sending domain
           </Label>
@@ -249,25 +351,16 @@ export function SettingsClient() {
       {guidance ? (
         <section className="mt-10" aria-label="DNS guidance">
           <h2 className="text-xl font-medium text-[var(--foreground)]">DNS for {guidance.domain}</h2>
-          {guidance.records.length === 0 ? (
-            <EmptyState
-              className="mt-4"
-              title="No DNS records"
-              description="Guidance will appear when records are available from the API."
-            />
-          ) : (
-            <ul className="mt-4 divide-y divide-[var(--border)] border-y border-[var(--border)]">
-              {guidance.records.map((record) => (
-                <li key={`${record.type}-${record.host}`} className="py-3 text-sm">
-                  <p className="font-medium">
-                    {record.type} {record.host}
-                  </p>
-                  <p className="text-[var(--muted-foreground)]">{record.value}</p>
-                  <p className="mt-1 text-[var(--muted-foreground)]">{record.purpose}</p>
-                </li>
-              ))}
-            </ul>
-          )}
+          <DataTable
+            className="mt-4"
+            mode="client"
+            caption={`DNS records for ${guidance.domain}`}
+            columns={dnsColumns}
+            rows={guidance.records}
+            getRowId={(record) => `${record.type}-${record.host}-${record.value}`}
+            emptyTitle="No DNS records"
+            emptyDescription="Guidance will appear when records are available from the API."
+          />
         </section>
       ) : null}
     </div>

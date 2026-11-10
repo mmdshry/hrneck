@@ -9,6 +9,10 @@ export const GUIDE_SLUGS = [
   "users-roles",
   "announcements-notifications",
   "settings",
+  "learner-portal",
+  "service-portal",
+  "msp",
+  "auth",
 ] as const;
 
 export type GuideSlug = (typeof GUIDE_SLUGS)[number];
@@ -17,6 +21,12 @@ export type GuideStep = {
   title: string;
   body: string;
   href?: string;
+};
+
+export type GuideSection = {
+  title: string;
+  body?: string;
+  steps: GuideStep[];
 };
 
 export type GuideDiagramNode = {
@@ -77,6 +87,7 @@ export type GuideModule = {
   overview: string;
   example: GuideExample;
   steps: GuideStep[];
+  sections?: GuideSection[];
   diagram: GuideDiagram;
   mock: GuideMock;
   related: GuideSlug[];

@@ -1,5 +1,7 @@
 import { TicketDetailClient } from "./ticket-detail-client";
 
+export const instant = false;
+
 export const metadata = {
   title: "Ticket",
   description: "Ticket detail and workflow.",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -12,7 +12,9 @@ import { PageSkeleton } from "@/components/ui/page-skeleton";
 import { Panel } from "@/components/ui/panel";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { liveStatusLabel, useLiveTopic } from "@/hooks/use-live-topic";
 import { api, ensureCsrf } from "@/lib/api";
+import { orgLiveChannel } from "@/lib/live-topics";
 import { resolveTenant } from "@/lib/tenant";
 import {
   ITEM_TYPES,
@@ -23,6 +25,7 @@ import {
 } from "../checklist-types";
 
 export function ChecklistBuilderClient({ templateId }: { templateId: number }) {
+  const tenant = resolveTenant();
   const [template, setTemplate] = useState<ChecklistTemplate | null>(null);
   const [items, setItems] = useState<ChecklistItem[]>([]);
   const [name, setName] = useState("");
@@ -34,8 +37,23 @@ export function ChecklistBuilderClient({ templateId }: { templateId: number }) {
   const [saving, setSaving] = useState(false);
   const [showApplyDialog, setShowApplyDialog] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [liveEpoch, setLiveEpoch] = useState(0);
 
-  async function load() {
+  const channel = useMemo(
+    () => (tenant ? orgLiveChannel(tenant, "checklists") : null),
+    [tenant],
+  );
+
+  const onLivePayload = useCallback(() => {
+    setLiveEpoch((n) => n + 1);
+  }, []);
+
+  const { status: liveStatus } = useLiveTopic({
+    channel,
+    onPayload: onLivePayload,
+  });
+
+  const load = useCallback(async () => {
     await ensureCsrf();
     const res = await api<{ data: ChecklistTemplate }>(
       `/api/v1/org/checklists/templates/${templateId}`,
@@ -51,7 +69,7 @@ export function ChecklistBuilderClient({ templateId }: { templateId: number }) {
     );
     setItems(nextItems);
     setSelectedKey(nextItems[0]?.key ?? null);
-  }
+  }, [templateId]);
 
   useEffect(() => {
     setLoading(true);
@@ -60,7 +78,9 @@ export function ChecklistBuilderClient({ templateId }: { templateId: number }) {
         setMessage(err instanceof Error ? err.message : "Load failed");
       })
       .finally(() => setLoading(false));
-  }, [templateId]);
+  }, [templateId, liveEpoch, load]);
+
+  const statusLabel = liveStatusLabel(liveStatus);
 
   const selected = useMemo(
     () => items.find((i) => i.key === selectedKey) ?? null,
@@ -192,7 +212,7 @@ export function ChecklistBuilderClient({ templateId }: { templateId: number }) {
     <div className="mx-auto w-full max-w-5xl flex-1 space-y-4 px-4 py-8 sm:px-6">
       <PageHeader
         title="Checklist builder"
-        description={`${template.slug} · version ${template.current_version}`}
+        description={`${template.slug} · version ${template.current_version}${statusLabel ? ` · ${statusLabel}` : " · Live"}`}
         actions={
           <>
             <LinkButton href="/org/checklists" variant="secondary" size="sm">
@@ -254,7 +274,7 @@ export function ChecklistBuilderClient({ templateId }: { templateId: number }) {
                   onClick={() => setSelectedKey(item.key)}
                   className={`w-full rounded-lg px-2 py-2 text-left text-sm ${
                     selectedKey === item.key
-                      ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
+                      ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
                       : "hover:bg-[var(--muted)]"
                   }`}
                 >

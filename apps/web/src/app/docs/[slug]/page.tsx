@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { GuideArticle } from "@/components/guides/guide-article";
+import { PageSkeleton } from "@/components/ui/page-skeleton";
 import {
   getGuide,
   isGuideSlug,
@@ -29,7 +31,15 @@ export async function generateMetadata({
   };
 }
 
-export default async function DocsSlugPage({ params }: DocsSlugPageProps) {
+export default function DocsSlugPage({ params }: DocsSlugPageProps) {
+  return (
+    <Suspense fallback={<PageSkeleton variant="detail" />}>
+      <DocsSlugContent params={params} />
+    </Suspense>
+  );
+}
+
+async function DocsSlugContent({ params }: DocsSlugPageProps) {
   const { slug } = await params;
   if (!isGuideSlug(slug)) {
     notFound();

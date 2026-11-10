@@ -27,6 +27,7 @@ export const reportingGuide: GuideModule = {
     {
       title: "Schedule email reports",
       body: "Configure monthly, weekly, or quarterly cadences so stakeholders receive CSV automatically.",
+      href: "/org/reports",
     },
     {
       title: "Export quarterly PDF",

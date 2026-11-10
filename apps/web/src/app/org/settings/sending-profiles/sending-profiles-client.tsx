@@ -1,18 +1,19 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { EmptyState } from "@/components/ui/empty-state";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
-import { Pagination } from "@/components/ui/pagination";
+import { useDataTableQuery } from "@/hooks/use-data-table-query";
 import { liveStatusLabel, useLiveTopic } from "@/hooks/use-live-topic";
 import { api, ensureCsrf } from "@/lib/api";
+import { serializeDataTableQuery } from "@/lib/data-table-query";
 import {
   DEFAULT_PAGE_SIZE,
   emptyMeta,
@@ -50,6 +51,32 @@ function alertVariantForMessage(message: string): "destructive" | "success" | "d
   return "default";
 }
 
+function matchesCells(
+  q: string,
+  columnFilters: Record<string, string>,
+  cells: Record<string, string>,
+): boolean {
+  const needle = q.trim().toLowerCase();
+  if (needle && !Object.values(cells).join(" ").toLowerCase().includes(needle)) {
+    return false;
+  }
+  for (const [key, raw] of Object.entries(columnFilters)) {
+    const value = raw.trim().toLowerCase();
+    if (!value) continue;
+    if (!String(cells[key] ?? "").toLowerCase().includes(value)) return false;
+  }
+  return true;
+}
+
+function profileCells(profile: Profile): Record<string, string> {
+  return {
+    name: profile.name,
+    from_name: profile.from_name,
+    from_email: profile.from_email,
+    mailer: profile.mailer,
+  };
+}
+
 export function SendingProfilesClient() {
   const tenant = resolveTenant();
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -60,15 +87,32 @@ export function SendingProfilesClient() {
   const [name, setName] = useState("Default SMTP");
   const [fromName, setFromName] = useState("HRNECK");
   const [fromEmail, setFromEmail] = useState("noreply@hrneck.com");
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [pendingDelete, setPendingDelete] = useState<Profile | null>(null);
+  const tableQuery = useDataTableQuery();
+  const filters = useMemo(
+    () => serializeDataTableQuery(tableQuery.debounced),
+    [tableQuery.debounced],
+  );
+  const filtersKey = useMemo(() => JSON.stringify(filters), [filters]);
+  const filtersKeyRef = useRef(filtersKey);
 
   const channel = useMemo(() => `org.${tenant}.sending-profiles`, [tenant]);
 
   const applyLiveSlice = useCallback(
-    (items: Profile[], nextPage: number, nextPerPage: number) => {
-      const sliced = paginateLocal(items, nextPage, nextPerPage);
+    (
+      items: Profile[],
+      nextPage: number,
+      nextPerPage: number,
+      q: string,
+      columnFilters: Record<string, string>,
+    ) => {
+      const filtered = items.filter((profile) =>
+        matchesCells(q, columnFilters, profileCells(profile)),
+      );
+      const sliced = paginateLocal(filtered, nextPage, nextPerPage);
       setProfiles(sliced.data);
       setMeta(sliced.meta);
       setPage(sliced.meta.current_page);
@@ -81,19 +125,22 @@ export function SendingProfilesClient() {
     setLiveProfiles(items);
   }, []);
 
-  const refreshFromApi = useCallback(async (nextPage: number, nextPerPage: number) => {
-    await ensureCsrf();
-    const res = await api(
-      `/api/v1/org/sending-profiles?${paginationQuery(nextPage, nextPerPage)}`,
-      {
-        tenant: resolveTenant(),
-      },
-    );
-    const parsed = parsePaginatedResponse<Profile>(res, nextPerPage);
-    setProfiles(parsed.data);
-    setMeta(parsed.meta);
-    setPage(parsed.meta.current_page);
-  }, []);
+  const refreshFromApi = useCallback(
+    async (nextPage: number, nextPerPage: number, nextFilters: Record<string, string>) => {
+      await ensureCsrf();
+      const res = await api(
+        `/api/v1/org/sending-profiles?${paginationQuery(nextPage, nextPerPage, nextFilters)}`,
+        {
+          tenant: resolveTenant(),
+        },
+      );
+      const parsed = parsePaginatedResponse<Profile>(res, nextPerPage);
+      setProfiles(parsed.data);
+      setMeta(parsed.meta);
+      setPage(parsed.meta.current_page);
+    },
+    [],
+  );
 
   const { status, error: liveError } = useLiveTopic<ProfilesPayload>({
     channel,
@@ -101,38 +148,87 @@ export function SendingProfilesClient() {
   });
 
   useEffect(() => {
+    if (filtersKeyRef.current !== filtersKey) {
+      filtersKeyRef.current = filtersKey;
+      if (page !== 1) {
+        setPage(1);
+        return;
+      }
+    }
     if (liveProfiles !== null) {
-      applyLiveSlice(liveProfiles, page, perPage);
+      applyLiveSlice(
+        liveProfiles,
+        page,
+        perPage,
+        tableQuery.debounced.q,
+        tableQuery.debounced.columnFilters,
+      );
       setLoading(false);
       return;
     }
-    void refreshFromApi(page, perPage)
+    void refreshFromApi(page, perPage, filters)
       .catch(() => {
         /* live channel may still populate */
       })
       .finally(() => setLoading(false));
-  }, [liveProfiles, page, perPage, applyLiveSlice, refreshFromApi]);
+  }, [
+    liveProfiles,
+    page,
+    perPage,
+    filters,
+    filtersKey,
+    applyLiveSlice,
+    refreshFromApi,
+    tableQuery.debounced,
+  ]);
 
   const statusLabel = liveStatusLabel(status);
+
+  function startEdit(profile: Profile) {
+    setEditingId(profile.id);
+    setName(profile.name);
+    setFromName(profile.from_name);
+    setFromEmail(profile.from_email);
+    setMessage(null);
+  }
+
+  function resetForm() {
+    setEditingId(null);
+    setName("Default SMTP");
+    setFromName("HRNECK");
+    setFromEmail("noreply@hrneck.com");
+  }
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     setMessage(null);
     try {
       await ensureCsrf();
-      await api("/api/v1/org/sending-profiles", {
-        method: "POST",
-        tenant: resolveTenant(),
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          from_name: fromName,
-          from_email: fromEmail,
-          mailer: "smtp",
-          is_default: true,
-        }),
-      });
-      await refreshFromApi(page, perPage);
+      const payload = {
+        name,
+        from_name: fromName,
+        from_email: fromEmail,
+        mailer: "smtp",
+        is_default: true,
+      };
+      if (editingId !== null) {
+        await api(`/api/v1/org/sending-profiles/${editingId}`, {
+          method: "PATCH",
+          tenant: resolveTenant(),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } else {
+        await api("/api/v1/org/sending-profiles", {
+          method: "POST",
+          tenant: resolveTenant(),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      }
+      setLiveProfiles(null);
+      await refreshFromApi(page, perPage, filters);
+      resetForm();
       setMessage("Profile saved.");
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Save failed — sign in first");
@@ -148,7 +244,7 @@ export function SendingProfilesClient() {
         tenant: resolveTenant(),
       });
       setLiveProfiles(null);
-      await refreshFromApi(page, perPage);
+      await refreshFromApi(page, perPage, filters);
       setMessage("Profile deleted.");
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Delete failed");
@@ -156,14 +252,72 @@ export function SendingProfilesClient() {
     }
   }
 
-  const listEmpty = profiles.length === 0 && meta.total === 0;
+  const columns: Array<DataTableColumn<Profile>> = [
+    {
+      id: "name",
+      header: "Name",
+      accessorKey: "name",
+      sticky: true,
+      cell: (profile) => (
+        <span>
+          {profile.name}
+          {profile.is_default ? " · default" : ""}
+        </span>
+      ),
+    },
+    {
+      id: "from_name",
+      header: "From name",
+      accessorKey: "from_name",
+      cell: (profile) => profile.from_name,
+    },
+    {
+      id: "from_email",
+      header: "From email",
+      accessorKey: "from_email",
+      cell: (profile) => profile.from_email,
+    },
+    {
+      id: "mailer",
+      header: "Mailer",
+      accessorKey: "mailer",
+      cell: (profile) => profile.mailer,
+    },
+    {
+      id: "actions",
+      header: "Actions",
+      filter: "none",
+      enableSorting: false,
+      enableGlobalFilter: false,
+      cell: (profile) => (
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-0 px-2 py-1 text-xs"
+            onClick={() => startEdit(profile)}
+          >
+            Edit
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-0 px-2 py-1 text-xs"
+            onClick={() => setPendingDelete(profile)}
+          >
+            Delete
+          </Button>
+        </div>
+      ),
+    },
+  ];
 
   if (loading) {
-    return <PageSkeleton className="max-w-3xl" />;
+    return <PageSkeleton className="max-w-5xl" />;
   }
 
   return (
-    <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-8 sm:px-6">
+    <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">
       <PageHeader
         title="Sending profiles"
         description={statusLabel ?? "Live"}
@@ -201,7 +355,14 @@ export function SendingProfilesClient() {
             onChange={(e) => setFromEmail(e.target.value)}
           />
         </div>
-        <Button type="submit">Save profile</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button type="submit">{editingId !== null ? "Update profile" : "Save profile"}</Button>
+          {editingId !== null ? (
+            <Button type="button" variant="secondary" onClick={resetForm}>
+              Cancel edit
+            </Button>
+          ) : null}
+        </div>
       </form>
       {message ? (
         <Alert className="mt-4" variant={alertVariantForMessage(message)}>
@@ -213,57 +374,32 @@ export function SendingProfilesClient() {
           {liveError}
         </Alert>
       ) : null}
-      {listEmpty ? (
-        <EmptyState
-          className="mt-10"
-          title={status === "live" ? "No sending profiles" : "Connecting…"}
-          description={
-            status === "live"
-              ? "Save a profile to choose From name and email for outbound mail."
-              : (statusLabel ?? "Waiting for live data…")
-          }
-        />
-      ) : (
-        <>
-          <ul className="mt-10 divide-y divide-[var(--border)] border-y border-[var(--border)]">
-            {profiles.map((p) => (
-              <li
-                key={p.id}
-                className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"
-              >
-                <div>
-                  <p className="font-medium">
-                    {p.name}
-                    {p.is_default ? " · default" : ""}
-                  </p>
-                  <p className="text-[var(--muted-foreground)]">
-                    {p.from_name} &lt;{p.from_email}&gt; · {p.mailer}
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="min-h-0 px-2 py-1 text-xs"
-                  onClick={() => setPendingDelete(p)}
-                >
-                  Delete
-                </Button>
-              </li>
-            ))}
-          </ul>
-          <Pagination
-            className="mt-4"
-            page={page}
-            perPage={perPage}
-            total={meta.total}
-            onPageChange={setPage}
-            onPerPageChange={(size) => {
-              setPerPage(size);
-              setPage(1);
-            }}
-          />
-        </>
-      )}
+      <DataTable
+        className="mt-10"
+        mode="server"
+        caption="Sending profiles"
+        columns={columns}
+        rows={profiles}
+        filterState={tableQuery.state}
+        onFilterStateChange={tableQuery.setState}
+        getRowId={(row) => row.id}
+        emptyTitle={status === "live" ? "No sending profiles" : "Connecting…"}
+        emptyDescription={
+          status === "live"
+            ? "Save a profile to choose From name and email for outbound mail."
+            : (statusLabel ?? "Waiting for live data…")
+        }
+        pagination={{
+          page,
+          perPage,
+          total: meta.total,
+          onPageChange: setPage,
+          onPerPageChange: (size) => {
+            setPerPage(size);
+            setPage(1);
+          },
+        }}
+      />
 
       <ConfirmDialog
         open={pendingDelete !== null}

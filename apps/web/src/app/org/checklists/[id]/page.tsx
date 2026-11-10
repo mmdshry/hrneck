@@ -1,5 +1,7 @@
 import { ChecklistBuilderClient } from "./builder-client";
 
+export const instant = false;
+
 export const metadata = {
   title: "Checklist builder",
   description: "Design a flexible multimedia HR checklist template.",

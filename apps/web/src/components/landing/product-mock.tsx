@@ -157,7 +157,7 @@ function TabButtons({
             className={cn(
               "landing-mock-tab relative shrink-0 overflow-hidden rounded-lg px-2.5 py-2 text-left text-xs transition-[color,background-color,box-shadow,transform] duration-[var(--motion)]",
               selected
-                ? "z-[1] scale-[1.03] bg-[var(--accent)] font-semibold text-[var(--accent-foreground)] shadow-[var(--shadow-sm)] ring-1 ring-[color-mix(in_srgb,var(--accent)_55%,transparent)]"
+                ? "z-[1] scale-[1.03] bg-[var(--primary)] font-semibold text-[var(--primary-foreground)] shadow-[var(--shadow-sm)] ring-1 ring-[color-mix(in_srgb,var(--primary)_55%,transparent)]"
                 : "bg-[var(--muted)] text-[var(--muted-foreground)] opacity-80 hover:opacity-100 hover:text-[var(--foreground)]",
             )}
             onClick={() => onSelect(index)}
@@ -168,7 +168,7 @@ function TabButtons({
                 key={progressKey}
                 aria-hidden
                 className={cn(
-                  "absolute bg-[color-mix(in_srgb,var(--accent-foreground)_75%,transparent)]",
+                  "absolute bg-[color-mix(in_srgb,var(--primary-foreground)_75%,transparent)]",
                   orientation === "vertical"
                     ? "landing-tab-progress-y inset-y-0 left-0 w-0.5 origin-top"
                     : "landing-tab-progress inset-x-0 bottom-0 h-0.5 origin-left",
@@ -274,7 +274,7 @@ export function ProductMock({ className }: { className?: string }) {
               {panel.stats.map((stat) => (
                 <div
                   key={stat.label}
-                  className="rounded-xl bg-[var(--muted)]/70 px-3 py-2.5"
+                  className="rounded-[var(--radius)] bg-[var(--muted)]/70 px-3 py-2.5"
                 >
                   <p className="text-[0.65rem] uppercase tracking-wide text-[var(--muted-foreground)]">
                     {stat.label}
@@ -285,14 +285,14 @@ export function ProductMock({ className }: { className?: string }) {
                 </div>
               ))}
             </div>
-            <div className="space-y-2 rounded-xl border border-[var(--border)] p-3">
+            <div className="space-y-2 rounded-[var(--radius)] border border-[var(--border)] p-3">
               <p className="text-xs font-medium text-[var(--foreground)]">
                 {panel.highlight.title}
               </p>
               {typeof panel.highlight.progress === "number" ? (
                 <div className="h-2 overflow-hidden rounded-full bg-[var(--muted)]">
                   <div
-                    className="h-full rounded-full bg-[var(--accent)] transition-[width] duration-500 ease-out"
+                    className="h-full rounded-full bg-[var(--primary)] transition-[width] duration-500 ease-out"
                     style={{ width: `${panel.highlight.progress}%` }}
                   />
                 </div>
@@ -305,7 +305,7 @@ export function ProductMock({ className }: { className?: string }) {
               {panel.rows.map((row) => (
                 <div
                   key={row.title}
-                  className="rounded-xl border border-[var(--border)] px-3 py-2.5"
+                  className="rounded-[var(--radius)] border border-[var(--border)] px-3 py-2.5"
                 >
                   <p className="truncate text-xs font-medium text-[var(--foreground)]">
                     {row.title}

@@ -30,6 +30,7 @@ export function GuideArticle({ guide }: { guide: GuideModule }) {
     .filter((item): item is GuideModule => Boolean(item));
   const Icon = guideIcon(guide.slug);
   const OpenIcon = guidesOpenInAppIcon;
+  const sections = guide.sections ?? [];
 
   return (
     <article className="space-y-8">
@@ -69,6 +70,18 @@ export function GuideArticle({ guide }: { guide: GuideModule }) {
         <SectionHeading icon={guidesStepsIcon}>Step-by-step</SectionHeading>
         <StepList steps={guide.steps} />
       </section>
+
+      {sections.map((section) => (
+        <section key={section.title} className="space-y-4">
+          <SectionHeading icon={guidesStepsIcon}>{section.title}</SectionHeading>
+          {section.body ? (
+            <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">
+              {section.body}
+            </p>
+          ) : null}
+          <StepList steps={section.steps} />
+        </section>
+      ))}
 
       {relatedGuides.length > 0 ? (
         <section className="space-y-3">

@@ -5,10 +5,13 @@ const brand = process.env.NEXT_PUBLIC_BRAND_SHORT ?? "HRNECK";
 
 export function LandingHero() {
   return (
-    <section className="relative overflow-hidden">
+    <section
+      className="relative overflow-hidden border-t-2"
+      style={{ borderTopColor: "var(--spark)" }}
+    >
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_20%_0%,color-mix(in_srgb,var(--accent)_18%,transparent),transparent_50%),radial-gradient(ellipse_at_90%_20%,color-mix(in_srgb,var(--primary)_28%,transparent),transparent_48%),linear-gradient(180deg,color-mix(in_srgb,var(--primary)_6%,transparent),transparent_55%)]"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_20%_0%,color-mix(in_srgb,var(--brand)_14%,transparent),transparent_50%),radial-gradient(ellipse_at_90%_20%,color-mix(in_srgb,var(--brand)_22%,transparent),transparent_48%),linear-gradient(180deg,color-mix(in_srgb,var(--brand)_6%,transparent),transparent_55%)]"
       />
       <div className="relative mx-auto grid w-full max-w-6xl gap-14 px-6 pb-16 pt-14 md:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] md:items-center md:gap-16 md:pb-20 md:pt-16">
         <div className="landing-hero-enter flex flex-col gap-8">

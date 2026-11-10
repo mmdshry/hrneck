@@ -6,11 +6,12 @@ import { NotificationBell } from "@/components/notifications/notification-bell";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
-import { Pagination } from "@/components/ui/pagination";
 import { Panel } from "@/components/ui/panel";
+import { liveStatusLabel, useLiveTopic } from "@/hooks/use-live-topic";
 import {
   ApiError,
   NO_ASSIGNED_TRAINING_MESSAGE,
@@ -18,11 +19,7 @@ import {
   ensureCsrf,
   fetchSessionUser,
 } from "@/lib/api";
-import {
-  DEFAULT_PAGE_SIZE,
-  paginateLocal,
-  type PageSize,
-} from "@/lib/pagination";
+import { learnLiveChannel } from "@/lib/live-topics";
 import { resolveTenant } from "@/lib/tenant";
 
 type Lesson = {
@@ -35,16 +32,31 @@ type Lesson = {
   duration_seconds?: number | null;
 };
 
+type QuizQuestion = {
+  type?: "mcq" | "essay";
+  prompt: string;
+  options?: string[] | null;
+};
+
+type CourseQuiz = {
+  id: number;
+  title: string;
+  pass_score: number;
+  is_required?: boolean;
+  time_limit_seconds?: number | null;
+  questions: QuizQuestion[];
+};
+
 type Course = {
   id: number;
   title: string;
   description?: string | null;
   lessons?: Lesson[];
-  quiz?: {
-    id: number;
-    questions: { prompt: string; options: string[] }[];
-  } | null;
+  quizzes?: CourseQuiz[];
+  quiz?: CourseQuiz | null;
 };
+
+type QuizAnswer = number | string;
 
 type Enrollment = {
   id: number;
@@ -58,6 +70,13 @@ type Enrollment = {
     status: string;
     progress_pct: number;
   }[];
+};
+
+type EnrollmentRow = {
+  id: number;
+  course: string;
+  status: string;
+  progress: number;
 };
 
 function youtubeEmbed(url: string): string | null {
@@ -102,28 +121,49 @@ function mediaSrc(lesson: Lesson, tenant: string): string | null {
   return null;
 }
 
+type LearnPayload = {
+  data: Enrollment[];
+};
+
 export function LearnClient() {
   const searchParams = useSearchParams();
   const courseParam = searchParams.get("course");
   const enrollmentParam = searchParams.get("enrollment");
   const targetParam = searchParams.get("target");
 
+  const [userId, setUserId] = useState<number | null>(null);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
+  const [liveEnrollments, setLiveEnrollments] = useState<Enrollment[] | null>(null);
   const [activeEnrollmentId, setActiveEnrollmentId] = useState<number | null>(
     enrollmentParam ? Number(enrollmentParam) : null,
   );
-  const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState<PageSize>(DEFAULT_PAGE_SIZE);
-  const [answers, setAnswers] = useState<number[]>([]);
+  const [answersByQuiz, setAnswersByQuiz] = useState<
+    Record<number, QuizAnswer[]>
+  >({});
+  const [startedAtByQuiz, setStartedAtByQuiz] = useState<
+    Record<number, string>
+  >({});
+  const [remainingByQuiz, setRemainingByQuiz] = useState<
+    Record<number, number>
+  >({});
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
+  const [submittingQuizId, setSubmittingQuizId] = useState<number | null>(null);
   const lastHeartbeat = useRef<Record<number, number>>({});
+  const tenant = resolveTenant();
+  const channel =
+    tenant && userId != null ? learnLiveChannel(tenant, userId) : null;
 
-  const enrollmentPage = useMemo(
-    () => paginateLocal(enrollments, page, perPage),
-    [enrollments, page, perPage],
+  const enrollmentRows = useMemo<EnrollmentRow[]>(
+    () =>
+      enrollments.map((row) => ({
+        id: row.id,
+        course: row.course?.title ?? `Course #${row.course_id}`,
+        status: row.status,
+        progress: row.progress,
+      })),
+    [enrollments],
   );
 
   const active = useMemo(
@@ -134,10 +174,40 @@ export function LearnClient() {
     [enrollments, activeEnrollmentId],
   );
   const course = active?.course ?? null;
-  const tenant = resolveTenant();
+  const courseQuizzes = useMemo(() => {
+    if (course?.quizzes && course.quizzes.length > 0) {
+      return course.quizzes;
+    }
+    return course?.quiz ? [course.quiz] : [];
+  }, [course]);
+
+  const applyEnrollmentList = useCallback(
+    (rows: Enrollment[]) => {
+      setEnrollments(rows);
+      if (rows.length === 0) {
+        setError(NO_ASSIGNED_TRAINING_MESSAGE);
+        return;
+      }
+      setError(null);
+      if (enrollmentParam) {
+        setActiveEnrollmentId(Number(enrollmentParam));
+      } else if (courseParam) {
+        const match = rows.find((row) => row.course_id === Number(courseParam));
+        setActiveEnrollmentId(match?.id ?? rows[0].id);
+      } else {
+        setActiveEnrollmentId((current) =>
+          current && rows.some((row) => row.id === current) ? current : rows[0].id,
+        );
+      }
+    },
+    [courseParam, enrollmentParam],
+  );
+
+  const onPayload = useCallback((payload: LearnPayload) => {
+    setLiveEnrollments(Array.isArray(payload.data) ? payload.data : []);
+  }, []);
 
   const loadAssignments = useCallback(async () => {
-    setLoading(true);
     setMessage(null);
     setError(null);
     try {
@@ -145,8 +215,10 @@ export function LearnClient() {
       const me = await fetchSessionUser();
       if (!me) {
         setError("Sign in required to view assigned training.");
+        setUserId(null);
         return;
       }
+      setUserId(me.id);
       const params = new URLSearchParams();
       if (courseParam) params.set("course_id", courseParam);
       if (targetParam) params.set("target_id", targetParam);
@@ -155,32 +227,32 @@ export function LearnClient() {
         `/api/v1/org/training/assignments${qs ? `?${qs}` : ""}`,
         { tenant },
       );
-      setEnrollments(res.data);
-      if (res.data.length === 0) {
-        setError(NO_ASSIGNED_TRAINING_MESSAGE);
-      } else if (enrollmentParam) {
-        setActiveEnrollmentId(Number(enrollmentParam));
-      } else if (courseParam) {
-        const match = res.data.find((row) => row.course_id === Number(courseParam));
-        setActiveEnrollmentId(match?.id ?? res.data[0].id);
-      } else {
-        setActiveEnrollmentId(res.data[0].id);
-      }
-      setAnswers([]);
+      applyEnrollmentList(res.data);
+      setAnswersByQuiz({});
     } catch (err) {
       if (err instanceof ApiError && err.status === 403) {
         setError(NO_ASSIGNED_TRAINING_MESSAGE);
       } else {
         setError(err instanceof Error ? err.message : "Failed to load");
       }
-    } finally {
-      setLoading(false);
     }
-  }, [courseParam, enrollmentParam, targetParam, tenant]);
+  }, [applyEnrollmentList, courseParam, targetParam, tenant]);
+
+  const { status, error: liveError } = useLiveTopic<LearnPayload>({
+    channel,
+    onPayload,
+  });
 
   useEffect(() => {
-    void loadAssignments();
-  }, [loadAssignments]);
+    if (liveEnrollments !== null) {
+      applyEnrollmentList(liveEnrollments);
+      setLoading(false);
+      return;
+    }
+    void loadAssignments().finally(() => setLoading(false));
+  }, [liveEnrollments, applyEnrollmentList, loadAssignments]);
+
+  const statusLabel = liveStatusLabel(status);
 
   async function reportLessonProgress(
     lesson: Lesson,
@@ -237,14 +309,67 @@ export function LearnClient() {
     });
   }
 
-  async function submitQuiz() {
-    if (!course?.quiz || !active) return;
-    const expected = course.quiz.questions.length;
-    if (answers.length !== expected || answers.some((value) => value < 0)) {
-      setError("Select an answer for every question before submitting.");
+  function ensureQuizStarted(quiz: CourseQuiz) {
+    if (startedAtByQuiz[quiz.id]) return;
+    const started = new Date().toISOString();
+    setStartedAtByQuiz((prev) => ({ ...prev, [quiz.id]: started }));
+    if (quiz.time_limit_seconds) {
+      setRemainingByQuiz((prev) => ({
+        ...prev,
+        [quiz.id]: quiz.time_limit_seconds!,
+      }));
+    }
+  }
+
+  useEffect(() => {
+    const timed = courseQuizzes.filter(
+      (quiz) => quiz.time_limit_seconds && startedAtByQuiz[quiz.id],
+    );
+    if (timed.length === 0) return;
+    const timer = window.setInterval(() => {
+      setRemainingByQuiz((prev) => {
+        const next = { ...prev };
+        for (const quiz of timed) {
+          const started = startedAtByQuiz[quiz.id];
+          if (!started || !quiz.time_limit_seconds) continue;
+          const elapsed = Math.floor(
+            (Date.now() - new Date(started).getTime()) / 1000,
+          );
+          next[quiz.id] = Math.max(0, quiz.time_limit_seconds - elapsed);
+        }
+        return next;
+      });
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [courseQuizzes, startedAtByQuiz]);
+
+  async function submitQuiz(quiz: CourseQuiz) {
+    if (!active) return;
+    ensureQuizStarted(quiz);
+    const answers = answersByQuiz[quiz.id] ?? [];
+    for (const [index, question] of quiz.questions.entries()) {
+      const answer = answers[index];
+      if (question.type === "essay") {
+        if (typeof answer !== "string" || !answer.trim()) {
+          setError(`Write an answer for essay question ${index + 1}.`);
+          return;
+        }
+        continue;
+      }
+      if (typeof answer !== "number" || answer < 0) {
+        setError(`Select an answer for question ${index + 1}.`);
+        return;
+      }
+    }
+    if (
+      quiz.time_limit_seconds &&
+      (remainingByQuiz[quiz.id] ?? quiz.time_limit_seconds) <= 0
+    ) {
+      setError("Time limit exceeded for this quiz.");
       return;
     }
-    setSubmitting(true);
+
+    setSubmittingQuizId(quiz.id);
     setMessage(null);
     setError(null);
     try {
@@ -256,14 +381,15 @@ export function LearnClient() {
         tenant,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          quiz_id: course.quiz.id,
+          quiz_id: quiz.id,
           target_id: active.target_id,
           enrollment_id: active.id,
           answers,
+          started_at: startedAtByQuiz[quiz.id] ?? new Date().toISOString(),
         }),
       });
       setMessage(
-        `Quiz score ${res.data.score}% · ${res.data.passed ? "passed" : "retry"}`,
+        `${quiz.title}: score ${res.data.score}% · ${res.data.passed ? "passed" : "retry"}`,
       );
       if (res.data.enrollment) {
         setEnrollments((prev) =>
@@ -277,7 +403,7 @@ export function LearnClient() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Quiz failed");
     } finally {
-      setSubmitting(false);
+      setSubmittingQuizId(null);
     }
   }
 
@@ -289,6 +415,55 @@ export function LearnClient() {
     );
   }
 
+  function selectEnrollment(id: number) {
+    setActiveEnrollmentId(id);
+    setAnswersByQuiz({});
+    setStartedAtByQuiz({});
+    setRemainingByQuiz({});
+    setMessage(null);
+  }
+
+  const enrollmentColumns: Array<DataTableColumn<EnrollmentRow>> = [
+    {
+      id: "course",
+      header: "Course",
+      accessorKey: "course",
+      sticky: true,
+      cell: (row) => (
+        <button
+          type="button"
+          className={`text-left ${row.id === active?.id ? "font-medium" : ""}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            selectEnrollment(row.id);
+          }}
+        >
+          <span className="inline-flex flex-wrap items-center gap-2">
+            <span>{row.course}</span>
+            {row.id === active?.id ? (
+              <span className="text-xs uppercase tracking-wide text-[var(--muted-foreground)]">
+                Current
+              </span>
+            ) : null}
+          </span>
+        </button>
+      ),
+    },
+    {
+      id: "status",
+      header: "Status",
+      accessorKey: "status",
+      cell: (row) => row.status,
+    },
+    {
+      id: "progress",
+      header: "Progress",
+      accessorKey: "progress",
+      filterValue: (row) => row.progress,
+      cell: (row) => `${row.progress}%`,
+    },
+  ];
+
   if (loading && enrollments.length === 0 && !error) {
     return <PageSkeleton className="max-w-3xl" />;
   }
@@ -298,54 +473,31 @@ export function LearnClient() {
       <PageHeader
         title={course?.title ?? "Learner portal"}
         description={
-          course?.description ??
-          "Open assigned awareness training and complete the quiz."
+          statusLabel
+            ? `${course?.description ?? "Open assigned awareness training and complete the quiz."} · ${statusLabel}`
+            : (course?.description ??
+              "Open assigned awareness training and complete the quiz.")
         }
         actions={
           <>
             <NotificationBell />
             <ThemeToggle />
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => void loadAssignments()}
-              disabled={loading}
-            >
-              {loading ? "Loading…" : "Refresh assignments"}
-            </Button>
           </>
         }
       />
 
       {enrollments.length > 1 ? (
-        <div className="mt-4 space-y-3">
-          <div className="flex flex-wrap gap-2">
-            {enrollmentPage.data.map((row) => (
-              <Button
-                key={row.id}
-                type="button"
-                variant={row.id === active?.id ? "default" : "secondary"}
-                onClick={() => {
-                  setActiveEnrollmentId(row.id);
-                  setAnswers([]);
-                  setMessage(null);
-                }}
-              >
-                {row.course?.title ?? `Course #${row.course_id}`}
-              </Button>
-            ))}
-          </div>
-          <Pagination
-            page={page}
-            perPage={perPage}
-            total={enrollmentPage.meta.total}
-            onPageChange={setPage}
-            onPerPageChange={(size) => {
-              setPerPage(size);
-              setPage(1);
-            }}
-          />
-        </div>
+        <DataTable
+          className="mt-4"
+          mode="client"
+          caption="Assigned courses"
+          columns={enrollmentColumns}
+          rows={enrollmentRows}
+          getRowId={(row) => row.id}
+          onRowClick={(row) => selectEnrollment(row.id)}
+          emptyTitle="No assigned courses"
+          emptyFilteredTitle="No matching courses"
+        />
       ) : null}
 
       {active ? (
@@ -380,7 +532,7 @@ export function LearnClient() {
               ) : null}
 
               {type === "video" && embed ? (
-                <div className="aspect-video overflow-hidden rounded-xl border border-[var(--border)]">
+                <div className="aspect-video overflow-hidden rounded-[var(--radius)] border border-[var(--border)]">
                   <iframe
                     title={lesson.title}
                     src={embed}
@@ -396,7 +548,7 @@ export function LearnClient() {
 
               {type === "video" && !embed && src ? (
                 <video
-                  className="w-full rounded-xl border border-[var(--border)]"
+                  className="w-full rounded-[var(--radius)] border border-[var(--border)]"
                   controls
                   src={src}
                   onPlay={() => {
@@ -413,7 +565,7 @@ export function LearnClient() {
                 <iframe
                   title={lesson.title}
                   src={src}
-                  className="h-[28rem] w-full rounded-xl border border-[var(--border)]"
+                  className="h-[28rem] w-full rounded-[var(--radius)] border border-[var(--border)]"
                   onLoad={() => {
                     void reportLessonProgress(lesson, { opened: true, progress_pct: 1 });
                   }}
@@ -436,46 +588,108 @@ export function LearnClient() {
         />
       )}
 
-      {course?.quiz ? (
-        <Panel className="mt-6 space-y-5 p-5">
-          <h2 className="text-lg font-medium">Quiz</h2>
-          {course.quiz.questions.map((question, questionIndex) => (
-            <fieldset key={question.prompt} className="space-y-2">
-              <legend className="text-sm font-medium">{question.prompt}</legend>
-              <div className="space-y-2">
-                {question.options.map((option, optionIndex) => {
-                  const selected = answers[questionIndex] === optionIndex;
-                  return (
-                    <label
-                      key={option}
-                      className="flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-[var(--border)] px-3 py-2 text-sm hover:bg-[var(--muted)]"
-                    >
-                      <input
-                        type="radio"
-                        name={`q-${questionIndex}`}
-                        checked={selected}
-                        onChange={() => {
-                          setAnswers((prev) => {
-                            const next = [...prev];
-                            next[questionIndex] = optionIndex;
-                            return next;
-                          });
-                        }}
-                        className="h-4 w-4 accent-[var(--accent)]"
-                      />
-                      <span>{option}</span>
-                    </label>
-                  );
-                })}
+      {courseQuizzes.map((quiz) => {
+        const answers = answersByQuiz[quiz.id] ?? [];
+        const remaining = remainingByQuiz[quiz.id];
+        const started = Boolean(startedAtByQuiz[quiz.id]);
+        return (
+          <Panel key={quiz.id} className="mt-6 space-y-5 p-5">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <h2 className="text-lg font-medium">{quiz.title}</h2>
+                <p className="text-xs text-[var(--muted-foreground)]">
+                  Pass {quiz.pass_score}%
+                  {quiz.is_required === false ? " · optional" : " · required"}
+                  {quiz.time_limit_seconds
+                    ? ` · ${quiz.time_limit_seconds}s limit`
+                    : ""}
+                </p>
               </div>
-            </fieldset>
-          ))}
-          <Button type="button" onClick={() => void submitQuiz()} disabled={submitting}>
-            {submitting ? "Submitting…" : "Submit quiz"}
-          </Button>
-        </Panel>
-      ) : null}
+              {quiz.time_limit_seconds ? (
+                <div className="text-sm text-[var(--muted-foreground)]">
+                  {started
+                    ? `Time left: ${remaining ?? quiz.time_limit_seconds}s`
+                    : "Timer starts when you answer"}
+                </div>
+              ) : null}
+            </div>
+            {quiz.questions.map((question, questionIndex) => {
+              const isEssay = question.type === "essay";
+              return (
+                <fieldset
+                  key={`${quiz.id}-${questionIndex}`}
+                  className="space-y-2"
+                  onFocus={() => ensureQuizStarted(quiz)}
+                >
+                  <legend className="text-sm font-medium">
+                    {question.prompt}
+                    {isEssay ? (
+                      <span className="ml-2 text-xs font-normal text-[var(--muted-foreground)]">
+                        Essay · not scored
+                      </span>
+                    ) : null}
+                  </legend>
+                  {isEssay ? (
+                    <textarea
+                      className="min-h-24 w-full rounded-[var(--radius)] border border-[var(--border)] bg-transparent px-3 py-2 text-sm"
+                      value={typeof answers[questionIndex] === "string" ? answers[questionIndex] : ""}
+                      onChange={(e) => {
+                        ensureQuizStarted(quiz);
+                        setAnswersByQuiz((prev) => {
+                          const next = [...(prev[quiz.id] ?? [])];
+                          next[questionIndex] = e.target.value;
+                          return { ...prev, [quiz.id]: next };
+                        });
+                      }}
+                    />
+                  ) : (
+                    <div className="space-y-2">
+                      {(question.options ?? []).map((option, optionIndex) => {
+                        const selected = answers[questionIndex] === optionIndex;
+                        return (
+                          <label
+                            key={option}
+                            className="flex min-h-11 cursor-pointer items-center gap-3 rounded-[var(--radius)] border border-[var(--border)] px-3 py-2 text-sm hover:bg-[var(--muted)]"
+                          >
+                            <input
+                              type="radio"
+                              name={`q-${quiz.id}-${questionIndex}`}
+                              checked={selected}
+                              onChange={() => {
+                                ensureQuizStarted(quiz);
+                                setAnswersByQuiz((prev) => {
+                                  const next = [...(prev[quiz.id] ?? [])];
+                                  next[questionIndex] = optionIndex;
+                                  return { ...prev, [quiz.id]: next };
+                                });
+                              }}
+                              className="h-4 w-4 accent-[var(--primary)]"
+                            />
+                            <span>{option}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </fieldset>
+              );
+            })}
+            <Button
+              type="button"
+              onClick={() => void submitQuiz(quiz)}
+              disabled={submittingQuizId === quiz.id}
+            >
+              {submittingQuizId === quiz.id ? "Submitting…" : "Submit quiz"}
+            </Button>
+          </Panel>
+        );
+      })}
 
+      {liveError ? (
+        <Alert className="mt-4" variant="destructive">
+          {liveError}
+        </Alert>
+      ) : null}
       {error ? (
         <Alert className="mt-4" variant="destructive">
           {error}

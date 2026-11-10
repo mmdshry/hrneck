@@ -48,8 +48,8 @@ const FEATURES: Feature[] = [
   },
   {
     icon: Target,
-    title: "Targets & groups",
-    body: "Maintain the employee audience for training and checklist assignment — groups, imports, and risk-aware targeting.",
+    title: "Employees & groups",
+    body: "Maintain employees and departments, then organize them into Groups for training and checklist assignment — imports, member pickers, and risk-aware targeting.",
   },
   {
     icon: Users,
@@ -109,7 +109,7 @@ export function LandingFeatures() {
                 delayMs={(index % 3) * 70}
                 className="group"
               >
-                <span className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-[color-mix(in_srgb,var(--primary)_10%,transparent)] text-[var(--primary)] transition-colors duration-[var(--motion)] group-hover:bg-[color-mix(in_srgb,var(--accent)_16%,transparent)] group-hover:text-[var(--accent)] dark:text-[var(--accent)]">
+                <span className="inline-flex h-12 w-12 items-center justify-center rounded-[var(--radius)] bg-[color-mix(in_srgb,var(--brand)_10%,transparent)] text-[var(--brand)] transition-colors duration-[var(--motion)] group-hover:bg-[color-mix(in_srgb,var(--brand)_16%,transparent)]">
                   <Icon className="h-5 w-5" strokeWidth={1.75} aria-hidden />
                 </span>
                 <h3 className="mt-5 font-[family-name:var(--font-display)] text-lg tracking-tight">

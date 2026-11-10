@@ -6,7 +6,11 @@ import { getEcho } from "@/lib/echo";
 
 export type LiveStatus = "connecting" | "live" | "disconnected" | "error";
 
-export type LiveStatusEvent = "subscribed" | "snapshot" | "error";
+export type LiveStatusEvent = "subscribed" | "snapshot" | "error" | "reconnecting";
+
+const INITIAL_DEFER_MS = 1500;
+const RECONNECT_BASE_MS = 1000;
+const RECONNECT_MAX_MS = 30_000;
 
 export function nextLiveStatus(
   current: LiveStatus,
@@ -17,6 +21,8 @@ export function nextLiveStatus(
       return current === "error" ? current : "live";
     case "snapshot":
       return "live";
+    case "reconnecting":
+      return current === "live" ? "connecting" : current === "error" ? "error" : "connecting";
     case "error":
       return "error";
     default: {
@@ -24,6 +30,11 @@ export function nextLiveStatus(
       return unreachable;
     }
   }
+}
+
+export function nextReconnectDelayMs(attempt: number): number {
+  const exp = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** Math.max(0, attempt));
+  return exp;
 }
 
 type UseLiveTopicOptions<T> = {
@@ -49,72 +60,119 @@ export function useLiveTopic<T = Record<string, unknown>>({
     let cancelled = false;
     let subscribedName: string | null = null;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    let attempt = 0;
+    let isFirstConnect = true;
 
     setStatus("connecting");
     setError(null);
 
-    // Defer websocket work past first paint so Lighthouse does not score console noise.
-    timer = setTimeout(() => {
-      void (async () => {
-        try {
-          const session = await fetchSessionUser();
+    const leaveChannel = () => {
+      if (!subscribedName) return;
+      const name = subscribedName;
+      subscribedName = null;
+      void getEcho()
+        .then((echo) => {
+          echo.leave(name);
+        })
+        .catch(() => {
+          /* ignore */
+        });
+    };
+
+    const scheduleConnect = (delayMs: number) => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        void connect();
+      }, delayMs);
+    };
+
+    const scheduleReconnect = () => {
+      if (cancelled) return;
+      leaveChannel();
+      setStatus((current) => nextLiveStatus(current, "reconnecting"));
+      const delay = nextReconnectDelayMs(attempt);
+      attempt += 1;
+      scheduleConnect(delay);
+    };
+
+    const connect = async () => {
+      try {
+        const session = await fetchSessionUser();
+        if (cancelled) return;
+        if (!session) {
+          setStatus("disconnected");
+          return;
+        }
+
+        const echo = await getEcho();
+        if (cancelled) return;
+
+        const sub = echo.private(channel);
+        subscribedName = channel;
+
+        const handle = (payload: T) => {
           if (cancelled) return;
-          if (!session) {
-            setStatus("disconnected");
-            return;
-          }
+          onPayload(payload);
+          attempt = 0;
+          setStatus((current) => nextLiveStatus(current, "snapshot"));
+          setError(null);
+        };
 
-          const echo = await getEcho();
+        sub.listen(".snapshot", handle);
+        sub.listen(".updated", handle);
+
+        sub.subscribed(() => {
           if (cancelled) return;
+          attempt = 0;
+          setStatus((current) => nextLiveStatus(current, "subscribed"));
+          setError(null);
+        });
 
-          const sub = echo.private(channel);
-          subscribedName = channel;
-
-          const handle = (payload: T) => {
-            if (cancelled) return;
-            onPayload(payload);
-            setStatus((current) => nextLiveStatus(current, "snapshot"));
-            setError(null);
-          };
-
-          sub.listen(".snapshot", handle);
-          sub.listen(".updated", handle);
-
-          sub.subscribed(() => {
-            if (!cancelled) {
-              setStatus((current) => nextLiveStatus(current, "subscribed"));
-            }
-          });
-
-          sub.error((err: unknown) => {
-            if (cancelled) return;
-            setStatus((current) => nextLiveStatus(current, "error"));
-            setError(
-              err instanceof Error ? err.message : "Live connection failed",
-            );
-          });
-        } catch (err) {
+        sub.error((err: unknown) => {
           if (cancelled) return;
-          setStatus("error");
+          setStatus((current) => nextLiveStatus(current, "error"));
           setError(
             err instanceof Error ? err.message : "Live connection failed",
           );
+          scheduleReconnect();
+        });
+
+        const pusher = echo.connector?.pusher;
+        if (pusher?.connection) {
+          const onDisconnected = () => {
+            if (cancelled) return;
+            setStatus((current) => nextLiveStatus(current, "error"));
+            setError("Live connection lost");
+            scheduleReconnect();
+          };
+          const onUnavailable = () => {
+            if (cancelled) return;
+            setStatus((current) => nextLiveStatus(current, "error"));
+            setError("Live sync unavailable");
+            scheduleReconnect();
+          };
+          pusher.connection.bind("disconnected", onDisconnected);
+          pusher.connection.bind("unavailable", onUnavailable);
         }
-      })();
-    }, 1500);
+      } catch (err) {
+        if (cancelled) return;
+        setStatus("error");
+        setError(
+          err instanceof Error ? err.message : "Live connection failed",
+        );
+        scheduleReconnect();
+      }
+    };
+
+    // Defer first websocket work past first paint so Lighthouse does not score console noise.
+    const firstDelay = isFirstConnect ? INITIAL_DEFER_MS : 0;
+    isFirstConnect = false;
+    scheduleConnect(firstDelay);
 
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
-      if (subscribedName) {
-        void getEcho()
-          .then((echo) => {
-            echo.leave(subscribedName!);
-          })
-          .catch(() => {
-            /* ignore */
-          });
-      }
+      leaveChannel();
     };
     // onPayload intentionally omitted — callers should pass a stable callback or accept re-subscribe
     // eslint-disable-next-line react-hooks/exhaustive-deps

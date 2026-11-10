@@ -8,17 +8,22 @@
   --muted-foreground: #334155;
   --card: #ffffff;
   --card-foreground: #0f172a;
-  --primary: #1e3a5f;
+  /* Logo navy. Not overridden by tenant primary. */
+  --brand: #083a6d;
+  /* Logo spark. Not overridden by tenant primary. Too light for small text on white. */
+  --spark: #f76b13;
+  --primary: #083a6d;
   --primary-foreground: #ffffff;
   --secondary: #334155;
   --secondary-foreground: #ffffff;
-  /* Emerald-700: ≥4.5:1 with white for normal text */
-  --accent: #047857;
+  /* Alias of the action color so a leftover accent class does not stay emerald. */
+  --accent: #083a6d;
   --accent-foreground: #ffffff;
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
   --border: #e2e8f0;
-  --ring: #1e3a5f;
+  --ring: #083a6d;
+  /* Status only. Not a brand color. */
   --success: #047857;
   --success-foreground: #ffffff;
   --space-xs: 0.25rem;
@@ -28,7 +33,7 @@
   --space-xl: 1.5rem;
   --space-2xl: 2rem;
   --space-3xl: 3rem;
-  --radius: 0.75rem;
+  --radius: 0.5rem;
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
   --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
   --motion: 200ms;
@@ -36,22 +41,26 @@
 
 .dark {
   color-scheme: dark;
-  --background: #0f172a;
+  --background: #071422;
   --foreground: #f8fafc;
-  --muted: #1e293b;
+  --muted: #16324f;
   --muted-foreground: #cbd5e1;
-  --card: #192134;
+  --card: #0e2238;
   --card-foreground: #f8fafc;
-  --primary: #93c5fd;
-  --primary-foreground: #0f172a;
-  --secondary: #334155;
+  /* Letterforms stay readable on the navy canvas. Triangles stay spark orange. */
+  --brand: #f8fafc;
+  --spark: #f76b13;
+  /* Lifted navy: white text 4.9:1, separation from the canvas 3.8:1. */
+  --primary: #2a73bc;
+  --primary-foreground: #ffffff;
+  --secondary: #1a3e62;
   --secondary-foreground: #f8fafc;
-  --accent: #34d399;
-  --accent-foreground: #064e3b;
+  --accent: #2a73bc;
+  --accent-foreground: #ffffff;
   --destructive: #f87171;
   --destructive-foreground: #450a0a;
   --border: rgba(255, 255, 255, 0.12);
-  --ring: #93c5fd;
+  --ring: #2a73bc;
   --success: #34d399;
   --success-foreground: #064e3b;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
@@ -75,6 +84,8 @@
   --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
   --color-ring: var(--ring);
+  --color-brand: var(--brand);
+  --color-spark: var(--spark);
   --font-sans: var(--font-sans);
   --font-display: var(--font-sans);
 }
@@ -118,7 +129,7 @@ body {
   top: 0;
   z-index: 100;
   transform: translateY(-120%);
-  border-radius: 0.75rem;
+  border-radius: var(--radius);
   background: var(--primary);
   color: var(--primary-foreground);
   padding: 0.75rem 1rem;

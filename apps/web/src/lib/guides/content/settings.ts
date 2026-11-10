@@ -78,13 +78,13 @@ export const settingsGuide: GuideModule = {
     },
     rows: [
       { title: "training@notify.acme.test", meta: "Sending profile · Default" },
-      { title: "Primary color", meta: "#0F766E · applied" },
+      { title: "Primary color", meta: "#083A6D · applied" },
       { title: "Custom domain DNS", meta: "Guidance stub · pending cutover" },
     ],
     annotations: [
       { label: "Integrations", note: "Connected status gates operational confidence." },
-      { label: "MFA", note: "Operators verify codes on /login/mfa." },
+      { label: "MFA", note: "Operators verify codes on /login/mfa; disable + recovery codes live under Settings → MFA." },
     ],
   },
-  related: ["training", "getting-started", "users-roles"],
+  related: ["auth", "training", "getting-started", "users-roles"],
 };

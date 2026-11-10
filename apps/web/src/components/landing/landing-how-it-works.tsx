@@ -44,7 +44,7 @@ export function LandingHowItWorks() {
                   <p className="text-xs font-medium uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
                     Step {index + 1}
                   </p>
-                  <span className="mt-5 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] text-[var(--primary)] dark:text-[var(--accent)]">
+                  <span className="mt-5 inline-flex h-12 w-12 items-center justify-center rounded-[var(--radius)] bg-[color-mix(in_srgb,var(--brand)_12%,transparent)] text-[var(--brand)]">
                     <Icon className="h-5 w-5" strokeWidth={1.75} aria-hidden />
                   </span>
                   <h3 className="mt-5 font-[family-name:var(--font-display)] text-xl tracking-tight">

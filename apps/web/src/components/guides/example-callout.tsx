@@ -13,7 +13,7 @@ export function ExampleCallout({
   return (
     <aside
       className={cn(
-        "rounded-xl border border-[color-mix(in_srgb,var(--primary)_35%,var(--border))] bg-[color-mix(in_srgb,var(--primary)_8%,var(--card))] p-4",
+        "rounded-[var(--radius)] border border-[color-mix(in_srgb,var(--primary)_35%,var(--border))] bg-[color-mix(in_srgb,var(--primary)_8%,var(--card))] p-4",
         className,
       )}
     >

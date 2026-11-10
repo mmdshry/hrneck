@@ -13,7 +13,7 @@ export function MockScreen({
   return (
     <figure
       className={cn(
-        "overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-[var(--shadow-sm)]",
+        "overflow-hidden rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] shadow-[var(--shadow-sm)]",
         className,
       )}
     >

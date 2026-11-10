@@ -43,6 +43,25 @@ export type ChecklistTemplate = {
   updated_at?: string | null;
 };
 
+export type ChecklistPack = {
+  id: number;
+  name: string;
+  slug: string;
+  description?: string | null;
+  status: string;
+  auto_assign_on_create: boolean;
+  template_ids: number[];
+  templates?: Array<{
+    id: number;
+    name: string;
+    category?: string | null;
+    status?: string | null;
+    is_system?: boolean;
+    sort_order?: number;
+  }>;
+  updated_at?: string | null;
+};
+
 export type ChecklistInstance = {
   id: number;
   template_id: number;

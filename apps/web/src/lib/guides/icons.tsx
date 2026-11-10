@@ -1,17 +1,21 @@
 import {
   BarChart3,
+  BookMarked,
   BookOpen,
+  Building2,
   ClipboardList,
   ExternalLink,
   GraduationCap,
   Info,
   LayoutDashboard,
+  LifeBuoy,
   Link2,
   ListOrdered,
   Megaphone,
   Rocket,
   Search,
   Settings2,
+  ShieldCheck,
   Sparkles,
   Target,
   Ticket,
@@ -32,6 +36,10 @@ const GUIDE_ICONS: Record<GuideSlug, LucideIcon> = {
   "users-roles": Users,
   "announcements-notifications": Megaphone,
   settings: Settings2,
+  "learner-portal": BookMarked,
+  "service-portal": LifeBuoy,
+  msp: Building2,
+  auth: ShieldCheck,
 };
 
 export const guidesHubIcon = BookOpen;

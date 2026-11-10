@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useLiveTopic } from "@/hooks/use-live-topic";
 import { api, ensureCsrf, fetchSessionUser } from "@/lib/api";
 import {
   applyPrimaryColor,
@@ -16,6 +17,7 @@ import {
   clearPrimaryColor,
   type OrgBranding,
 } from "@/lib/branding";
+import { orgLiveChannel } from "@/lib/live-topics";
 import { resolveTenant } from "@/lib/tenant";
 
 type BrandingContextValue = {
@@ -26,53 +28,83 @@ type BrandingContextValue = {
   refresh: () => Promise<void>;
 };
 
+type BrandingPayload = {
+  data: OrgBranding;
+};
+
 const BrandingContext = createContext<BrandingContextValue | null>(null);
 
 export function BrandingProvider({ children }: { children: ReactNode }) {
+  const tenant = resolveTenant();
+  const channel = tenant ? orgLiveChannel(tenant, "branding") : null;
   const [branding, setBranding] = useState<OrgBranding | null>(null);
+  const [liveReady, setLiveReady] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  const applyBranding = useCallback((next: OrgBranding | null) => {
+    setBranding(next);
+    if (next) {
+      applyPrimaryColor(next.primary_color);
+    } else {
+      clearPrimaryColor();
+    }
+  }, []);
+
+  const onPayload = useCallback(
+    (payload: BrandingPayload) => {
+      setLiveReady(true);
+      applyBranding(payload.data ?? null);
+      setLoading(false);
+    },
+    [applyBranding],
+  );
 
   const refresh = useCallback(async () => {
     try {
       await ensureCsrf();
       const session = await fetchSessionUser();
       if (!session) {
-        setBranding(null);
-        clearPrimaryColor();
+        applyBranding(null);
         return;
       }
-      const tenant = session.tenant_id || resolveTenant();
-      if (!tenant) {
-        setBranding(null);
-        clearPrimaryColor();
+      const nextTenant = session.tenant_id || resolveTenant();
+      if (!nextTenant) {
+        applyBranding(null);
         return;
       }
       const res = await api<{ data: OrgBranding }>("/api/v1/org/branding", {
-        tenant,
+        tenant: nextTenant,
       });
-      setBranding(res.data);
-      applyPrimaryColor(res.data.primary_color);
+      applyBranding(res.data);
     } catch {
-      setBranding(null);
-      clearPrimaryColor();
+      applyBranding(null);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [applyBranding]);
+
+  useLiveTopic<BrandingPayload>({
+    channel,
+    onPayload,
+  });
 
   useEffect(() => {
+    if (liveReady) {
+      setLoading(false);
+      return;
+    }
     void refresh();
     return () => {
       clearPrimaryColor();
     };
-  }, [refresh]);
+  }, [liveReady, refresh]);
 
   const value = useMemo<BrandingContextValue>(() => {
     const logoPath = branding?.logo_url?.trim() || null;
     // <img> cannot send X-Tenant; tenancy middleware accepts ?tenant= (same as training media).
-    const tenant = resolveTenant();
+    const nextTenant = resolveTenant();
     const params = new URLSearchParams();
-    if (tenant) params.set("tenant", tenant);
+    if (nextTenant) params.set("tenant", nextTenant);
     if (branding?.logo_path) params.set("v", branding.logo_path);
     const query = params.toString();
     return {

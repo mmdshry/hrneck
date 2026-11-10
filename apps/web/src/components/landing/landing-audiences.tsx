@@ -21,7 +21,7 @@ export function LandingAudiences() {
 
         <div className="mt-12 grid gap-12 md:grid-cols-2 md:gap-16">
           <Reveal>
-            <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] text-[var(--primary)] dark:text-[var(--accent)]">
+            <span className="inline-flex h-11 w-11 items-center justify-center rounded-[var(--radius)] bg-[color-mix(in_srgb,var(--brand)_12%,transparent)] text-[var(--brand)]">
               <Building2 className="h-5 w-5" strokeWidth={1.75} aria-hidden />
             </span>
             <h3 className="mt-4 font-[family-name:var(--font-display)] text-2xl tracking-tight">
@@ -34,7 +34,7 @@ export function LandingAudiences() {
             </p>
           </Reveal>
           <Reveal delayMs={90}>
-            <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] text-[var(--primary)] dark:text-[var(--accent)]">
+            <span className="inline-flex h-11 w-11 items-center justify-center rounded-[var(--radius)] bg-[color-mix(in_srgb,var(--brand)_12%,transparent)] text-[var(--brand)]">
               <Shield className="h-5 w-5" strokeWidth={1.75} aria-hidden />
             </span>
             <h3 className="mt-4 font-[family-name:var(--font-display)] text-2xl tracking-tight">
@@ -49,7 +49,7 @@ export function LandingAudiences() {
         </div>
 
         <Reveal className="mt-14 flex flex-wrap items-start gap-6 border-t border-[var(--border)] pt-10 text-sm text-[var(--muted-foreground)]">
-          <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--card)] text-[var(--primary)] dark:text-[var(--accent)]">
+          <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius)] bg-[var(--card)] text-[var(--brand)]">
             <Headphones className="h-4 w-4" strokeWidth={1.75} aria-hidden />
           </span>
           <p className="max-w-3xl leading-relaxed">

@@ -11,10 +11,12 @@ test.describe("Parity shells", () => {
     await expect(page).toHaveURL(/\/login/);
   });
 
-  test("integrations and targets require sign in", async ({ page }) => {
+  test("integrations, targets, and groups require sign in", async ({ page }) => {
     await page.goto("/org/settings/integrations");
     await expect(page).toHaveURL(/\/login/);
     await page.goto("/org/targets");
+    await expect(page).toHaveURL(/\/login/);
+    await page.goto("/org/groups");
     await expect(page).toHaveURL(/\/login/);
   });
 });

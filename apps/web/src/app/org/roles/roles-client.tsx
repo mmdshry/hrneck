@@ -1,18 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
-import { Pagination } from "@/components/ui/pagination";
+import { useDataTableQuery } from "@/hooks/use-data-table-query";
+import { liveStatusLabel, useLiveTopic } from "@/hooks/use-live-topic";
 import { api, ensureCsrf, fetchSessionUser } from "@/lib/api";
+import { serializeDataTableQuery } from "@/lib/data-table-query";
+import { orgLiveChannel } from "@/lib/live-topics";
 import {
   DEFAULT_PAGE_SIZE,
   emptyMeta,
+  paginateLocal,
   parsePaginatedResponse,
   paginationQuery,
   type PageSize,
@@ -27,9 +32,34 @@ type OrgRole = {
   permissions: string[];
 };
 
+type RolesPayload = {
+  data: OrgRole[];
+  permissions?: string[];
+};
+
+function matchesCells(
+  q: string,
+  columnFilters: Record<string, string>,
+  cells: Record<string, string>,
+): boolean {
+  const needle = q.trim().toLowerCase();
+  if (needle && !Object.values(cells).join(" ").toLowerCase().includes(needle)) {
+    return false;
+  }
+  for (const [key, raw] of Object.entries(columnFilters)) {
+    const value = raw.trim().toLowerCase();
+    if (!value) continue;
+    if (!String(cells[key] ?? "").toLowerCase().includes(value)) return false;
+  }
+  return true;
+}
+
 export function RolesClient() {
+  const tenant = resolveTenant();
+  const channel = tenant ? orgLiveChannel(tenant, "roles") : null;
   const [session, setSession] = useState<SessionUser | null>(null);
   const [roles, setRoles] = useState<OrgRole[]>([]);
+  const [liveRoles, setLiveRoles] = useState<OrgRole[] | null>(null);
   const [meta, setMeta] = useState<PaginationMeta>(emptyMeta());
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState<PageSize>(DEFAULT_PAGE_SIZE);
@@ -38,39 +68,130 @@ export function RolesClient() {
   const [selected, setSelected] = useState<string[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const tableQuery = useDataTableQuery();
+  const filters = useMemo(
+    () => serializeDataTableQuery(tableQuery.debounced),
+    [tableQuery.debounced],
+  );
+  const filtersKey = useMemo(() => JSON.stringify(filters), [filters]);
+  const filtersKeyRef = useRef(filtersKey);
 
-  async function refresh(nextPage = page, nextPerPage = perPage) {
-    await ensureCsrf();
-    const tenant = resolveTenant();
-    const me = await fetchSessionUser();
-    setSession(me);
-    if (!me) {
-      return;
+  const applyLiveSlice = useCallback(
+    (
+      items: OrgRole[],
+      nextPage: number,
+      nextPerPage: number,
+      q: string,
+      columnFilters: Record<string, string>,
+    ) => {
+      const filtered = items.filter((role) =>
+        matchesCells(q, columnFilters, {
+          name: role.name,
+          permissions: role.permissions.join(" "),
+        }),
+      );
+      const sliced = paginateLocal(filtered, nextPage, nextPerPage);
+      setRoles(sliced.data);
+      setMeta(sliced.meta);
+      setPage(sliced.meta.current_page);
+    },
+    [],
+  );
+
+  const onPayload = useCallback((payload: RolesPayload) => {
+    setLiveRoles(Array.isArray(payload.data) ? payload.data : []);
+    if (Array.isArray(payload.permissions)) {
+      setCatalog(payload.permissions);
     }
-    const [roleList, permissionList] = await Promise.all([
-      api(`/api/v1/org/roles?${paginationQuery(nextPage, nextPerPage)}`, { tenant }),
-      api<{ data: string[] }>("/api/v1/org/permissions", { tenant }),
-    ]);
-    const parsed = parsePaginatedResponse<OrgRole>(roleList, nextPerPage);
-    setRoles(parsed.data);
-    setMeta(parsed.meta);
-    setPage(parsed.meta.current_page);
-    setCatalog(permissionList.data ?? []);
-  }
+  }, []);
+
+  const refreshFromApi = useCallback(
+    async (nextPage: number, nextPerPage: number, nextFilters: Record<string, string>) => {
+      await ensureCsrf();
+      const t = resolveTenant();
+      const me = await fetchSessionUser();
+      setSession(me);
+      if (!me) {
+        return;
+      }
+      const [roleList, permissionList] = await Promise.all([
+        api(`/api/v1/org/roles?${paginationQuery(nextPage, nextPerPage, nextFilters)}`, { tenant: t }),
+        api<{ data: string[] }>("/api/v1/org/permissions", { tenant: t }),
+      ]);
+      const parsed = parsePaginatedResponse<OrgRole>(roleList, nextPerPage);
+      setRoles(parsed.data);
+      setMeta(parsed.meta);
+      setPage(parsed.meta.current_page);
+      setCatalog(permissionList.data ?? []);
+    },
+    [],
+  );
+
+  const { status, error: liveError } = useLiveTopic<RolesPayload>({
+    channel,
+    onPayload,
+  });
 
   useEffect(() => {
-    void refresh()
+    void fetchSessionUser()
+      .then(setSession)
+      .catch(() => setSession(null));
+  }, []);
+
+  useEffect(() => {
+    if (filtersKeyRef.current !== filtersKey) {
+      filtersKeyRef.current = filtersKey;
+      if (page !== 1) {
+        setPage(1);
+        return;
+      }
+    }
+    if (liveRoles !== null) {
+      applyLiveSlice(
+        liveRoles,
+        page,
+        perPage,
+        tableQuery.debounced.q,
+        tableQuery.debounced.columnFilters,
+      );
+      setLoading(false);
+      return;
+    }
+    void refreshFromApi(page, perPage, filters)
       .catch((err: unknown) => {
         setMessage(err instanceof Error ? err.message : "Load failed");
       })
       .finally(() => setLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, perPage]);
+  }, [
+    liveRoles,
+    page,
+    perPage,
+    filters,
+    filtersKey,
+    applyLiveSlice,
+    refreshFromApi,
+    tableQuery.debounced,
+  ]);
+
+  const statusLabel = liveStatusLabel(status);
 
   function togglePermission(permission: string) {
     setSelected((prev) =>
       prev.includes(permission) ? prev.filter((p) => p !== permission) : [...prev, permission],
     );
+  }
+
+  function updateRolePermissions(roleId: number, permissions: string[]) {
+    setRoles((prev) => prev.map((r) => (r.id === roleId ? { ...r, permissions } : r)));
+    setLiveRoles((prev) =>
+      prev ? prev.map((r) => (r.id === roleId ? { ...r, permissions } : r)) : prev,
+    );
+  }
+
+  async function afterMutation() {
+    if (liveRoles === null) {
+      await refreshFromApi(page, perPage, filters);
+    }
   }
 
   async function onCreate(event: FormEvent) {
@@ -87,7 +208,7 @@ export function RolesClient() {
       setName("");
       setSelected([]);
       setMessage("Role created.");
-      await refresh();
+      await afterMutation();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Create failed");
     }
@@ -104,29 +225,90 @@ export function RolesClient() {
         body: JSON.stringify({ permissions }),
       });
       setMessage(`Updated ${role.name}.`);
-      await refresh();
+      await afterMutation();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Update failed");
     }
   }
 
+  const columns: Array<DataTableColumn<OrgRole>> = [
+    {
+      id: "name",
+      header: "Name",
+      accessorKey: "name",
+      sticky: true,
+      cell: (role) => role.name,
+    },
+    {
+      id: "permissions",
+      header: "Permissions",
+      filter: "none",
+      filterValue: (role) => role.permissions.join(" "),
+      enableSorting: false,
+      cell: (role) => (
+        <details>
+          <summary className="cursor-pointer text-sm">
+            {role.permissions.length} selected
+          </summary>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            {catalog.map((permission) => {
+              const checked = role.permissions.includes(permission);
+              return (
+                <label key={`${role.id}-${permission}`} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => {
+                      const next = checked
+                        ? role.permissions.filter((p) => p !== permission)
+                        : [...role.permissions, permission];
+                      updateRolePermissions(role.id, next);
+                    }}
+                  />
+                  {permission}
+                </label>
+              );
+            })}
+          </div>
+        </details>
+      ),
+    },
+    {
+      id: "actions",
+      header: "Actions",
+      filter: "none",
+      enableSorting: false,
+      enableGlobalFilter: false,
+      cell: (role) => (
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={() => void saveRole(role, role.permissions)}
+        >
+          Save permissions
+        </Button>
+      ),
+    },
+  ];
+
   if (loading) {
-    return <PageSkeleton className="max-w-3xl" />;
+    return <PageSkeleton className="max-w-5xl" />;
   }
 
   if (!session) {
     return (
-      <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-8 sm:px-6">
+      <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">
         <PageHeader
           title="Roles & permissions"
-          description="RBAC for organization operators. Employee categorization stays on Targets & Groups."
+          description="RBAC for organization operators. Employee categorization stays on Employees and Groups."
         />
         <Alert className="mt-4">
-          Sign in required. Use Sign in in the sidebar (admin@itneck.test).
+          Sign in required. Use Sign in in the sidebar.
         </Alert>
         <Link
           href="/login?next=%2Forg%2Froles"
-          className="mt-4 inline-flex min-h-11 items-center justify-center rounded-xl bg-[var(--accent)] px-4 py-2.5 text-sm font-medium text-[var(--accent-foreground)]"
+          className="mt-4 inline-flex min-h-11 items-center justify-center rounded-[var(--radius)] bg-[var(--primary)] px-4 py-2.5 text-sm font-medium text-[var(--primary-foreground)]"
         >
           Sign in
         </Link>
@@ -136,17 +318,21 @@ export function RolesClient() {
 
   if (!hasPermission(session, "org.roles.manage")) {
     return (
-      <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-8 sm:px-6">
+      <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">
         <Alert variant="destructive">You do not have permission to manage roles.</Alert>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-8 sm:px-6">
+    <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">
       <PageHeader
         title="Roles & permissions"
-        description="RBAC for organization operators. Employee categorization stays on Targets & Groups."
+        description={
+          statusLabel
+            ? `RBAC for organization operators. Employee categorization stays on Employees and Groups. · ${statusLabel}`
+            : "RBAC for organization operators. Employee categorization stays on Employees and Groups."
+        }
       />
       {message ? (
         <Alert
@@ -154,6 +340,11 @@ export function RolesClient() {
           variant={message.toLowerCase().includes("fail") ? "destructive" : "success"}
         >
           {message}
+        </Alert>
+      ) : null}
+      {liveError ? (
+        <Alert className="mt-4" variant="destructive">
+          {liveError}
         </Alert>
       ) : null}
 
@@ -181,54 +372,26 @@ export function RolesClient() {
         <Button type="submit">Create role</Button>
       </form>
 
-      <ul className="mt-8 space-y-4">
-        {roles.map((role) => (
-          <li key={role.id} className="rounded-2xl border border-[var(--border)] p-4">
-            <div className="flex items-center justify-between gap-2">
-              <p className="font-medium">{role.name}</p>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => void saveRole(role, role.permissions)}
-              >
-                Save permissions
-              </Button>
-            </div>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              {catalog.map((permission) => {
-                const checked = role.permissions.includes(permission);
-                return (
-                  <label key={`${role.id}-${permission}`} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => {
-                        const next = checked
-                          ? role.permissions.filter((p) => p !== permission)
-                          : [...role.permissions, permission];
-                        setRoles((prev) =>
-                          prev.map((r) => (r.id === role.id ? { ...r, permissions: next } : r)),
-                        );
-                      }}
-                    />
-                    {permission}
-                  </label>
-                );
-              })}
-            </div>
-          </li>
-        ))}
-      </ul>
-      <Pagination
-        className="mt-4"
-        page={page}
-        perPage={perPage}
-        total={meta.total}
-        onPageChange={setPage}
-        onPerPageChange={(size) => {
-          setPerPage(size);
-          setPage(1);
+      <DataTable
+        className="mt-8"
+        mode="server"
+        caption="Roles"
+        columns={columns}
+        rows={roles}
+        filterState={tableQuery.state}
+        onFilterStateChange={tableQuery.setState}
+        getRowId={(row) => row.id}
+        emptyTitle="No roles yet."
+        emptyDescription="Create a role and choose its permissions."
+        pagination={{
+          page,
+          perPage,
+          total: meta.total,
+          onPageChange: setPage,
+          onPerPageChange: (size) => {
+            setPerPage(size);
+            setPage(1);
+          },
         }}
       />
     </div>

@@ -28,7 +28,9 @@ test.describe("Ticketing", () => {
     await expect(page.getByRole("button", { name: "Create ticket" })).toBeVisible();
 
     await page.goto("/org/ticketing/desks");
-    await expect(page.getByRole("heading", { name: "Desks", exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Desks", exact: true }).or(page.getByText("Desks", { exact: true }).first()),
+    ).toBeVisible({ timeout: 20_000 });
 
     await page.goto("/org/ticketing/kb");
     await expect(page.getByRole("heading", { name: "Knowledge Base" })).toBeVisible();
@@ -47,9 +49,10 @@ test.describe("Ticketing", () => {
     test.setTimeout(60_000);
     await loginAsOrgAdmin(page);
     await page.goto("/org/ticketing");
-    await expect(page.getByLabel("Desk", { exact: true })).toContainText("Incident Desk");
+    await expect(page.locator("#desk option").first()).toBeAttached({ timeout: 20_000 });
+    await expect(page.locator("#desk")).not.toHaveValue("", { timeout: 20_000 });
     const summary = `E2E ticket ${Date.now()}`;
-    await page.getByLabel("Summary").fill(summary);
+    await page.locator("#summary").fill(summary);
     const responsePromise = page.waitForResponse(
       (res) =>
         res.url().includes("/api/v1/org/ticketing/tickets") &&

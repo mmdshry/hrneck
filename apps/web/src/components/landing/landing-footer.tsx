@@ -7,15 +7,15 @@ import {
   MapPin,
   Phone,
   Presentation,
-  ShieldAlert,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
+import { HrneckWordmark } from "@/components/hrneck-wordmark";
 
-const brand = process.env.NEXT_PUBLIC_BRAND_SHORT ?? "HRNECK";
 const brandName =
   process.env.NEXT_PUBLIC_BRAND_NAME ?? "HRNECK Training Portal";
-const supportEmail = "support@itneck.com";
+const supportEmail =
+  process.env.NEXT_PUBLIC_CONTACT_EMAIL ?? "support@hrneck.com";
 const supportPhoneDisplay = "858-740-8878";
 const supportPhoneTel = "+18587408878";
 
@@ -33,15 +33,7 @@ export function LandingFooter() {
       <div className="mx-auto w-full max-w-6xl px-6 py-12 md:py-14">
         <div className="grid gap-12 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:gap-16">
           <div>
-            <p className="flex items-center gap-2 font-[family-name:var(--font-display)] text-lg tracking-tight">
-              <span
-                className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent)] text-[var(--accent-foreground)]"
-                aria-hidden
-              >
-                <ShieldAlert className="h-3.5 w-3.5" strokeWidth={2.25} />
-              </span>
-              {brand}
-            </p>
+            <HrneckWordmark className="h-8" />
             <p className="mt-3 max-w-sm text-sm leading-relaxed text-[var(--muted-foreground)]">
               {brandName} — security awareness for MSPs and organizations.
             </p>
@@ -73,7 +65,7 @@ export function LandingFooter() {
               <div>
                 <dt className="flex items-center gap-3 font-medium text-[var(--foreground)]">
                   <MapPin
-                    className="h-4 w-4 shrink-0 text-[var(--accent)]"
+                    className="h-4 w-4 shrink-0 text-[var(--brand)]"
                     aria-hidden
                   />
                   Postal Address
@@ -85,7 +77,7 @@ export function LandingFooter() {
               <div>
                 <dt className="flex items-center gap-3 font-medium text-[var(--foreground)]">
                   <Clock
-                    className="h-4 w-4 shrink-0 text-[var(--accent)]"
+                    className="h-4 w-4 shrink-0 text-[var(--brand)]"
                     aria-hidden
                   />
                   Work Hours
@@ -98,7 +90,7 @@ export function LandingFooter() {
               <div>
                 <dt className="flex items-center gap-3 font-medium text-[var(--foreground)]">
                   <Phone
-                    className="h-4 w-4 shrink-0 text-[var(--accent)]"
+                    className="h-4 w-4 shrink-0 text-[var(--brand)]"
                     aria-hidden
                   />
                   Phone
@@ -115,7 +107,7 @@ export function LandingFooter() {
               <div>
                 <dt className="flex items-center gap-3 font-medium text-[var(--foreground)]">
                   <Mail
-                    className="h-4 w-4 shrink-0 text-[var(--accent)]"
+                    className="h-4 w-4 shrink-0 text-[var(--brand)]"
                     aria-hidden
                   />
                   Email

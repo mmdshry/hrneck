@@ -1,5 +1,7 @@
 import { SendingProfilesClient } from "./sending-profiles-client";
 
+export const instant = false;
+
 export const metadata = {
   title: "Sending profiles",
   description: "Configure outbound from addresses for simulations.",
