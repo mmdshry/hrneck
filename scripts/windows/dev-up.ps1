@@ -85,7 +85,7 @@ if (Get-Command caddy -ErrorAction SilentlyContinue) {
 }
 
 if (-not (Test-TcpPort 8000)) {
-  Start-DevWindow "HRNECK API" $api "php artisan serve --host=127.0.0.1 --port=8000"
+  Start-DevWindow "HRNECK API" $api "`$env:PHP_CLI_SERVER_WORKERS='8'; php artisan serve --host=127.0.0.1 --port=8000 --no-reload"
 } else {
   Write-Host "  skip API serve (:8000 already in use)" -ForegroundColor DarkYellow
 }
