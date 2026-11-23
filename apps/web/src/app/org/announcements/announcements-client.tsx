@@ -202,16 +202,19 @@ export function AnnouncementsClient() {
     try {
       await ensureCsrf();
       const tenantSlug = resolveTenant();
-      await api("/api/v1/org/announcements", {
+      const res = (await api("/api/v1/org/announcements", {
         method: "POST",
         tenant: tenantSlug,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title, body }),
-      });
+      })) as { data?: Announcement };
+      const created = res.data;
       setTitle("");
       setBody("");
       setPage(1);
-      if (liveRows === null) {
+      if (created && liveRows !== null) {
+        setLiveRows([created, ...liveRows.filter((row) => row.id !== created.id)]);
+      } else {
         await refreshFromApi(1, perPage, filters);
       }
       toastSuccess(t("announcementPublished"));
