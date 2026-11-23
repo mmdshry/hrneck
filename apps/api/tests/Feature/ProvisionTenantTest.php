@@ -28,10 +28,11 @@ test('provision tenant creates database domain and sample content', function () 
         ->and($tenant->name)->toBe('Provisioned Org')
         ->and($tenant->domains)->not->toBeEmpty();
 
-    expect(DB::select("SHOW DATABASES LIKE 'hrneck_tenant_{$slug}'"))->not->toBeEmpty();
+    $dbName = (string) config('tenancy.database.prefix').$slug;
+    expect(DB::select("SHOW DATABASES LIKE '{$dbName}'"))->not->toBeEmpty();
 
     // cleanup
-    DB::statement("DROP DATABASE IF EXISTS `hrneck_tenant_{$slug}`");
+    DB::statement("DROP DATABASE IF EXISTS `{$dbName}`");
     DB::table('domains')->where('tenant_id', $slug)->delete();
     DB::table('tenants')->where('id', $slug)->delete();
 });

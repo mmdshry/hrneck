@@ -2,6 +2,26 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DataTable } from "./data-table";
 
+vi.mock("next-intl", () => ({
+  useTranslations: () => (key: string) => {
+    const messages: Record<string, string> = {
+      searchTable: "Search table",
+      searchPlaceholder: "Search…",
+      noResults: "No results for filters",
+      noRows: "No rows yet",
+      filters: "Filters",
+      clear: "Clear",
+      all: "All",
+      tryClearingFilters: "Try clearing search or column filters.",
+      columnFilters: "Column filters",
+      columnFiltersDescription: "Narrow the table by column.",
+      done: "Done",
+      search: "Search",
+    };
+    return messages[key] ?? key;
+  },
+}));
+
 afterEach(() => {
   cleanup();
 });
