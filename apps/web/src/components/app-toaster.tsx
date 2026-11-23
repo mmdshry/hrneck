@@ -9,8 +9,7 @@ export function AppToaster() {
       closeButton
       richColors
       toastOptions={{
-        className:
-          "border border-[var(--border)] bg-[var(--card)] text-[var(--card-foreground)] shadow-[var(--shadow-md)]",
+        className: "border shadow-[var(--shadow-md)]",
       }}
     />
   );

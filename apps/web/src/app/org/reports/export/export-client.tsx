@@ -1,7 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
@@ -25,6 +25,7 @@ import {
   type PaginationMeta,
 } from "@/lib/pagination";
 import { resolveTenant } from "@/lib/tenant";
+import { toastError, toastSuccess } from "@/lib/toast";
 
 type Calendar = {
   year: number;
@@ -45,29 +46,6 @@ type ExportPayload = {
   calendar: Calendar;
   logs: Archive[];
 };
-
-const SCOPE_OPTIONS = [
-  { label: "Business", value: "business" },
-  { label: "User", value: "user" },
-];
-
-const STATUS_OPTIONS = [{ label: "Ready", value: "ready" }];
-
-function alertVariantForMessage(message: string): "destructive" | "success" | "default" {
-  const m = message.toLowerCase();
-  if (
-    /\b(fail|failed|error|invalid|unauthorized|rejected)\b/.test(m) ||
-    m.includes("load failed") ||
-    m.includes("generate failed") ||
-    m.includes("download failed")
-  ) {
-    return "destructive";
-  }
-  if (m.includes("generated") || m.includes("downloaded")) {
-    return "success";
-  }
-  return "default";
-}
 
 function matchesCells(
   q: string,
@@ -96,6 +74,8 @@ function archiveCells(row: Archive): Record<string, string> {
 }
 
 export function ReportExportClient() {
+  const t = useTranslations("org.export");
+  const tCommon = useTranslations("common");
   const tenant = resolveTenant();
   const [tab, setTab] = useState<"business" | "user">("business");
   const [calendar, setCalendar] = useState<Calendar | null>(null);
@@ -107,7 +87,6 @@ export function ReportExportClient() {
   const [timezone, setTimezone] = useState("UTC");
   const [includeTraining, setIncludeTraining] = useState(true);
   const [periodKey, setPeriodKey] = useState("");
-  const [message, setMessage] = useState<string | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
   const tableQuery = useDataTableQuery();
   const filters = useMemo(
@@ -185,6 +164,12 @@ export function ReportExportClient() {
   });
 
   useEffect(() => {
+    if (liveError) {
+      toastError(liveError);
+    }
+  }, [liveError]);
+
+  useEffect(() => {
     if (filtersKeyRef.current !== filtersKey) {
       filtersKeyRef.current = filtersKey;
       if (logsPage !== 1) {
@@ -203,7 +188,7 @@ export function ReportExportClient() {
       return;
     }
     void refreshFromApi(logsPage, logsPerPage, filters).catch((err: unknown) => {
-      setMessage(err instanceof Error ? err.message : "Load failed");
+      toastError(err instanceof Error ? err.message : tCommon("loadFailed"));
     });
   }, [
     allLogs,
@@ -214,12 +199,12 @@ export function ReportExportClient() {
     applyLogSlice,
     refreshFromApi,
     tableQuery.debounced,
+    tCommon,
   ]);
 
   const statusLabel = liveStatusLabel(status);
 
   async function generate(scope: "business" | "user", key: string, periodType: string) {
-    setMessage(null);
     try {
       await ensureCsrf();
       await api("/api/v1/org/reports/export", {
@@ -235,9 +220,9 @@ export function ReportExportClient() {
         }),
       });
       await refreshFromApi(logsPage, logsPerPage, filters);
-      setMessage(`Generated ${scope} report for ${key}`);
+      toastSuccess(`Generated ${scope} report for ${key}`);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Generate failed");
+      toastError(err instanceof Error ? err.message : t("generateFailed"));
     }
   }
 
@@ -249,7 +234,6 @@ export function ReportExportClient() {
   }
 
   async function download(id: number, key: string) {
-    setMessage(null);
     try {
       await ensureCsrf();
       const token = document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1];
@@ -271,12 +255,11 @@ export function ReportExportClient() {
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Download failed");
+      toastError(err instanceof Error ? err.message : tCommon("downloadFailed"));
     }
   }
 
   async function deleteArchive(id: number) {
-    setMessage(null);
     try {
       await ensureCsrf();
       await api(`/api/v1/org/reports/export/${id}`, {
@@ -285,52 +268,59 @@ export function ReportExportClient() {
       });
       setAllLogs(null);
       await refreshFromApi(logsPage, logsPerPage, filters);
-      setMessage("Archive deleted.");
+      toastSuccess(t("archiveDeleted"));
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Delete failed");
+      toastError(err instanceof Error ? err.message : tCommon("deleteFailed"));
       throw err;
     }
   }
 
+  const scopeOptions = [
+    { label: t("business"), value: "business" },
+    { label: t("user"), value: "user" },
+  ];
+  const statusOptions = [{ label: tCommon("ready"), value: "ready" }];
+
   const columns: Array<DataTableColumn<Archive>> = [
     {
       id: "name",
-      header: "Name",
+      header: tCommon("name"),
       accessorKey: "name",
       sticky: true,
       cell: (row) => row.name,
     },
     {
       id: "scope",
-      header: "Scope",
+      header: tCommon("scope"),
       filter: "select",
-      filterOptions: SCOPE_OPTIONS,
+      filterOptions: scopeOptions,
       accessorKey: "scope",
       cell: (row) => row.scope,
     },
     {
       id: "period",
-      header: "Period",
+      header: tCommon("period"),
       filterValue: (row) => row.period_key,
       cell: (row) => row.period_key,
     },
     {
       id: "status",
-      header: "Status",
+      header: tCommon("status"),
       filter: "select",
-      filterOptions: STATUS_OPTIONS,
+      filterOptions: statusOptions,
       accessorKey: "status",
       cell: (row) => row.status,
     },
     {
       id: "generated_at",
-      header: "Generated",
+      header: tCommon("generated"),
       filter: "none",
-      cell: (row) => (row.generated_at ? new Date(row.generated_at).toLocaleString() : "—"),
+      cell: (row) =>
+        row.generated_at ? new Date(row.generated_at).toLocaleString() : tCommon("emDash"),
     },
     {
       id: "actions",
-      header: "Actions",
+      header: tCommon("actions"),
       filter: "none",
       enableSorting: false,
       enableGlobalFilter: false,
@@ -338,19 +328,19 @@ export function ReportExportClient() {
         <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
-            variant="link"
-            className="min-h-0 px-0"
+            variant="outline"
+            size="compact"
             onClick={() => void download(row.id, row.period_key)}
           >
-            Download
+            {tCommon("download")}
           </Button>
           <Button
             type="button"
             variant="outline"
-            className="min-h-0 px-2 py-1 text-xs"
+            size="compact"
             onClick={() => setPendingDeleteId(row.id)}
           >
-            Delete
+            {tCommon("delete")}
           </Button>
         </div>
       ),
@@ -360,47 +350,37 @@ export function ReportExportClient() {
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">
       <PageHeader
-        title="Report export"
-        description="Business rollup and user-filtered PDF archives (six-section quarterly)."
+        title={t("title")}
+        description={t("descriptionRollup")}
         actions={
           <span className="text-sm text-[var(--muted-foreground)]">
-            {statusLabel ?? "Live"}
+            {statusLabel ?? tCommon("live")}
           </span>
         }
       />
-      <div className="mt-6 flex flex-wrap gap-2" role="tablist" aria-label="Export mode">
-        {(["business", "user"] as const).map((t) => (
+      <div className="mt-6 flex flex-wrap gap-2" role="tablist" aria-label={t("exportMode")}>
+        {(["business", "user"] as const).map((mode) => (
           <Button
-            key={t}
+            key={mode}
             type="button"
             role="tab"
-            aria-selected={tab === t}
-            variant={tab === t ? "default" : "secondary"}
-            onClick={() => setTab(t)}
+            aria-selected={tab === mode}
+            variant={tab === mode ? "default" : "secondary"}
+            onClick={() => setTab(mode)}
           >
-            {t === "business" ? "Business" : "User"}
+            {mode === "business" ? t("business") : t("user")}
           </Button>
         ))}
       </div>
-      {message ? (
-        <Alert className="mt-4" variant={alertVariantForMessage(message)}>
-          {message}
-        </Alert>
-      ) : null}
-      {liveError ? (
-        <Alert className="mt-4" variant="destructive">
-          {liveError}
-        </Alert>
-      ) : null}
       {tab === "business" && calendar ? (
         <div className="mt-8 space-y-8">
           <section>
-            <h2 className="text-xl font-medium text-[var(--foreground)]">Monthly</h2>
+            <h2 className="text-xl font-medium text-[var(--foreground)]">{tCommon("monthly")}</h2>
             {calendar.months.length === 0 ? (
               <EmptyState
                 className="mt-4"
-                title="No months in calendar"
-                description="Periods appear when the export calendar is available."
+                title={t("noMonths")}
+                description={t("periodsAppear")}
               />
             ) : (
               <ul className="mt-4 grid gap-2 sm:grid-cols-3">
@@ -417,10 +397,12 @@ export function ReportExportClient() {
                           className="min-h-0 px-2 py-1"
                           onClick={() => void generate("business", m.key, "monthly")}
                         >
-                          Download
+                          {tCommon("download")}
                         </Button>
                       ) : (
-                        <span className="text-[var(--muted-foreground)]">Unavailable</span>
+                        <span className="text-[var(--muted-foreground)]">
+                          {tCommon("unavailable")}
+                        </span>
                       )}
                     </Panel>
                   </li>
@@ -429,12 +411,14 @@ export function ReportExportClient() {
             )}
           </section>
           <section>
-            <h2 className="text-xl font-medium text-[var(--foreground)]">Quarterly</h2>
+            <h2 className="text-xl font-medium text-[var(--foreground)]">
+              {tCommon("quarterly")}
+            </h2>
             {calendar.quarters.length === 0 ? (
               <EmptyState
                 className="mt-4"
-                title="No quarters in calendar"
-                description="Periods appear when the export calendar is available."
+                title={t("noQuarters")}
+                description={t("periodsAppear")}
               />
             ) : (
               <ul className="mt-4 grid gap-2 sm:grid-cols-4">
@@ -451,10 +435,12 @@ export function ReportExportClient() {
                           className="min-h-0 px-2 py-1"
                           onClick={() => void generate("business", q.key, "quarterly")}
                         >
-                          PDF
+                          {tCommon("pdf")}
                         </Button>
                       ) : (
-                        <span className="text-[var(--muted-foreground)]">Unavailable</span>
+                        <span className="text-[var(--muted-foreground)]">
+                          {tCommon("unavailable")}
+                        </span>
                       )}
                     </Panel>
                   </li>
@@ -465,13 +451,13 @@ export function ReportExportClient() {
         </div>
       ) : null}
       {tab === "business" && !calendar ? (
-        <MinimalLoader className="mt-8" label={statusLabel ?? "Loading calendar"} />
+        <MinimalLoader className="mt-8" label={statusLabel ?? tCommon("loadingCalendar")} />
       ) : null}
       {tab === "user" ? (
         <form onSubmit={onUserGenerate} className="mt-8 max-w-lg space-y-4">
           <div className="space-y-1">
             <Label htmlFor="export-period-key" className="text-[var(--muted-foreground)]">
-              Period key
+              {t("periodKey")}
             </Label>
             <Input
               id="export-period-key"
@@ -482,7 +468,7 @@ export function ReportExportClient() {
           </div>
           <div className="space-y-1">
             <Label htmlFor="export-timezone" className="text-[var(--muted-foreground)]">
-              Timezone
+              {tCommon("timezone")}
             </Label>
             <Input
               id="export-timezone"
@@ -497,24 +483,24 @@ export function ReportExportClient() {
               onChange={(e) => setIncludeTraining(e.target.checked)}
               className="h-4 w-4 rounded border border-[var(--border)]"
             />
-            Include training
+            {t("includeTraining")}
           </label>
-          <Button type="submit">Generate PDF</Button>
+          <Button type="submit">{t("generatePdf")}</Button>
         </form>
       ) : null}
       <section className="mt-12">
-        <h2 className="text-xl font-medium text-[var(--foreground)]">Report log</h2>
+        <h2 className="text-xl font-medium text-[var(--foreground)]">{t("reportLog")}</h2>
         <DataTable
           className="mt-4"
           mode="server"
-          caption="Report log"
+          caption={t("reportLog")}
           columns={columns}
           rows={logs}
           filterState={tableQuery.state}
           onFilterStateChange={tableQuery.setState}
           getRowId={(row) => row.id}
-          emptyTitle="No exports yet"
-          emptyDescription="Generate a business or user report to see it listed here."
+          emptyTitle={t("noExportsYet")}
+          emptyDescription={t("noExportsHint")}
           pagination={{
             page: logsPage,
             perPage: logsPerPage,
@@ -533,9 +519,9 @@ export function ReportExportClient() {
         onOpenChange={(open) => {
           if (!open) setPendingDeleteId(null);
         }}
-        title="Delete report archive"
-        description="Delete this report archive?"
-        confirmLabel="Delete"
+        title={t("deleteArchive")}
+        description={t("deleteArchiveConfirm")}
+        confirmLabel={tCommon("delete")}
         variant="destructive"
         onConfirm={async () => {
           if (pendingDeleteId === null) return;

@@ -1,12 +1,11 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
 import {
   BarChart3,
   BookOpen,
   Building2,
   ClipboardList,
+  ContactRound,
   Download,
   KeyRound,
   LayoutDashboard,
@@ -26,6 +25,9 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
+import { useTranslations } from "next-intl";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   useEffect,
   useId,
@@ -34,12 +36,16 @@ import {
   type ReactNode,
 } from "react";
 import { BrandMark } from "@/components/brand-mark";
-import { OrgMembershipGate } from "@/components/org-membership-gate";
+import { LanguageSwitcher } from "@/components/language-switcher";
 import { NotificationBell } from "@/components/notifications/notification-bell";
+import { OrgMembershipGate } from "@/components/org-membership-gate";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { Avatar } from "@/components/ui/avatar";
+import { AvatarUploader } from "@/components/ui/avatar-uploader";
 import { Button } from "@/components/ui/button";
 import { api, ensureCsrf, fetchSessionUser, signOut as apiSignOut } from "@/lib/api";
 import {
+  activeMemberships,
   hasPermission,
   matchOrgMembership,
   type SessionUser,
@@ -49,7 +55,24 @@ import { cn } from "@/lib/utils";
 
 type NavItem = {
   href: string;
-  label: string;
+  labelKey:
+    | "dashboard"
+    | "organizations"
+    | "training"
+    | "courses"
+    | "checklists"
+    | "ticketing"
+    | "employees"
+    | "departments"
+    | "groups"
+    | "users"
+    | "roles"
+    | "reporting"
+    | "export"
+    | "announcements"
+    | "settings"
+    | "accountMfa"
+    | "guides";
   icon: LucideIcon;
   exact?: boolean;
   permission?: string;
@@ -57,23 +80,23 @@ type NavItem = {
 };
 
 const NAV: NavItem[] = [
-  { href: "/org", label: "Dashboard", icon: LayoutDashboard, exact: true },
-  { href: "/msp", label: "Organizations", icon: Building2, exact: true, platformOnly: true },
-  { href: "/org/training", label: "Training", icon: GraduationCap, permission: "org.training.manage" },
-  { href: "/org/courses", label: "Courses", icon: Library, permission: "org.training.manage" },
-  { href: "/org/checklists", label: "Checklists", icon: ClipboardList, permission: "org.checklists.manage" },
-  { href: "/org/ticketing", label: "Ticketing", icon: Ticket, permission: "org.ticketing.tickets" },
-  { href: "/org/targets", label: "Employees", icon: Target, permission: "org.targets.manage" },
-  { href: "/org/departments", label: "Departments", icon: Layers, permission: "org.departments.manage" },
-  { href: "/org/groups", label: "Groups", icon: UsersRound, permission: "org.groups.manage" },
-  { href: "/org/users", label: "Users", icon: Users, permission: "org.users.manage" },
-  { href: "/org/roles", label: "Roles", icon: KeyRound, permission: "org.roles.manage" },
-  { href: "/org/reports", label: "Reporting", icon: BarChart3, permission: "org.reports.view" },
-  { href: "/org/reports/export", label: "Export", icon: Download, permission: "org.reports.export" },
-  { href: "/org/announcements", label: "Announcements", icon: Megaphone, permission: "org.announcements.manage" },
-  { href: "/org/settings", label: "Settings", icon: Settings2, permission: "org.settings.manage" },
-  { href: "/org/settings/mfa", label: "Account / MFA", icon: Shield },
-  { href: "/docs", label: "Guides", icon: BookOpen },
+  { href: "/org", labelKey: "dashboard", icon: LayoutDashboard, exact: true },
+  { href: "/msp", labelKey: "organizations", icon: Building2, exact: true, platformOnly: true },
+  { href: "/org/training", labelKey: "training", icon: GraduationCap, permission: "org.training.manage" },
+  { href: "/org/courses", labelKey: "courses", icon: Library, permission: "org.training.manage" },
+  { href: "/org/checklists", labelKey: "checklists", icon: ClipboardList, permission: "org.checklists.manage" },
+  { href: "/org/ticketing", labelKey: "ticketing", icon: Ticket, permission: "org.ticketing.tickets" },
+  { href: "/org/targets", labelKey: "employees", icon: ContactRound, permission: "org.targets.manage" },
+  { href: "/org/departments", labelKey: "departments", icon: Layers, permission: "org.departments.manage" },
+  { href: "/org/groups", labelKey: "groups", icon: UsersRound, permission: "org.groups.manage" },
+  { href: "/org/users", labelKey: "users", icon: Users, permission: "org.users.manage" },
+  { href: "/org/roles", labelKey: "roles", icon: KeyRound, permission: "org.roles.manage" },
+  { href: "/org/reports", labelKey: "reporting", icon: BarChart3, permission: "org.reports.view" },
+  { href: "/org/reports/export", labelKey: "export", icon: Download, permission: "org.reports.export" },
+  { href: "/org/announcements", labelKey: "announcements", icon: Megaphone, permission: "org.announcements.manage" },
+  { href: "/org/settings", labelKey: "settings", icon: Settings2, permission: "org.settings.manage" },
+  { href: "/org/settings/mfa", labelKey: "accountMfa", icon: Shield },
+  { href: "/docs", labelKey: "guides", icon: BookOpen },
 ];
 
 function visibleNav(user: SessionUser | null): NavItem[] {
@@ -116,10 +139,11 @@ function NavLinks({
   onNavigate?: () => void;
   labelledBy?: string;
 }) {
+  const t = useTranslations("nav");
   return (
     <nav
       className="flex flex-1 flex-col space-y-0.5"
-      aria-label={labelledBy ? undefined : "Organization"}
+      aria-label={labelledBy ? undefined : t("organizations")}
       aria-labelledby={labelledBy}
     >
       {items.map((item) => {
@@ -143,7 +167,7 @@ function NavLinks({
               strokeWidth={active ? 2.25 : 1.75}
               aria-hidden
             />
-            <span>{item.label}</span>
+            <span>{t(item.labelKey)}</span>
           </Link>
         );
       })}
@@ -151,46 +175,107 @@ function NavLinks({
   );
 }
 
-function AuthFooter({
+function SidebarUserProfile({
   authChecked,
-  userEmail,
-  signingOut,
-  onSignOut,
-  onNavigate,
+  user,
+  onAvatarChanged,
 }: {
   authChecked: boolean;
-  userEmail: string | null;
-  signingOut: boolean;
-  onSignOut: () => void;
-  onNavigate?: () => void;
+  user: SessionUser | null;
+  onAvatarChanged?: (url: string | null) => void;
 }) {
+  const userEmail = user?.email ?? null;
+  if (!authChecked || !userEmail) {
+    return null;
+  }
+
+  const displayName = user?.name?.trim() || userEmail;
+  const operatorRole = (user?.roles ?? []).find((role) => role !== "learner");
+  const profileLine = operatorRole
+    ? [operatorRole, user?.department].filter(Boolean).join(" . ")
+    : [user?.job_title, user?.target_department].filter(Boolean).join(" . ");
+
   return (
-    <div className="mt-4 space-y-2 border-t border-[var(--border)] px-2 pt-4">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-medium uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
-          Theme
+    <div className="mb-6 flex items-center gap-3 px-2">
+      <AvatarUploader
+        name={user?.name}
+        email={userEmail}
+        avatarUrl={user?.avatar_url}
+        endpoint="/api/v1/auth/avatar"
+        size="md"
+        variant="dialog"
+        onChanged={onAvatarChanged}
+      />
+      <div className="min-w-0 space-y-0.5">
+        <p
+          className="truncate text-sm font-medium text-[var(--foreground)]"
+          title={displayName}
+        >
+          {displayName}
         </p>
-        <ThemeToggle />
-      </div>
-      {authChecked && userEmail ? (
-        <>
+        {user?.name?.trim() ? (
           <p
             className="truncate text-xs text-[var(--muted-foreground)]"
             title={userEmail}
           >
             {userEmail}
           </p>
-          <Button
-            type="button"
-            variant="ghost"
-            className="w-full justify-start px-3"
-            onClick={onSignOut}
-            disabled={signingOut}
+        ) : null}
+        {profileLine ? (
+          <p
+            className="truncate text-xs text-[var(--muted-foreground)]"
+            title={profileLine}
           >
-            <LogOut className="h-4 w-4 shrink-0" aria-hidden />
-            {signingOut ? "Signing out…" : "Sign out"}
-          </Button>
-        </>
+            {profileLine}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function AuthFooter({
+  authChecked,
+  user,
+  signingOut,
+  onSignOut,
+  onNavigate,
+}: {
+  authChecked: boolean;
+  user: SessionUser | null;
+  signingOut: boolean;
+  onSignOut: () => void;
+  onNavigate?: () => void;
+}) {
+  const userEmail = user?.email ?? null;
+  const t = useTranslations("common");
+  const tLang = useTranslations("language");
+
+  return (
+    <div className="mt-4 space-y-2 border-t border-[var(--border)] px-2 pt-4">
+      <div className="space-y-1.5">
+        <p className="text-xs font-medium uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
+          {tLang("label")}
+        </p>
+        <LanguageSwitcher />
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-medium uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
+          {t("theme")}
+        </p>
+        <ThemeToggle />
+      </div>
+      {authChecked && userEmail ? (
+        <Button
+          type="button"
+          variant="ghost"
+          className="w-full justify-start px-3"
+          onClick={onSignOut}
+          disabled={signingOut}
+        >
+          <LogOut className="h-4 w-4 shrink-0" aria-hidden />
+          {signingOut ? t("signingOut") : t("signOut")}
+        </Button>
       ) : (
         <Link
           href="/login"
@@ -198,7 +283,7 @@ function AuthFooter({
           className="flex min-h-11 items-center gap-2.5 rounded-[var(--radius)] px-3 py-2.5 text-sm text-[var(--foreground)] hover:bg-[var(--muted)]"
         >
           <LogIn className="h-4 w-4 shrink-0" aria-hidden />
-          Sign in
+          {t("signIn")}
         </Link>
       )}
     </div>
@@ -207,8 +292,8 @@ function AuthFooter({
 
 export function OrgShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const tAccount = useTranslations("account");
   const [user, setUser] = useState<SessionUser | null>(null);
-  const [userEmail, setUserEmail] = useState<string | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
@@ -222,6 +307,10 @@ export function OrgShell({ children }: { children: ReactNode }) {
   const preferredTenant = user?.staff_tenant_id ?? user?.tenant_id ?? null;
   const navItems = visibleNav(user);
   const actingInTenant = Boolean(user?.acting_in_tenant && user.staff_tenant_id);
+  const canSwitchOrg =
+    user !== null &&
+    !user.is_platform_staff &&
+    activeMemberships(user).length > 1;
   const membership = user && tenant ? matchOrgMembership(user, tenant) : null;
   const isDocsRoute = pathname === "/docs" || pathname.startsWith("/docs/");
   const isOrgRoute = pathname === "/org" || pathname.startsWith("/org/");
@@ -243,10 +332,12 @@ export function OrgShell({ children }: { children: ReactNode }) {
   }, [preferredTenant, pathname]);
 
   useEffect(() => {
+    // Cookie is the UI locale source of truth after the user switches language.
+    // Session → cookie sync happens only on login (see login-form), not here —
+    // otherwise a stale session.locale (en) overwrites the cookie and snaps back.
     void fetchSessionUser()
       .then((sessionUser) => {
         setUser(sessionUser);
-        setUserEmail(sessionUser?.email ?? null);
         setAuthError(null);
         setAuthChecked(true);
         if (sessionUser?.staff_tenant_id) {
@@ -311,7 +402,6 @@ export function OrgShell({ children }: { children: ReactNode }) {
     try {
       await apiSignOut();
       setUser(null);
-      setUserEmail(null);
       clearTenant();
       setMobileOpen(false);
       window.location.replace("/login");
@@ -321,13 +411,20 @@ export function OrgShell({ children }: { children: ReactNode }) {
     }
   }
 
+  const brandLabel =
+    user?.is_platform_staff && !actingInTenant
+      ? "Platform"
+      : actingInTenant
+        ? (user?.staff_tenant_id ?? tenant)
+        : tenant;
+
   const brandBlock = (
     <div className="px-2">
       <p className="text-xs font-medium uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
-        {tenant}
+        {brandLabel}
       </p>
       <div className="mt-1">
-        <BrandMark size="md" nameClassName="text-xl" />
+        <BrandMark size="lg" showName={false} />
       </div>
     </div>
   );
@@ -341,31 +438,35 @@ export function OrgShell({ children }: { children: ReactNode }) {
       >
         {brandBlock}
         <div className="mt-8 flex min-h-0 flex-1 flex-col">
+          <SidebarUserProfile
+            authChecked={authChecked}
+            user={user}
+            onAvatarChanged={(url) =>
+              setUser((prev) => (prev ? { ...prev, avatar_url: url } : prev))
+            }
+          />
           <NavLinks pathname={pathname} items={navItems} />
           <AuthFooter
             authChecked={authChecked}
-            userEmail={userEmail}
+            user={user}
             signingOut={signingOut}
             onSignOut={() => void signOut()}
           />
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col overflow-x-clip">
         <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--background)] px-4 py-3">
           <div className="min-w-0 md:hidden">
-            <BrandMark size="sm" nameClassName="text-base leading-tight" />
+            <BrandMark size="sm" showName={false} />
             <p className="truncate text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
-              {tenant}
+              {brandLabel}
             </p>
           </div>
-          <div className="hidden min-w-0 md:block">
-            <p className="truncate text-xs font-medium uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
-              {user?.name?.trim() || userEmail || ""}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <NotificationBell />
+          <div className="ml-auto flex items-center gap-2">
+            {!(user?.is_platform_staff && !actingInTenant) ? (
+              <NotificationBell />
+            ) : null}
             <Button
               type="button"
               variant="secondary"
@@ -398,8 +499,22 @@ export function OrgShell({ children }: { children: ReactNode }) {
           </div>
         ) : null}
 
+        {canSwitchOrg && isOrgRoute ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-2 text-sm">
+            <p className="text-[var(--muted-foreground)]">
+              {brandLabel}
+            </p>
+            <Link
+              href={`/select-org?next=${encodeURIComponent(pathname || "/org")}`}
+              className="text-sm font-medium text-[var(--foreground)] underline-offset-4 hover:underline"
+            >
+              {tAccount("switchOrganization")}
+            </Link>
+          </div>
+        ) : null}
+
         {authError ? (
-          <div className="border-b border-[var(--border)] px-4 py-3 text-sm text-[#991b1b]">
+          <div className="border-b border-[var(--border)] px-4 py-3 text-sm text-[var(--destructive)]">
             {authError}
           </div>
         ) : null}
@@ -446,6 +561,13 @@ export function OrgShell({ children }: { children: ReactNode }) {
               </Button>
             </div>
             <div className="flex min-h-0 flex-1 flex-col">
+              <SidebarUserProfile
+                authChecked={authChecked}
+                user={user}
+                onAvatarChanged={(url) =>
+                  setUser((prev) => (prev ? { ...prev, avatar_url: url } : prev))
+                }
+              />
               <NavLinks
                 pathname={pathname}
                 items={navItems}
@@ -454,7 +576,7 @@ export function OrgShell({ children }: { children: ReactNode }) {
               />
               <AuthFooter
                 authChecked={authChecked}
-                userEmail={userEmail}
+                user={user}
                 signingOut={signingOut}
                 onSignOut={() => void signOut()}
                 onNavigate={() => setMobileOpen(false)}

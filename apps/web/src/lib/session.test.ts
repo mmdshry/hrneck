@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   canAccessMsp,
   defaultPostLoginPath,
+  hasPermission,
   matchOrgMembership,
   resolvePostLoginPath,
   type SessionUser,
@@ -76,16 +77,49 @@ describe("matchOrgMembership", () => {
     });
   });
 
-  it("treats tenant_id null non-staff like staff enter required", () => {
+  it("asks multi-membership users to select an org when tenant is unknown", () => {
     expect(
       matchOrgMembership(
-        orgUser({ tenant_id: null, is_platform_staff: false }),
+        orgUser({
+          tenant_id: null,
+          memberships: [
+            { tenant_id: "itneck", name: "ITneck" },
+            { tenant_id: "company", name: "Company" },
+          ],
+        }),
         "mmdshry",
       ),
     ).toEqual({
       ok: false,
-      kind: "staff_enter_required",
+      kind: "org_selection_required",
     });
+  });
+
+  it("allows a membership match even when active tenant_id differs", () => {
+    expect(
+      matchOrgMembership(
+        orgUser({
+          tenant_id: "itneck",
+          memberships: [
+            { tenant_id: "itneck", name: "ITneck" },
+            { tenant_id: "company", name: "Company" },
+          ],
+        }),
+        "company",
+      ),
+    ).toEqual({ ok: true });
+  });
+});
+
+describe("hasPermission for staff tenant context", () => {
+  it("elevates only support permissions while acting in tenant", () => {
+    const staff = staffUser({
+      staff_tenant_id: "itneck",
+      acting_in_tenant: true,
+    });
+    expect(hasPermission(staff, "org.targets.manage")).toBe(true);
+    expect(hasPermission(staff, "org.settings.manage")).toBe(false);
+    expect(hasPermission(staff, "org.roles.manage")).toBe(false);
   });
 });
 
@@ -100,9 +134,37 @@ describe("MSP staff gate paths", () => {
       email: "employee1@mmdshry.com",
       roles: ["learner"],
       permissions: [],
+      memberships: [{ tenant_id: "mmdshry", name: "mmdshry" }],
     });
     expect(canAccessMsp(learner)).toBe(false);
     expect(defaultPostLoginPath(learner)).toBe("/org");
+  });
+
+  it("sends multi-membership users to /select-org", () => {
+    const multi = orgUser({
+      needs_org_selection: true,
+      memberships: [
+        { tenant_id: "itneck", name: "ITneck" },
+        { tenant_id: "company", name: "Company" },
+      ],
+    });
+    expect(defaultPostLoginPath(multi)).toBe("/select-org");
+    expect(resolvePostLoginPath(multi, "/org/users")).toBe(
+      "/select-org?next=%2Forg%2Fusers",
+    );
+  });
+
+  it("does not loop multi-membership users back to /select-org after enter", () => {
+    const selected = orgUser({
+      tenant_id: "company",
+      needs_org_selection: false,
+      memberships: [
+        { tenant_id: "itneck", name: "ITneck" },
+        { tenant_id: "company", name: "Company" },
+      ],
+    });
+    expect(defaultPostLoginPath(selected)).toBe("/org");
+    expect(resolvePostLoginPath(selected, "/learn")).toBe("/learn");
   });
 
   it("sends null-tenant non-staff to /org, not /msp", () => {

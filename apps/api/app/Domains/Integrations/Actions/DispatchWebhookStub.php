@@ -22,11 +22,15 @@ class DispatchWebhookStub
 
         $this->assertSafeWebhookUrl($url);
 
-        $response = Http::timeout(5)->acceptJson()->asJson()->post($url, [
-            'event' => $event,
-            'brand' => config('brand.short'),
-            'payload' => $payload,
-        ]);
+        $response = Http::timeout(5)
+            ->withOptions(['allow_redirects' => false])
+            ->acceptJson()
+            ->asJson()
+            ->post($url, [
+                'event' => $event,
+                'brand' => config('brand.short'),
+                'payload' => $payload,
+            ]);
 
         return [
             'delivered' => $response->successful(),

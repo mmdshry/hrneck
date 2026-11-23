@@ -1,3 +1,5 @@
+"use client";
+
 import {
   BookOpen,
   Clock,
@@ -10,6 +12,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
+import { useMemo } from "react";
 import { HrneckWordmark } from "@/components/hrneck-wordmark";
 
 const brandName =
@@ -19,15 +23,21 @@ const supportEmail =
 const supportPhoneDisplay = "858-740-8878";
 const supportPhoneTel = "+18587408878";
 
-const LINKS: { href: string; label: string; icon: LucideIcon }[] = [
-  { href: "/docs", label: "Guides", icon: BookOpen },
-  { href: "/learn", label: "Learner portal", icon: Presentation },
-  { href: "/portal", label: "Service portal", icon: Headphones },
-  { href: "/login", label: "Sign in", icon: LogIn },
-  { href: "#demo", label: "Request a demo", icon: Mail },
-];
-
 export function LandingFooter() {
+  const t = useTranslations("landing");
+  const tNav = useTranslations("nav");
+
+  const links: { href: string; label: string; icon: LucideIcon }[] = useMemo(
+    () => [
+      { href: "/docs", label: t("guides"), icon: BookOpen },
+      { href: "/learn", label: tNav("learnerPortal"), icon: Presentation },
+      { href: "/portal", label: tNav("servicePortal"), icon: Headphones },
+      { href: "/login", label: t("signIn"), icon: LogIn },
+      { href: "#demo", label: t("requestDemo"), icon: Mail },
+    ],
+    [t, tNav],
+  );
+
   return (
     <footer className="border-t border-[var(--border)] bg-[var(--background)]">
       <div className="mx-auto w-full max-w-6xl px-6 py-12 md:py-14">
@@ -35,19 +45,19 @@ export function LandingFooter() {
           <div>
             <HrneckWordmark className="h-8" />
             <p className="mt-3 max-w-sm text-sm leading-relaxed text-[var(--muted-foreground)]">
-              {brandName} — security awareness for MSPs and organizations.
+              {t("footerTagline", { brand: brandName })}
             </p>
             <nav
               className="mt-8 flex flex-col gap-3 text-sm"
               aria-label="Footer"
             >
-              {LINKS.map((link) => {
+              {links.map((link) => {
                 const Icon = link.icon;
                 return (
                   <Link
                     key={link.href}
                     href={link.href}
-                    className="inline-flex items-center gap-2.5 text-[var(--muted-foreground)] transition-colors duration-[var(--motion)] hover:text-[var(--foreground)]"
+                    className="inline-flex min-h-11 items-center gap-[var(--space-sm)] text-[var(--muted-foreground)] transition-colors duration-[var(--motion)] hover:text-[var(--foreground)]"
                   >
                     <Icon className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
                     {link.label}
@@ -59,7 +69,7 @@ export function LandingFooter() {
 
           <div>
             <h2 className="font-[family-name:var(--font-display)] text-base tracking-tight">
-              Contact
+              {t("contact")}
             </h2>
             <dl className="mt-6 space-y-5 text-sm">
               <div>
@@ -68,10 +78,10 @@ export function LandingFooter() {
                     className="h-4 w-4 shrink-0 text-[var(--brand)]"
                     aria-hidden
                   />
-                  Postal Address
+                  {t("postalAddress")}
                 </dt>
                 <dd className="mt-1.5 pl-7 text-[var(--muted-foreground)]">
-                  San Diego, CA
+                  {t("addressValue")}
                 </dd>
               </div>
               <div>
@@ -80,11 +90,11 @@ export function LandingFooter() {
                     className="h-4 w-4 shrink-0 text-[var(--brand)]"
                     aria-hidden
                   />
-                  Work Hours
+                  {t("workHours")}
                 </dt>
                 <dd className="mt-1.5 space-y-1 pl-7 text-[var(--muted-foreground)]">
-                  <p>Monday–Friday, 7:00 AM – 7:00 PM</p>
-                  <p>Saturday, 8:00 AM – 3:00 PM</p>
+                  <p>{t("hoursWeekday")}</p>
+                  <p>{t("hoursSaturday")}</p>
                 </dd>
               </div>
               <div>
@@ -93,12 +103,12 @@ export function LandingFooter() {
                     className="h-4 w-4 shrink-0 text-[var(--brand)]"
                     aria-hidden
                   />
-                  Phone
+                  {t("phone")}
                 </dt>
                 <dd className="mt-1.5 pl-7">
                   <a
                     href={`tel:${supportPhoneTel}`}
-                    className="text-[var(--primary)] underline-offset-4 hover:underline"
+                    className="inline-flex min-h-11 items-center text-[var(--link)] underline-offset-4 hover:underline"
                   >
                     {supportPhoneDisplay}
                   </a>
@@ -110,12 +120,12 @@ export function LandingFooter() {
                     className="h-4 w-4 shrink-0 text-[var(--brand)]"
                     aria-hidden
                   />
-                  Email
+                  {t("emailLabel")}
                 </dt>
                 <dd className="mt-1.5 pl-7">
                   <a
                     href={`mailto:${supportEmail}`}
-                    className="text-[var(--primary)] underline-offset-4 hover:underline"
+                    className="inline-flex min-h-11 items-center text-[var(--link)] underline-offset-4 hover:underline"
                   >
                     {supportEmail}
                   </a>
@@ -126,7 +136,7 @@ export function LandingFooter() {
         </div>
 
         <p className="mt-12 border-t border-[var(--border)] pt-6 text-center text-sm text-[var(--muted-foreground)]">
-          © 2026 HRneck. All rights reserved.
+          {t("copyright")}
         </p>
       </div>
     </footer>

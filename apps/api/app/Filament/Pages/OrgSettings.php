@@ -3,7 +3,9 @@
 namespace App\Filament\Pages;
 
 use App\Support\FilamentTenant;
+use App\Support\TimezoneOptions;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -57,7 +59,11 @@ class OrgSettings extends Page
             ->components([
                 TextInput::make('display_name')->maxLength(160),
                 TextInput::make('primary_color')->maxLength(20),
-                TextInput::make('timezone')->maxLength(64),
+                Select::make('timezone')
+                    ->options(TimezoneOptions::all())
+                    ->searchable()
+                    ->required()
+                    ->default('UTC'),
                 FileUpload::make('logo_path')
                     ->label('Company logo')
                     ->image()
@@ -74,7 +80,7 @@ class OrgSettings extends Page
     public function save(): void
     {
         if (! FilamentTenant::has()) {
-            Notification::make()->title('Select an organization first')->danger()->send();
+            Notification::make()->title(__('filament.select_organization_first'))->danger()->send();
 
             return;
         }
@@ -107,6 +113,6 @@ class OrgSettings extends Page
                 'created_at' => $existing->created_at ?? now(),
             ],
         );
-        Notification::make()->title('Settings saved')->success()->send();
+        Notification::make()->title(__('filament.settings_saved'))->success()->send();
     }
 }

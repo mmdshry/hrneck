@@ -84,7 +84,7 @@ test('password change succeeds for authenticated user', function () {
         ->assertJsonPath('mfa_required', false);
 });
 
-test('staff tenant gate does not allow horizon and requires matching tenant', function () {
+test('staff tenant gate elevates only support permissions and requires matching tenant', function () {
     $staff = platformAdmin();
     $origin = ['Origin' => 'http://hrneck.test'];
 
@@ -93,8 +93,23 @@ test('staff tenant gate does not allow horizon and requires matching tenant', fu
         ->postJson('/api/v1/msp/tenants/itneck/enter')
         ->assertOk();
 
-    expect(Gate::forUser($staff)->allows('viewHorizon'))->toBeFalse()
-        ->and(Gate::forUser($staff)->allows('viewTelescope'))->toBeFalse();
+    $this->actingAs($staff)
+        ->withHeaders($origin + ['X-Tenant' => 'itneck'])
+        ->getJson('/api/v1/org/targets')
+        ->assertOk();
+
+    $this->actingAs($staff)
+        ->withHeaders($origin + ['X-Tenant' => 'itneck'])
+        ->getJson('/api/v1/org/settings')
+        ->assertForbidden();
+
+    $this->actingAs($staff)
+        ->withHeaders($origin + ['X-Tenant' => 'itneck'])
+        ->getJson('/api/v1/org/roles')
+        ->assertForbidden();
+
+    expect(Gate::forUser($staff)->allows(OrgPermissionCatalog::SETTINGS_MANAGE))->toBeFalse()
+        ->and(Gate::forUser($staff)->allows(OrgPermissionCatalog::ROLES_MANAGE))->toBeFalse();
 
     $this->actingAs($staff)
         ->withHeaders($origin + ['X-Tenant' => 'company'])

@@ -1,25 +1,30 @@
+"use client";
+
 import { Building2, LineChart, Workflow } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Reveal } from "@/components/landing/reveal";
 
 const STEPS = [
   {
     icon: Building2,
-    title: "Onboard organizations",
-    body: "Stand up client tenants from the MSP workspace, or configure a single organization with roles, targets, and branding.",
+    titleKey: "step1Title",
+    bodyKey: "step1Body",
   },
   {
     icon: Workflow,
-    title: "Run training, checklists, and tickets",
-    body: "Assign LMS campaigns, fill HR checklist instances, and resolve service-desk work with desks, SLA, and knowledge base.",
+    titleKey: "step2Title",
+    bodyKey: "step2Body",
   },
   {
     icon: LineChart,
-    title: "Measure risk and export",
-    body: "Watch completion and posture live, then schedule reports or export PDF archives for quarterly reviews.",
+    titleKey: "step3Title",
+    bodyKey: "step3Body",
   },
 ] as const;
 
 export function LandingHowItWorks() {
+  const t = useTranslations("landing");
+
   return (
     <section
       id="how-it-works"
@@ -28,30 +33,29 @@ export function LandingHowItWorks() {
       <div className="mx-auto w-full max-w-6xl px-6 py-16 md:py-20">
         <Reveal className="max-w-2xl">
           <h2 className="font-[family-name:var(--font-display)] text-3xl tracking-tight md:text-4xl">
-            How it works
+            {t("howItWorksTitle")}
           </h2>
           <p className="mt-4 text-[var(--muted-foreground)]">
-            Three steps from empty tenant to measurable security awareness
-            posture.
+            {t("howItWorksBody")}
           </p>
         </Reveal>
         <ol className="mt-14 grid gap-12 md:grid-cols-3 md:gap-10">
           {STEPS.map((step, index) => {
             const Icon = step.icon;
             return (
-              <Reveal key={step.title} as="li" delayMs={index * 80}>
+              <Reveal key={step.titleKey} as="li" delayMs={index * 80}>
                 <div className="flex h-full flex-col p-1">
                   <p className="text-xs font-medium uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
-                    Step {index + 1}
+                    {t("step", { n: index + 1 })}
                   </p>
                   <span className="mt-5 inline-flex h-12 w-12 items-center justify-center rounded-[var(--radius)] bg-[color-mix(in_srgb,var(--brand)_12%,transparent)] text-[var(--brand)]">
                     <Icon className="h-5 w-5" strokeWidth={1.75} aria-hidden />
                   </span>
                   <h3 className="mt-5 font-[family-name:var(--font-display)] text-xl tracking-tight">
-                    {step.title}
+                    {t(step.titleKey)}
                   </h3>
                   <p className="mt-3 text-sm leading-relaxed text-[var(--muted-foreground)]">
-                    {step.body}
+                    {t(step.bodyKey)}
                   </p>
                 </div>
               </Reveal>

@@ -56,3 +56,26 @@ test('webhook stub rejects private hosts', function () {
         ->assertStatus(422)
         ->assertJsonValidationErrors(['url']);
 });
+
+test('webhook stub does not follow redirects', function () {
+    Http::fake([
+        'https://example.com/hooks/redirect' => Http::response(null, 302, [
+            'Location' => 'http://127.0.0.1/secret',
+        ]),
+        'http://127.0.0.1/*' => Http::response(['pwned' => true], 200),
+    ]);
+
+    $this->actingAs(orgAdmin())
+        ->withHeader('X-Tenant', 'itneck')
+        ->postJson('/api/v1/org/webhooks/test', [
+            'url' => 'https://example.com/hooks/redirect',
+            'event' => 'campaign.launched',
+            'payload' => ['id' => 1],
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.delivered', false)
+        ->assertJsonPath('data.status', 302);
+
+    Http::assertSentCount(1);
+    Http::assertNotSent(fn ($request) => str_contains($request->url(), '127.0.0.1'));
+});

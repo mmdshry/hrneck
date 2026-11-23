@@ -78,11 +78,7 @@ class SeedRbacCatalog
         app()[PermissionRegistrar::class]->forgetCachedPermissions();
 
         setPermissionsTeamId($tenantId);
-        Role::findOrCreate(OrgPermissionCatalog::LEARNER, OrgPermissionCatalog::GUARD);
-        $role = Role::query()
-            ->where('name', OrgPermissionCatalog::LEARNER)
-            ->where('guard_name', OrgPermissionCatalog::GUARD)
-            ->firstOrFail();
+        $role = Role::findOrCreate(OrgPermissionCatalog::LEARNER, OrgPermissionCatalog::GUARD);
         $role->syncPermissions([OrgPermissionCatalog::TICKETING_PORTAL]);
         setPermissionsTeamId(null);
 
@@ -105,7 +101,8 @@ class SeedRbacCatalog
         $target = Role::findOrCreate($to, OrgPermissionCatalog::GUARD);
 
         foreach ($legacy->users as $user) {
-            setPermissionsTeamId($user->tenant_id);
+            $teamId = $user->resolvedActiveTenantId() ?? $user->tenant_id;
+            setPermissionsTeamId($teamId);
             $user->assignRole($target);
             $user->removeRole($legacy);
         }

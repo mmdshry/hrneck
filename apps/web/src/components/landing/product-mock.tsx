@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useEffect, useId, useState } from "react";
 import { cn } from "@/lib/utils";
 
@@ -7,10 +8,16 @@ const INTERVAL_MS = 2500;
 
 type PanelStat = { label: string; value: string };
 type PanelRow = { title: string; meta: string };
+type MockLabelKey =
+  | "mockOrgs"
+  | "mockTraining"
+  | "mockChecklists"
+  | "mockTickets"
+  | "mockReports";
 
 type MockPanel = {
   id: string;
-  label: string;
+  labelKey: MockLabelKey;
   chromeTitle: string;
   stats: PanelStat[];
   highlight: { title: string; progress?: number; caption: string };
@@ -20,7 +27,7 @@ type MockPanel = {
 const PANELS: MockPanel[] = [
   {
     id: "orgs",
-    label: "Orgs",
+    labelKey: "mockOrgs",
     chromeTitle: "MSP · Client portfolio",
     stats: [
       { label: "Active orgs", value: "24" },
@@ -39,7 +46,7 @@ const PANELS: MockPanel[] = [
   },
   {
     id: "training",
-    label: "Training",
+    labelKey: "mockTraining",
     chromeTitle: "MSP · Acme Corp training posture",
     stats: [
       { label: "Completion", value: "86%" },
@@ -58,7 +65,7 @@ const PANELS: MockPanel[] = [
   },
   {
     id: "checklists",
-    label: "Checklists",
+    labelKey: "mockChecklists",
     chromeTitle: "MSP · HR checklist operations",
     stats: [
       { label: "In progress", value: "18" },
@@ -77,7 +84,7 @@ const PANELS: MockPanel[] = [
   },
   {
     id: "tickets",
-    label: "Tickets",
+    labelKey: "mockTickets",
     chromeTitle: "MSP · Service desk queue",
     stats: [
       { label: "Open tickets", value: "12" },
@@ -96,7 +103,7 @@ const PANELS: MockPanel[] = [
   },
   {
     id: "reports",
-    label: "Reports",
+    labelKey: "mockReports",
     chromeTitle: "MSP · Risk & reporting",
     stats: [
       { label: "Risk trend", value: "↓ 12%" },
@@ -123,6 +130,7 @@ function TabButtons({
   tabIdPrefix,
   panelId,
   progressKey,
+  labelFor,
 }: {
   activeIndex: number;
   onSelect: (index: number) => void;
@@ -131,6 +139,7 @@ function TabButtons({
   tabIdPrefix: string;
   panelId: string;
   progressKey: number;
+  labelFor: (key: MockLabelKey) => string;
 }) {
   return (
     <div
@@ -162,7 +171,7 @@ function TabButtons({
             )}
             onClick={() => onSelect(index)}
           >
-            <span className="relative z-[1]">{panel.label}</span>
+            <span className="relative z-[1]">{labelFor(panel.labelKey)}</span>
             {selected ? (
               <span
                 key={progressKey}
@@ -184,6 +193,7 @@ function TabButtons({
 
 /** Interactive multi-tenant workspace mock for the hero. */
 export function ProductMock({ className }: { className?: string }) {
+  const t = useTranslations("landing");
   const reactId = useId();
   const idPrefix = `mock-${reactId.replace(/:/g, "")}`;
   const titleId = `${idPrefix}-title`;
@@ -193,6 +203,7 @@ export function ProductMock({ className }: { className?: string }) {
 
   const panel = PANELS[activeIndex] ?? PANELS[0];
   const panelId = `${idPrefix}-panel`;
+  const labelFor = (key: MockLabelKey) => t(key);
 
   useEffect(() => {
     if (paused) {
@@ -253,6 +264,7 @@ export function ProductMock({ className }: { className?: string }) {
             tabIdPrefix={`${idPrefix}-h`}
             panelId={panelId}
             progressKey={panelKey}
+            labelFor={labelFor}
           />
           <TabButtons
             activeIndex={activeIndex}
@@ -262,6 +274,7 @@ export function ProductMock({ className }: { className?: string }) {
             tabIdPrefix={`${idPrefix}-v`}
             panelId={panelId}
             progressKey={panelKey}
+            labelFor={labelFor}
           />
           <div
             key={panelKey}

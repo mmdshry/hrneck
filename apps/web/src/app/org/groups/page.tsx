@@ -1,12 +1,15 @@
+import { getTranslations } from "next-intl/server";
 import { GroupsClient } from "./groups-client";
 
 export const instant = false;
 
-export const metadata = {
-  title: "Groups",
-  description: "Create and manage audience groups and their members.",
-};
-
+export async function generateMetadata() {
+  const t = await getTranslations("org.groups");
+  return {
+    title: t("title"),
+    description: t("description"),
+  };
+}
 export default function GroupsPage() {
   return <GroupsClient />;
 }

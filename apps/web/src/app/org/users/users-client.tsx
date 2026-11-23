@@ -2,15 +2,18 @@
 
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert } from "@/components/ui/alert";
+import { useTranslations } from "next-intl";
+import { Avatar } from "@/components/ui/avatar";
+import { AvatarUploader } from "@/components/ui/avatar-uploader";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import { Dialog } from "@/components/ui/dialog";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
-import { PromptDialog } from "@/components/ui/prompt-dialog";
 import { Select } from "@/components/ui/select";
 import { useDataTableQuery } from "@/hooks/use-data-table-query";
 import { liveStatusLabel, useLiveTopic } from "@/hooks/use-live-topic";
@@ -28,13 +31,18 @@ import {
 } from "@/lib/pagination";
 import { hasPermission, type SessionUser } from "@/lib/session";
 import { resolveTenant } from "@/lib/tenant";
-import { notifyResult, toastError, toastSuccess } from "@/lib/toast";
+import { toastError, toastSuccess } from "@/lib/toast";
 
 type OrgUser = {
   id: number;
   name: string;
   email: string;
   roles: string[];
+  department_id?: number | null;
+  department?: string | null;
+  job_title?: string | null;
+  target_department?: string | null;
+  avatar_url?: string | null;
 };
 
 type OrgRole = {
@@ -43,16 +51,39 @@ type OrgRole = {
   permissions: string[];
 };
 
+type DepartmentOption = {
+  id: number;
+  name: string;
+};
+
 type UsersPayload = {
   data: OrgUser[];
   roles?: OrgRole[];
 };
+
+function roleChoices(
+  user: OrgUser,
+  catalog: OrgRole[],
+  noRoleLabel: string,
+): { value: string; options: { value: string; label: string }[] } {
+  const current = user.roles?.[0] ?? "";
+  const options = catalog.map((role) => ({ value: role.name, label: role.name }));
+  if (current === "") {
+    options.unshift({ value: "", label: noRoleLabel });
+    return { value: "", options };
+  }
+  if (!options.some((option) => option.value === current)) {
+    options.unshift({ value: current, label: current });
+  }
+  return { value: current, options };
+}
 
 function userCells(user: OrgUser): Record<string, string> {
   return {
     name: user.name,
     email: user.email,
     role: (user.roles ?? []).join(" "),
+    department: user.department ?? "",
   };
 }
 
@@ -74,6 +105,8 @@ function matchesCells(
 }
 
 export function UsersClient() {
+  const t = useTranslations("org.users");
+  const tCommon = useTranslations("common");
   const tenant = resolveTenant();
   const channel = tenant ? orgLiveChannel(tenant, "users") : null;
   const [session, setSession] = useState<SessionUser | null>(null);
@@ -87,7 +120,18 @@ export function UsersClient() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [roleName, setRoleName] = useState("org_admin");
-  const [renameTarget, setRenameTarget] = useState<OrgUser | null>(null);
+  const [departmentId, setDepartmentId] = useState("");
+  const [createErrors, setCreateErrors] = useState<{
+    name?: string;
+    email?: string;
+    password?: string;
+  }>({});
+  const createErrorSummaryRef = useRef<HTMLDivElement | null>(null);
+  const [departments, setDepartments] = useState<DepartmentOption[]>([]);
+  const [editTarget, setEditTarget] = useState<OrgUser | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editDepartmentId, setEditDepartmentId] = useState("");
+  const [avatarTarget, setAvatarTarget] = useState<OrgUser | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<OrgUser | null>(null);
   const [loading, setLoading] = useState(true);
   const tableQuery = useDataTableQuery();
@@ -134,13 +178,21 @@ export function UsersClient() {
       if (!me) {
         return;
       }
-      const t = resolveTenant();
+      const tenantSlug = resolveTenant();
       const canManageRoles = hasPermission(me, "org.roles.manage");
-      const [userList, roleList] = await Promise.all([
-        api(`/api/v1/org/users?${paginationQuery(nextPage, nextPerPage, nextFilters)}`, { tenant: t }),
+      const [userList, roleList, departmentList] = await Promise.all([
+        api(`/api/v1/org/users?${paginationQuery(nextPage, nextPerPage, nextFilters)}`, {
+          tenant: tenantSlug,
+        }),
         canManageRoles
-          ? apiOptional<{ data: OrgRole[] }>("/api/v1/org/roles?per_page=100", { tenant: t })
+          ? apiOptional<{ data: OrgRole[] }>("/api/v1/org/roles?per_page=100", {
+              tenant: tenantSlug,
+            })
           : Promise.resolve(null),
+        apiOptional<{ data: DepartmentOption[] }>(
+          `/api/v1/org/departments?${paginationQuery(1, 500, { active_only: "1" })}`,
+          { tenant: tenantSlug },
+        ),
       ]);
       const parsed = parsePaginatedResponse<OrgUser>(userList, nextPerPage);
       setUsers(parsed.data);
@@ -157,6 +209,12 @@ export function UsersClient() {
       } else {
         setRoles([]);
       }
+      if (departmentList) {
+        const deptParsed = parsePaginatedResponse<DepartmentOption>(departmentList, 500);
+        setDepartments(deptParsed.data.length ? deptParsed.data : (departmentList.data ?? []));
+      } else {
+        setDepartments([]);
+      }
     },
     [],
   );
@@ -165,6 +223,20 @@ export function UsersClient() {
     channel,
     onPayload,
   });
+
+  const canManageUsers = hasPermission(session, "org.users.manage");
+
+  useEffect(() => {
+    if (liveError) {
+      toastError(liveError);
+    }
+  }, [liveError]);
+
+  useEffect(() => {
+    if (session && !canManageUsers) {
+      toastError("You do not have permission to manage users.");
+    }
+  }, [session, canManageUsers]);
 
   useEffect(() => {
     void fetchSessionUser()
@@ -193,7 +265,7 @@ export function UsersClient() {
     }
     void refreshFromApi(page, perPage, filters)
       .catch((err: unknown) => {
-        toastError(err instanceof Error ? err.message : "Load failed");
+        toastError(err instanceof Error ? err.message : tCommon("loadFailed"));
       })
       .finally(() => setLoading(false));
   }, [
@@ -217,21 +289,70 @@ export function UsersClient() {
 
   async function onCreate(event: FormEvent) {
     event.preventDefault();
+    const nextErrors: { name?: string; email?: string; password?: string } = {};
+    if (!name.trim()) nextErrors.name = t("enterName");
+    if (!email.trim()) nextErrors.email = t("enterEmail");
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      nextErrors.email = t("enterValidEmail");
+    }
+    if (!password) nextErrors.password = t("enterPassword");
+    else if (password.length < 8) nextErrors.password = t("passwordMin");
+    setCreateErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) {
+      queueMicrotask(() => createErrorSummaryRef.current?.focus());
+      return;
+    }
     try {
       await ensureCsrf();
       await api("/api/v1/org/users", {
         method: "POST",
         tenant: resolveTenant(),
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password, roles: [roleName] }),
+        body: JSON.stringify({
+          name,
+          email,
+          password,
+          roles: [roleName],
+          department_id: departmentId ? Number(departmentId) : null,
+        }),
       });
       setName("");
       setEmail("");
       setPassword("");
-      toastSuccess("User created.");
+      setDepartmentId("");
+      setCreateErrors({});
+      toastSuccess(t("userCreated"));
       await afterMutation();
     } catch (err) {
-      notifyResult(err instanceof Error ? err.message : "Create failed");
+      toastError(err instanceof Error ? err.message : tCommon("createFailed"));
+    }
+  }
+
+  function openEdit(user: OrgUser) {
+    setEditTarget(user);
+    setEditName(user.name);
+    setEditDepartmentId(user.department_id != null ? String(user.department_id) : "");
+  }
+
+  async function saveEdit() {
+    if (!editTarget) return;
+    try {
+      await ensureCsrf();
+      await api(`/api/v1/org/users/${editTarget.id}`, {
+        method: "PATCH",
+        tenant: resolveTenant(),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editName.trim(),
+          department_id: editDepartmentId ? Number(editDepartmentId) : null,
+        }),
+      });
+      toastSuccess(t("userUpdated"));
+      setEditTarget(null);
+      await afterMutation();
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : tCommon("updateFailed"));
+      throw err;
     }
   }
 
@@ -244,10 +365,10 @@ export function UsersClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ roles: ["org_admin"] }),
       });
-      toastSuccess("User promoted to org_admin.");
+      toastSuccess(t("userPromoted"));
       await afterMutation();
     } catch (err) {
-      notifyResult(err instanceof Error ? err.message : "Update failed");
+      toastError(err instanceof Error ? err.message : tCommon("updateFailed"));
     }
   }
 
@@ -260,28 +381,10 @@ export function UsersClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ roles: [nextRole] }),
       });
-      toastSuccess("Roles updated.");
+      toastSuccess(t("rolesUpdated"));
       await afterMutation();
     } catch (err) {
-      notifyResult(err instanceof Error ? err.message : "Update failed");
-    }
-  }
-
-  async function renameUser(user: OrgUser, nextName: string) {
-    if (nextName === user.name) return;
-    try {
-      await ensureCsrf();
-      await api(`/api/v1/org/users/${user.id}`, {
-        method: "PATCH",
-        tenant: resolveTenant(),
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: nextName }),
-      });
-      toastSuccess("User updated.");
-      await afterMutation();
-    } catch (err) {
-      notifyResult(err instanceof Error ? err.message : "Update failed");
-      throw err;
+      toastError(err instanceof Error ? err.message : tCommon("updateFailed"));
     }
   }
 
@@ -292,68 +395,117 @@ export function UsersClient() {
         method: "DELETE",
         tenant: resolveTenant(),
       });
-      toastSuccess("User deleted.");
+      toastSuccess(t("userDeleted"));
       await afterMutation();
     } catch (err) {
-      notifyResult(err instanceof Error ? err.message : "Delete failed");
+      toastError(err instanceof Error ? err.message : tCommon("deleteFailed"));
       throw err;
     }
   }
 
   const columns: Array<DataTableColumn<OrgUser>> = [
     {
-      id: "name",
-      header: "Name",
-      accessorKey: "name",
+      id: "avatar",
+      header: tCommon("photo"),
+      filter: "none",
+      enableSorting: false,
       sticky: true,
+      cell: (user) => (
+        <Avatar src={user.avatar_url} name={user.name} email={user.email} size="sm" />
+      ),
+    },
+    {
+      id: "name",
+      header: tCommon("name"),
+      accessorKey: "name",
       cell: (user) => user.name,
     },
     {
       id: "email",
-      header: "Email",
+      header: tCommon("email"),
       accessorKey: "email",
       cell: (user) => user.email,
     },
     {
       id: "role",
-      header: "Role",
+      header: tCommon("role"),
       filter: "select",
       filterOptions: roles.map((role) => ({ label: role.name, value: role.name })),
       filterValue: (user) => (user.roles ?? []).join(" "),
       enableSorting: false,
-      cell: (user) => (
-        <Select
-          aria-label={`Role for ${user.email}`}
-          value={user.roles?.[0] ?? roles[0]?.name ?? "org_admin"}
-          onChange={(e) => void syncRoles(user.id, e.target.value)}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {roles.map((role) => (
-            <option key={role.id} value={role.name}>
-              {role.name}
-            </option>
-          ))}
-        </Select>
-      ),
+      cell: (user) => {
+        const choice = roleChoices(user, roles, t("noRole"));
+        return (
+          <Select
+            aria-label={`Role for ${user.email}`}
+            value={choice.value}
+            onChange={(e) => {
+              const next = e.target.value;
+              if (next === "" || next === (user.roles?.[0] ?? "")) {
+                return;
+              }
+              void syncRoles(user.id, next);
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {choice.options.map((option) => (
+              <option key={option.value || "none"} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
+        );
+      },
+    },
+    {
+      id: "department",
+      header: tCommon("department"),
+      accessorKey: "department",
+      filterValue: (user) => user.department ?? "",
+      enableSorting: false,
+      cell: (user) => user.department ?? "—",
     },
     {
       id: "actions",
-      header: "Actions",
+      header: tCommon("actions"),
       filter: "none",
       enableSorting: false,
       enableGlobalFilter: false,
       cell: (user) => (
         <div className="flex flex-wrap items-center gap-2">
           {!user.roles?.includes("org_admin") ? (
-            <Button type="button" variant="secondary" onClick={() => void makeAdmin(user.id)}>
+            <Button
+              type="button"
+              variant="outline"
+              size="compact"
+              onClick={() => void makeAdmin(user.id)}
+            >
               Make admin
             </Button>
           ) : null}
-          <Button type="button" variant="outline" onClick={() => setRenameTarget(user)}>
+          <Button
+            type="button"
+            variant="outline"
+            size="compact"
+            onClick={() => openEdit(user)}
+          >
             Edit
           </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="compact"
+            onClick={() => setAvatarTarget(user)}
+          >
+            Photo
+          </Button>
           {session?.id !== user.id ? (
-            <Button type="button" variant="outline" onClick={() => setDeleteTarget(user)}>
+            <Button
+              type="button"
+              variant="outline"
+              size="compact"
+              onClick={() => setDeleteTarget(user)}
+            >
               Delete
             </Button>
           ) : null}
@@ -370,26 +522,30 @@ export function UsersClient() {
     return (
       <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">
         <PageHeader
-          title="Organization users"
-          description="Invite operators and assign organization roles. Employees stay on Employees and Groups."
+          title={t("title")}
+          description={t("description")}
         />
-        <Alert className="mt-4">
-          Sign in required. Use Sign in in the sidebar.
-        </Alert>
-        <Link
-          href="/login?next=%2Forg%2Fusers"
-          className="mt-4 inline-flex min-h-11 items-center justify-center rounded-[var(--radius)] bg-[var(--primary)] px-4 py-2.5 text-sm font-medium text-[var(--primary-foreground)]"
-        >
-          Sign in
-        </Link>
+        <EmptyState
+          className="mt-4"
+          title="Sign in required. Use Sign in in the sidebar."
+          action={
+            <Link
+              href="/login?next=%2Forg%2Fusers"
+              className="inline-flex min-h-11 items-center justify-center rounded-[var(--radius)] bg-[var(--primary)] px-4 py-2.5 text-sm font-medium text-[var(--primary-foreground)]"
+            >
+              {tCommon("signIn")}
+            </Link>
+          }
+        />
       </div>
     );
   }
 
-  if (!hasPermission(session, "org.users.manage")) {
+  if (!canManageUsers) {
     return (
-      <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">
-        <Alert variant="destructive">You do not have permission to manage users.</Alert>
+      <div className="mx-auto w-full max-w-5xl flex-1 space-y-4 px-4 py-8 sm:px-6">
+        <PageHeader title={t("title")} description={t("description")} />
+        <EmptyState title="You do not have permission to manage users." />
       </div>
     );
   }
@@ -397,25 +553,73 @@ export function UsersClient() {
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">
       <PageHeader
-        title="Organization users"
+        title={t("title")}
         description={
-          statusLabel
-            ? `Invite operators and assign organization roles. Employees stay on Employees and Groups. · ${statusLabel}`
-            : "Invite operators and assign organization roles. Employees stay on Employees and Groups."
+          statusLabel ? `${t("description")} · ${statusLabel}` : t("description")
         }
       />
-      {liveError ? (
-        <Alert className="mt-4" variant="destructive">
-          {liveError}
-        </Alert>
-      ) : null}
 
-      <form onSubmit={onCreate} className="mt-8 space-y-3 rounded-2xl border border-[var(--border)] p-4">
+      <form
+        onSubmit={onCreate}
+        className="mt-8 space-y-3 rounded-2xl border border-[var(--border)] p-4"
+        noValidate
+      >
         <p className="text-sm font-medium">Add user</p>
+        {Object.keys(createErrors).length > 0 ? (
+          <div
+            ref={createErrorSummaryRef}
+            role="alert"
+            tabIndex={-1}
+            className="rounded-[var(--radius)] border border-[var(--destructive)]/40 bg-[var(--destructive)]/10 px-[var(--space-md)] py-[var(--space-sm)] text-sm text-[var(--destructive)] outline-none"
+            aria-labelledby="org-user-error-title"
+          >
+            <p id="org-user-error-title" className="font-medium">
+              There is a problem
+            </p>
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              {createErrors.name ? (
+                <li>
+                  <a href="#org-user-name" className="underline-offset-2 hover:underline">
+                    {createErrors.name}
+                  </a>
+                </li>
+              ) : null}
+              {createErrors.email ? (
+                <li>
+                  <a href="#org-user-email" className="underline-offset-2 hover:underline">
+                    {createErrors.email}
+                  </a>
+                </li>
+              ) : null}
+              {createErrors.password ? (
+                <li>
+                  <a href="#org-user-password" className="underline-offset-2 hover:underline">
+                    {createErrors.password}
+                  </a>
+                </li>
+              ) : null}
+            </ul>
+          </div>
+        ) : null}
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1">
             <Label htmlFor="org-user-name">Name</Label>
-            <Input id="org-user-name" value={name} onChange={(e) => setName(e.target.value)} required />
+            <Input
+              id="org-user-name"
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (createErrors.name) setCreateErrors((prev) => ({ ...prev, name: undefined }));
+              }}
+              required
+              aria-invalid={createErrors.name ? true : undefined}
+              aria-describedby={createErrors.name ? "org-user-name-error" : undefined}
+            />
+            {createErrors.name ? (
+              <p id="org-user-name-error" className="text-xs text-[var(--destructive)]">
+                {createErrors.name}
+              </p>
+            ) : null}
           </div>
           <div className="space-y-1">
             <Label htmlFor="org-user-email">Email</Label>
@@ -423,9 +627,19 @@ export function UsersClient() {
               id="org-user-email"
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (createErrors.email) setCreateErrors((prev) => ({ ...prev, email: undefined }));
+              }}
               required
+              aria-invalid={createErrors.email ? true : undefined}
+              aria-describedby={createErrors.email ? "org-user-email-error" : undefined}
             />
+            {createErrors.email ? (
+              <p id="org-user-email-error" className="text-xs text-[var(--destructive)]">
+                {createErrors.email}
+              </p>
+            ) : null}
           </div>
           <div className="space-y-1">
             <Label htmlFor="org-user-password">Password</Label>
@@ -433,10 +647,22 @@ export function UsersClient() {
               id="org-user-password"
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                if (createErrors.password) {
+                  setCreateErrors((prev) => ({ ...prev, password: undefined }));
+                }
+              }}
               required
               minLength={8}
+              aria-invalid={createErrors.password ? true : undefined}
+              aria-describedby={createErrors.password ? "org-user-password-error" : undefined}
             />
+            {createErrors.password ? (
+              <p id="org-user-password-error" className="text-xs text-[var(--destructive)]">
+                {createErrors.password}
+              </p>
+            ) : null}
           </div>
           <div className="space-y-1">
             <Label htmlFor="org-user-role">Role</Label>
@@ -452,6 +678,21 @@ export function UsersClient() {
               ))}
             </Select>
           </div>
+          <div className="space-y-1">
+            <Label htmlFor="org-user-department">Department</Label>
+            <Select
+              id="org-user-department"
+              value={departmentId}
+              onChange={(e) => setDepartmentId(e.target.value)}
+            >
+              <option value="">No department</option>
+              {departments.map((department) => (
+                <option key={department.id} value={String(department.id)}>
+                  {department.name}
+                </option>
+              ))}
+            </Select>
+          </div>
         </div>
         <Button type="submit">Create user</Button>
       </form>
@@ -459,14 +700,14 @@ export function UsersClient() {
       <DataTable
         className="mt-8"
         mode="server"
-        caption="Organization users"
+        caption={t("usersCaption")}
         columns={columns}
         rows={users}
         filterState={tableQuery.state}
         onFilterStateChange={tableQuery.setState}
         getRowId={(row) => row.id}
-        emptyTitle="No users yet."
-        emptyDescription="Create an operator to assign an organization role."
+        emptyTitle={t("noUsersYet")}
+        emptyDescription={t("noUsersHint")}
         pagination={{
           page,
           perPage,
@@ -479,29 +720,100 @@ export function UsersClient() {
         }}
       />
 
-      <PromptDialog
-        open={renameTarget !== null}
+      <Dialog
+        open={editTarget !== null}
         onOpenChange={(open) => {
-          if (!open) setRenameTarget(null);
+          if (!open) setEditTarget(null);
         }}
-        title="Update display name"
-        label="Display name"
-        defaultValue={renameTarget?.name ?? ""}
-        confirmLabel="Save"
-        onSubmit={async (value) => {
-          if (!renameTarget) return;
-          await renameUser(renameTarget, value);
+        title={t("editUser")}
+        description={editTarget?.email ?? undefined}
+        footer={
+          <>
+            <Button type="button" variant="secondary" onClick={() => setEditTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                void saveEdit();
+              }}
+            >
+              Save
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <Label htmlFor="org-user-edit-name">Display name</Label>
+            <Input
+              id="org-user-edit-name"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              required
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="org-user-edit-department">Department</Label>
+            <Select
+              id="org-user-edit-department"
+              value={editDepartmentId}
+              onChange={(e) => setEditDepartmentId(e.target.value)}
+            >
+              <option value="">No department</option>
+              {departments.map((department) => (
+                <option key={department.id} value={String(department.id)}>
+                  {department.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+        </div>
+      </Dialog>
+
+      <Dialog
+        open={avatarTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setAvatarTarget(null);
         }}
-      />
+        title={t("userPhoto")}
+        description={avatarTarget?.email ?? undefined}
+      >
+        {avatarTarget ? (
+          <AvatarUploader
+            name={avatarTarget.name}
+            email={avatarTarget.email}
+            avatarUrl={avatarTarget.avatar_url}
+            endpoint={`/api/v1/org/users/${avatarTarget.id}/avatar`}
+            withTenant
+            size="md"
+            onChanged={(url) => {
+              setAvatarTarget((prev) => (prev ? { ...prev, avatar_url: url } : prev));
+              setUsers((rows) =>
+                rows.map((row) =>
+                  row.id === avatarTarget.id ? { ...row, avatar_url: url } : row,
+                ),
+              );
+              setLiveUsers((rows) =>
+                rows
+                  ? rows.map((row) =>
+                      row.id === avatarTarget.id ? { ...row, avatar_url: url } : row,
+                    )
+                  : rows,
+              );
+            }}
+          />
+        ) : null}
+      </Dialog>
 
       <ConfirmDialog
         open={deleteTarget !== null}
         onOpenChange={(open) => {
           if (!open) setDeleteTarget(null);
         }}
-        title="Delete user"
+        title={t("deleteUser")}
         description={`Delete ${deleteTarget?.email}? This cannot be undone.`}
-        confirmLabel="Delete"
+        confirmLabel={tCommon("delete")}
         variant="destructive"
         onConfirm={async () => {
           if (!deleteTarget) return;

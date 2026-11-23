@@ -20,6 +20,11 @@ class ReportArchive extends Model
         'timezone', 'options', 'status', 'generated_at',
     ];
 
+    /** @var list<string> */
+    protected $hidden = [
+        'disk_path',
+    ];
+
     protected function casts(): array
     {
         return [

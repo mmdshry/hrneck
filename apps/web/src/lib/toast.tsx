@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, CheckCircle2, Info, XCircle } from "lucide-react";
+import { AlertTriangle, Bell, CheckCircle2, Info, XCircle } from "lucide-react";
 import { toast as sonnerToast } from "sonner";
 import type { ReactNode } from "react";
 
@@ -26,6 +26,14 @@ export function toastError(message: string, description?: string) {
   });
 }
 
+export function toastWarning(message: string, description?: string) {
+  return sonnerToast.warning(message, {
+    description,
+    duration: DURATION_MS,
+    icon: iconWrap(<AlertTriangle className="h-4 w-4" aria-hidden />),
+  });
+}
+
 export function toastInfo(message: string, description?: string) {
   return sonnerToast.message(message, {
     description,
@@ -42,7 +50,7 @@ export function toastNotification(message: string, description?: string) {
   });
 }
 
-/** Map common API/UI result strings to success or error toasts. */
+/** Map common API/UI result strings to success or error toasts. Prefer explicit toast* helpers. */
 export function notifyResult(message: string) {
   const m = message.toLowerCase();
   if (/\b(fail|failed|error|invalid|denied|forbidden)\b/.test(m) || m.includes("save failed")) {

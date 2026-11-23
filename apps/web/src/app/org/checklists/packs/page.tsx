@@ -1,12 +1,15 @@
+import { getTranslations } from "next-intl/server";
 import { ChecklistPacksClient } from "./packs-client";
 
 export const instant = false;
 
-export const metadata = {
-  title: "Checklist packs",
-  description: "Bundle templates into welcome packs and auto-assign on hire.",
-};
-
+export async function generateMetadata() {
+  const t = await getTranslations("org.checklists");
+  return {
+    title: t("packsTitle"),
+    description: t("packsDescription"),
+  };
+}
 export default function ChecklistPacksPage() {
   return <ChecklistPacksClient />;
 }

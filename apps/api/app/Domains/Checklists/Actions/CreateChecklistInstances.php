@@ -6,11 +6,14 @@ use App\Domains\Campaigns\Actions\ResolveCampaignAudience;
 use App\Domains\Checklists\Models\ChecklistInstance;
 use App\Domains\Checklists\Models\ChecklistTemplate;
 use App\Domains\Notifications\Actions\CreateUserNotification;
+use App\Domains\Notifications\Actions\QueueNotificationEmail;
 use App\Domains\Notifications\Models\UserNotification;
 use App\Domains\Notifications\Support\ResolveUsersFromTargets;
 use App\Domains\Realtime\Support\LiveTopics;
 use App\Domains\Realtime\Support\PublishLive;
 use App\Domains\TargetsGroups\Models\Target;
+use App\Models\User;
+use App\Support\AppLocale;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -52,25 +55,39 @@ class CreateChecklistInstances
             ]);
         }
 
-        $resolved = $this->audience->handle($targetIds, $groupIds);
+        $resolved = array_values(array_unique(array_map('intval', $this->audience->handle($targetIds, $groupIds))));
         $created = [];
 
         DB::transaction(function () use ($template, $version, $resolved, $actorId, &$created) {
-            foreach ($resolved as $targetId) {
-                $existsOpen = ChecklistInstance::query()
-                    ->where('template_id', $template->id)
-                    ->where('target_id', $targetId)
-                    ->whereIn('status', [
-                        ChecklistInstance::STATUS_NOT_STARTED,
-                        ChecklistInstance::STATUS_IN_PROGRESS,
-                    ])
-                    ->exists();
+            if ($resolved === []) {
+                return;
+            }
 
-                if ($existsOpen) {
+            $openTargetIds = ChecklistInstance::query()
+                ->where('template_id', $template->id)
+                ->whereIn('target_id', $resolved)
+                ->whereIn('status', [
+                    ChecklistInstance::STATUS_NOT_STARTED,
+                    ChecklistInstance::STATUS_IN_PROGRESS,
+                ])
+                ->pluck('target_id')
+                ->map(static fn ($id): int => (int) $id)
+                ->all();
+            $openSet = array_fill_keys($openTargetIds, true);
+
+            $targets = Target::query()
+                ->whereIn('id', $resolved)
+                ->get()
+                ->keyBy(fn (Target $target): int => (int) $target->id);
+            $prefill = app(PrefillChecklistInstanceFromTarget::class);
+
+            foreach ($resolved as $targetId) {
+                if (isset($openSet[$targetId])) {
                     continue;
                 }
 
-                if (! Target::query()->whereKey($targetId)->exists()) {
+                $target = $targets->get($targetId);
+                if ($target === null) {
                     continue;
                 }
 
@@ -97,6 +114,7 @@ class CreateChecklistInstances
                     $actorId,
                 );
 
+                $instance = $prefill->handle($instance, $target);
                 $created[] = $instance;
             }
         });
@@ -117,17 +135,56 @@ class CreateChecklistInstances
         )));
         $userIds = app(ResolveUsersFromTargets::class)->handle($createdTargetIds);
         $notify = app(CreateUserNotification::class);
+        $usersById = User::query()
+            ->whereIn('id', $userIds)
+            ->get(['id', 'locale'])
+            ->keyBy('id');
         foreach ($userIds as $userId) {
+            $matched = $usersById->get($userId);
+            $locale = AppLocale::normalize(is_string($matched?->locale) ? $matched->locale : null);
             $notify->handle(
                 $userId,
                 UserNotification::TYPE_CHECKLIST_ASSIGNED,
-                'Checklist assigned',
+                __('notifications.checklist_assigned_title', [], $locale),
                 $template->name,
                 [
                     'link' => '/org/checklists/instances',
                     'entity_id' => $template->id,
                     'template_id' => $template->id,
                 ],
+            );
+        }
+
+        $frontend = rtrim((string) config('brand.frontend_url', config('app.url')), '/');
+        $link = $frontend.'/org/checklists/instances';
+        $queueEmail = app(QueueNotificationEmail::class);
+        $targets = Target::query()->whereIn('id', $createdTargetIds)->get(['id', 'email', 'first_name']);
+        $localeByEmail = User::query()
+            ->whereIn('email', $targets->pluck('email')->filter()->all())
+            ->get(['email', 'locale'])
+            ->keyBy(fn (User $u): string => strtolower(trim((string) $u->email)));
+
+        foreach ($targets as $target) {
+            $email = trim((string) $target->email);
+            if ($email === '') {
+                continue;
+            }
+            $matched = $localeByEmail->get(strtolower($email));
+            $locale = AppLocale::normalize(is_string($matched?->locale) ? $matched->locale : null);
+            $greeting = $target->first_name !== null && $target->first_name !== ''
+                ? __('notifications.checklist_assigned_greeting_named', ['name' => $target->first_name], $locale)
+                : __('notifications.checklist_assigned_greeting', [], $locale);
+            $queueEmail->handle(
+                $email,
+                __('notifications.checklist_assigned_subject', [
+                    'brand' => config('brand.short'),
+                    'name' => $template->name,
+                ], $locale),
+                $greeting.__('notifications.checklist_assigned_body', [
+                    'name' => $template->name,
+                    'url' => $link,
+                ], $locale),
+                $locale,
             );
         }
 

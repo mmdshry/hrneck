@@ -1,7 +1,8 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert } from "@/components/ui/alert";
+import { toastSuccess, toastError } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,8 @@ import {
 } from "../checklist-types";
 
 export function ChecklistBuilderClient({ templateId }: { templateId: number }) {
+  const t = useTranslations("org.checklists");
+  const tCommon = useTranslations("common");
   const tenant = resolveTenant();
   const [template, setTemplate] = useState<ChecklistTemplate | null>(null);
   const [items, setItems] = useState<ChecklistItem[]>([]);
@@ -34,7 +37,6 @@ export function ChecklistBuilderClient({ templateId }: { templateId: number }) {
   const [category, setCategory] = useState("custom");
   const [description, setDescription] = useState("");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [showApplyDialog, setShowApplyDialog] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -76,7 +78,7 @@ export function ChecklistBuilderClient({ templateId }: { templateId: number }) {
     setLoading(true);
     void load()
       .catch((err: unknown) => {
-        setMessage(err instanceof Error ? err.message : "Load failed");
+        toastError(err instanceof Error ? err.message : tCommon("loadFailed"));
       })
       .finally(() => setLoading(false));
   }, [templateId, liveEpoch, load]);
@@ -107,14 +109,14 @@ export function ChecklistBuilderClient({ templateId }: { templateId: number }) {
     const item: ChecklistItem = {
       key,
       type,
-      label: type === "section" ? "New section" : "New item",
+      label: type === "section" ? t("newSection") : t("newItem"),
       required: false,
       order: items.length + 1,
       options:
         type === "single_select" || type === "multi_select"
           ? [
-              { value: "option_a", label: "Option A" },
-              { value: "option_b", label: "Option B" },
+              { value: "option_a", label: t("optionA") },
+              { value: "option_b", label: t("optionB") },
             ]
           : [],
       visible_when: null,
@@ -150,7 +152,7 @@ export function ChecklistBuilderClient({ templateId }: { templateId: number }) {
 
   async function persist(applyToOpen: boolean) {
     setSaving(true);
-    setMessage(null);
+    
     try {
       await ensureCsrf();
       const normalized = items.map((item, index) => ({
@@ -180,13 +182,13 @@ export function ChecklistBuilderClient({ templateId }: { templateId: number }) {
       setTemplate(res.data);
       setItems([...(res.data.schema_json?.items ?? [])].sort((a, b) => a.order - b.order));
       setShowApplyDialog(false);
-      setMessage(
+      toastSuccess(
         applyToOpen
-          ? `Saved v${res.data.current_version} and applied to open instances.`
-          : `Saved v${res.data.current_version}. Open instances keep their previous schema.`,
+          ? t("savedVersionApplied", { version: res.data.current_version })
+          : t("savedVersionKept", { version: res.data.current_version }),
       );
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Save failed");
+      toastError(err instanceof Error ? err.message : tCommon("saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -199,8 +201,8 @@ export function ChecklistBuilderClient({ templateId }: { templateId: number }) {
   if (!template) {
     return (
       <div className="mx-auto w-full max-w-5xl flex-1 space-y-4 px-4 py-8 sm:px-6">
-        <PageHeader title="Checklist builder" />
-        {message ? <Alert>{message}</Alert> : null}
+        <PageHeader title={t("builderTitle")} />
+        
       </div>
     );
   }
@@ -210,8 +212,8 @@ export function ChecklistBuilderClient({ templateId }: { templateId: number }) {
       <div className="mx-auto w-full max-w-5xl flex-1 space-y-4 px-4 py-8 sm:px-6">
         <PageHeader
           title={template.name}
-          description="System templates are read-only. Copy from the library to edit."
-          actions={<LinkButton href="/org/checklists" variant="secondary">Back</LinkButton>}
+          description={t("systemReadOnly")}
+          actions={<LinkButton href="/org/checklists" variant="secondary">{tCommon("back")}</LinkButton>}
         />
       </div>
     );
@@ -220,7 +222,7 @@ export function ChecklistBuilderClient({ templateId }: { templateId: number }) {
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 space-y-4 px-4 py-8 sm:px-6">
       <PageHeader
-        title="Checklist builder"
+        title={t("builderTitle")}
         description={`${template.slug} · version ${template.current_version}${statusLabel ? ` · ${statusLabel}` : " · Live"}`}
         actions={
           <>
@@ -237,7 +239,7 @@ export function ChecklistBuilderClient({ templateId }: { templateId: number }) {
         }
       />
 
-      {message ? <Alert>{message}</Alert> : null}
+      
 
       <Panel className="grid gap-3 p-4 sm:grid-cols-2">
         <div className="space-y-1.5">
@@ -472,7 +474,7 @@ export function ChecklistBuilderClient({ templateId }: { templateId: number }) {
       <Dialog
         open={showApplyDialog}
         onOpenChange={setShowApplyDialog}
-        title="Apply template changes?"
+        title={t("applyTemplateChanges")}
         description="Saving creates a new version. Choose whether open (not completed) employee instances should receive this schema now. Existing answers are kept by item key."
         dismissible={!saving}
       >

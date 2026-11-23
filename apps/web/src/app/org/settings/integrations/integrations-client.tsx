@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert } from "@/components/ui/alert";
+import { useTranslations } from "next-intl";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
@@ -21,20 +21,9 @@ type IntegrationsPayload = {
   data: Integration[];
 };
 
-const STATUS_OPTIONS = [
-  { label: "Connected", value: "connected" },
-  { label: "Disconnected", value: "disconnected" },
-  { label: "Coming soon", value: "coming_soon" },
-];
-
-function detailsText(row: Integration): string {
-  if (row.id === "smtp") {
-    return `${String(row.details.host)}:${String(row.details.port)} · from ${String(row.details.from)}`;
-  }
-  return String(row.details.message ?? "Coming when credentials provided");
-}
-
 export function IntegrationsClient() {
+  const t = useTranslations("org.settings");
+  const tCommon = useTranslations("common");
   const tenant = resolveTenant();
   const [rows, setRows] = useState<Integration[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,25 +57,38 @@ export function IntegrationsClient() {
 
   const statusLabel = liveStatusLabel(status);
 
+  const statusOptions = [
+    { label: tCommon("connected"), value: "connected" },
+    { label: tCommon("disconnected"), value: "disconnected" },
+    { label: tCommon("comingSoon"), value: "coming_soon" },
+  ];
+
+  function detailsText(row: Integration): string {
+    if (row.id === "smtp") {
+      return `${String(row.details.host)}:${String(row.details.port)} · from ${String(row.details.from)}`;
+    }
+    return String(row.details.message ?? t("comingWhenCredentials"));
+  }
+
   const columns: Array<DataTableColumn<Integration>> = [
     {
       id: "name",
-      header: "Name",
+      header: tCommon("name"),
       accessorKey: "name",
       sticky: true,
       cell: (row) => row.name,
     },
     {
       id: "status",
-      header: "Status",
+      header: tCommon("status"),
       filter: "select",
-      filterOptions: STATUS_OPTIONS,
+      filterOptions: statusOptions,
       filterValue: (row) => row.status,
       cell: (row) => row.status.replaceAll("_", " "),
     },
     {
       id: "details",
-      header: "Details",
+      header: tCommon("details"),
       filterValue: (row) => detailsText(row),
       enableSorting: false,
       cell: (row) => detailsText(row),
@@ -100,31 +102,27 @@ export function IntegrationsClient() {
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">
       <PageHeader
-        title="Integrations"
-        description={statusLabel ?? "Live"}
+        title={t("integrationsTitle")}
+        description={statusLabel ?? tCommon("live")}
         actions={
           <LinkButton href="/org/settings" variant="secondary">
-            Settings
+            {t("title")}
           </LinkButton>
         }
       />
-      {error ? (
-        <Alert className="mt-4" variant="destructive">
-          {error}
-        </Alert>
-      ) : null}
+      
       <DataTable
         className="mt-8"
         mode="client"
-        caption="Integrations"
+        caption={t("integrationsTitle")}
         columns={columns}
         rows={rows}
         getRowId={(row) => row.id}
-        emptyTitle={status === "live" ? "No integrations" : "Connecting…"}
+        emptyTitle={status === "live" ? t("noIntegrations") : tCommon("connecting")}
         emptyDescription={
           status === "live"
-            ? "Connect SMTP and other providers when credentials are configured."
-            : (statusLabel ?? "Waiting for live data…")
+            ? t("integrationsEmptyHint")
+            : (statusLabel ?? t("waitingLive"))
         }
       />
     </div>

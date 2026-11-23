@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1\Org;
 use App\Domains\Audit\Actions\LogOrgActivity;
 use App\Domains\Notifications\Actions\FanOutAnnouncement;
 use App\Domains\Notifications\Models\OrgAnnouncement;
+use App\Domains\Notifications\Models\UserNotification;
 use App\Domains\Notifications\Support\NotificationPayload;
 use App\Domains\Realtime\Support\LiveTopics;
 use App\Domains\Realtime\Support\PublishLive;
@@ -88,6 +89,17 @@ class AnnouncementController extends Controller
     {
         $model = OrgAnnouncement::query()->findOrFail($announcement);
         $snapshot = $model->only(['id', 'title']);
+        $userIds = UserNotification::query()
+            ->where('type', UserNotification::TYPE_ANNOUNCEMENT)
+            ->where('data->announcement_id', $model->id)
+            ->pluck('user_id')
+            ->unique()
+            ->map(fn ($id): int => (int) $id)
+            ->all();
+        UserNotification::query()
+            ->where('type', UserNotification::TYPE_ANNOUNCEMENT)
+            ->where('data->announcement_id', $model->id)
+            ->delete();
         $model->delete();
 
         $audit->handle('announcements', 'deleted', 'Announcement deleted', null, [
@@ -95,6 +107,9 @@ class AnnouncementController extends Controller
         ]);
 
         PublishLive::org([LiveTopics::ANNOUNCEMENTS]);
+        foreach ($userIds as $userId) {
+            PublishLive::notificationsUser($userId);
+        }
 
         return response()->json(['message' => 'Deleted']);
     }

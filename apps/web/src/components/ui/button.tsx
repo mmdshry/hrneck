@@ -18,11 +18,12 @@ const buttonVariants = cva(
         ghost: "text-[var(--foreground)] hover:bg-[var(--muted)]",
         destructive:
           "bg-[var(--destructive)] text-[var(--destructive-foreground)] hover:brightness-110",
-        link: "rounded-md text-[var(--primary)] underline-offset-4 hover:underline",
+        link: "rounded-md text-[var(--link)] underline-offset-4 hover:underline",
       },
       size: {
         default: "min-h-11 px-4 py-2.5",
         sm: "min-h-11 px-3.5 py-2 text-sm",
+        compact: "min-h-0 px-2 py-1 text-xs",
         lg: "min-h-12 px-5 py-3",
         icon: "h-11 w-11 shrink-0",
       },

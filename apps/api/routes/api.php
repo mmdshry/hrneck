@@ -1,6 +1,7 @@
 <?php
 
 use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
+use App\Http\Controllers\Api\V1\AuthAvatarController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\HealthController;
 use App\Http\Controllers\Api\V1\Msp\TenantController;
@@ -10,7 +11,6 @@ use App\Http\Controllers\Api\V1\Org\CampaignController;
 use App\Http\Controllers\Api\V1\Org\ChecklistController;
 use App\Http\Controllers\Api\V1\Org\CustomDomainController;
 use App\Http\Controllers\Api\V1\Org\DepartmentController;
-use App\Http\Controllers\Api\V1\Org\DirectorySyncController;
 use App\Http\Controllers\Api\V1\Org\GroupController;
 use App\Http\Controllers\Api\V1\Org\IntegrationController;
 use App\Http\Controllers\Api\V1\Org\NotificationController;
@@ -21,7 +21,9 @@ use App\Http\Controllers\Api\V1\Org\ReportExportController;
 use App\Http\Controllers\Api\V1\Org\ReportScheduleController;
 use App\Http\Controllers\Api\V1\Org\SendingProfileController;
 use App\Http\Controllers\Api\V1\Org\SettingsController;
+use App\Http\Controllers\Api\V1\Org\TargetAvatarController;
 use App\Http\Controllers\Api\V1\Org\TargetController;
+use App\Http\Controllers\Api\V1\Org\TargetImportController;
 use App\Http\Controllers\Api\V1\Org\Ticketing\DeskController as TicketingDeskController;
 use App\Http\Controllers\Api\V1\Org\Ticketing\EmailReaderController;
 use App\Http\Controllers\Api\V1\Org\Ticketing\KbController;
@@ -30,6 +32,7 @@ use App\Http\Controllers\Api\V1\Org\Ticketing\TemplateController;
 use App\Http\Controllers\Api\V1\Org\Ticketing\TicketController;
 use App\Http\Controllers\Api\V1\Org\Ticketing\TicketingReportController;
 use App\Http\Controllers\Api\V1\Org\TrainingController;
+use App\Http\Controllers\Api\V1\Org\UserAvatarController;
 use App\Http\Controllers\Api\V1\Org\WebhookStubController;
 use App\Http\Controllers\Api\V1\Portal\PortalTicketingController;
 use App\Http\Middleware\EnsureOrgMembership;
@@ -52,6 +55,14 @@ Route::prefix('v1')->group(function (): void {
     Route::post('/auth/password/forgot', [AuthController::class, 'forgotPassword'])->middleware('throttle:auth-login');
     Route::post('/auth/password/reset', [AuthController::class, 'resetPassword'])->middleware('throttle:auth-login');
     Route::post('/auth/password', [AuthController::class, 'changePassword'])->middleware('auth:sanctum');
+    Route::put('/auth/locale', [AuthController::class, 'updateLocale'])->middleware('auth:sanctum');
+    Route::middleware('auth:sanctum')->group(function (): void {
+        Route::get('/auth/avatar', [AuthAvatarController::class, 'show']);
+        Route::post('/auth/avatar', [AuthAvatarController::class, 'store']);
+        Route::delete('/auth/avatar', [AuthAvatarController::class, 'destroy']);
+        Route::post('/auth/orgs/leave', [AuthController::class, 'leaveOrg']);
+        Route::post('/auth/orgs/{tenant}/enter', [AuthController::class, 'enterOrg']);
+    });
 
     Route::middleware(['auth:sanctum', EnsurePlatformStaff::class])->prefix('msp')->group(function (): void {
         Route::get('/tenants', [TenantController::class, 'index']);
@@ -90,6 +101,9 @@ Route::prefix('v1')->group(function (): void {
                 Route::patch('/users/{user}', [OrgUserController::class, 'update']);
                 Route::put('/users/{user}/roles', [OrgUserController::class, 'syncRoles']);
                 Route::delete('/users/{user}', [OrgUserController::class, 'destroy']);
+                Route::get('/users/{user}/avatar', [UserAvatarController::class, 'show']);
+                Route::post('/users/{user}/avatar', [UserAvatarController::class, 'store']);
+                Route::delete('/users/{user}/avatar', [UserAvatarController::class, 'destroy']);
             });
 
             Route::middleware('permission:'.OrgPermissionCatalog::ROLES_MANAGE)->group(function (): void {
@@ -102,18 +116,29 @@ Route::prefix('v1')->group(function (): void {
 
             Route::get('/targets', [TargetController::class, 'index'])
                 ->middleware('permission:'.OrgPermissionCatalog::TARGETS_MANAGE.'|'.OrgPermissionCatalog::GROUPS_MANAGE);
+            Route::get('/targets/{target}/avatar', [TargetAvatarController::class, 'show'])
+                ->middleware('permission:'.OrgPermissionCatalog::TARGETS_MANAGE.'|'.OrgPermissionCatalog::GROUPS_MANAGE);
 
             Route::middleware('permission:'.OrgPermissionCatalog::TARGETS_MANAGE)->group(function (): void {
+                Route::post('/targets/import', [TargetImportController::class, 'importLegacy']);
+                Route::post('/targets/import/sessions', [TargetImportController::class, 'storeSession']);
+                Route::post('/targets/import/sessions/{session}/preview', [TargetImportController::class, 'preview']);
+                Route::post('/targets/import/sessions/{session}/commit', [TargetImportController::class, 'commit']);
+                Route::get('/targets/import/mappings', [TargetImportController::class, 'indexMappings']);
+                Route::post('/targets/import/mappings', [TargetImportController::class, 'storeMapping']);
+                Route::patch('/targets/import/mappings/{mapping}', [TargetImportController::class, 'updateMapping']);
+                Route::delete('/targets/import/mappings/{mapping}', [TargetImportController::class, 'destroyMapping']);
                 Route::get('/targets/{target}', [TargetController::class, 'show']);
                 Route::post('/targets', [TargetController::class, 'store']);
                 Route::patch('/targets/{target}', [TargetController::class, 'update']);
                 Route::delete('/targets/{target}', [TargetController::class, 'destroy']);
-                Route::post('/targets/import', [TargetController::class, 'importCsv']);
-                Route::post('/directory-sync', DirectorySyncController::class);
+                Route::post('/targets/{target}/recalculate-risk', [TargetController::class, 'recalculateRisk']);
+                Route::post('/targets/{target}/avatar', [TargetAvatarController::class, 'store']);
+                Route::delete('/targets/{target}/avatar', [TargetAvatarController::class, 'destroy']);
             });
 
             Route::get('/departments', [DepartmentController::class, 'index'])
-                ->middleware('permission:'.OrgPermissionCatalog::DEPARTMENTS_MANAGE.'|'.OrgPermissionCatalog::TARGETS_MANAGE.'|'.OrgPermissionCatalog::REPORTS_VIEW);
+                ->middleware('permission:'.OrgPermissionCatalog::DEPARTMENTS_MANAGE.'|'.OrgPermissionCatalog::TARGETS_MANAGE.'|'.OrgPermissionCatalog::USERS_MANAGE.'|'.OrgPermissionCatalog::REPORTS_VIEW);
 
             Route::middleware('permission:'.OrgPermissionCatalog::DEPARTMENTS_MANAGE)->group(function (): void {
                 Route::post('/departments', [DepartmentController::class, 'store']);

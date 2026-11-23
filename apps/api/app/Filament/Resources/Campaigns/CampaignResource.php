@@ -53,6 +53,7 @@ class CampaignResource extends Resource
                 ->label('Groups')
                 ->multiple()
                 ->options(fn () => Group::query()->orderBy('name')->pluck('name', 'id')),
+            Toggle::make('is_remedial')->label('Remedial training')->default(false),
             Toggle::make('launch_now')->default(true),
         ]);
     }
@@ -90,7 +91,11 @@ class CampaignResource extends Resource
                             $data['target_ids'] ?? [],
                             $data['group_ids'] ?? [],
                         );
-                        app(LaunchTrainingCampaign::class)->handle($record, $ids);
+                        app(LaunchTrainingCampaign::class)->handle(
+                            $record,
+                            $ids,
+                            array_map(intval(...), $data['group_ids'] ?? []),
+                        );
                         AuditsFilamentMutation::log('campaigns', 'launched', 'Campaign launched', $record, [
                             'name' => $record->name,
                         ]);

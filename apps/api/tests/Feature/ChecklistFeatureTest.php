@@ -468,6 +468,7 @@ test('creating a target auto assigns published packs', function () {
             'email' => $email,
             'first_name' => 'New',
             'last_name' => 'Hire',
+            'timezone' => 'UTC',
         ])
         ->assertCreated()
         ->json();
@@ -503,4 +504,23 @@ test('welcome pack is seeded for sample tenants', function () {
     expect($pack->auto_assign_on_create)->toBeTrue();
     expect($pack->items()->count())->toBeGreaterThanOrEqual(1);
     Tenancy::end();
+});
+
+test('archived templates are excluded from the editable assign list', function () {
+    $created = asChecklistAdmin($this)
+        ->postJson('/api/v1/org/checklists/templates', [
+            'name' => 'Archive me',
+            'category' => 'custom',
+            'status' => 'archived',
+        ])
+        ->assertCreated();
+
+    $id = (int) $created->json('data.id');
+
+    $listed = asChecklistAdmin($this)
+        ->getJson('/api/v1/org/checklists/templates?per_page=100&editable_only=1')
+        ->assertOk()
+        ->json('data');
+
+    expect(collect($listed)->pluck('id'))->not->toContain($id);
 });

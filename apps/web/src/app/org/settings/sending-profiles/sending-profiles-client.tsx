@@ -1,7 +1,8 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert } from "@/components/ui/alert";
+import { toastSuccess, toastError } from "@/lib/toast";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
@@ -38,19 +39,6 @@ type ProfilesPayload = {
   data: Profile[];
 };
 
-function alertVariantForMessage(message: string): "destructive" | "success" | "default" {
-  const m = message.toLowerCase();
-  if (
-    /\b(fail|failed|error|invalid)\b/.test(m) ||
-    m.includes("load failed") ||
-    m.includes("save failed")
-  ) {
-    return "destructive";
-  }
-  if (m.includes("saved")) return "success";
-  return "default";
-}
-
 function matchesCells(
   q: string,
   columnFilters: Record<string, string>,
@@ -78,6 +66,8 @@ function profileCells(profile: Profile): Record<string, string> {
 }
 
 export function SendingProfilesClient() {
+  const t = useTranslations("org.settings");
+  const tCommon = useTranslations("common");
   const tenant = resolveTenant();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [liveProfiles, setLiveProfiles] = useState<Profile[] | null>(null);
@@ -88,7 +78,6 @@ export function SendingProfilesClient() {
   const [fromName, setFromName] = useState("HRNECK");
   const [fromEmail, setFromEmail] = useState("noreply@hrneck.com");
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [pendingDelete, setPendingDelete] = useState<Profile | null>(null);
   const tableQuery = useDataTableQuery();
@@ -189,7 +178,7 @@ export function SendingProfilesClient() {
     setName(profile.name);
     setFromName(profile.from_name);
     setFromEmail(profile.from_email);
-    setMessage(null);
+    
   }
 
   function resetForm() {
@@ -201,7 +190,7 @@ export function SendingProfilesClient() {
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
-    setMessage(null);
+    
     try {
       await ensureCsrf();
       const payload = {
@@ -229,14 +218,14 @@ export function SendingProfilesClient() {
       setLiveProfiles(null);
       await refreshFromApi(page, perPage, filters);
       resetForm();
-      setMessage("Profile saved.");
+      toastSuccess(t("profileSaved"));
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Save failed — sign in first");
+      toastError(err instanceof Error ? err.message : t("saveFailedSignIn"));
     }
   }
 
   async function deleteProfile(profile: Profile) {
-    setMessage(null);
+    
     try {
       await ensureCsrf();
       await api(`/api/v1/org/sending-profiles/${profile.id}`, {
@@ -245,9 +234,9 @@ export function SendingProfilesClient() {
       });
       setLiveProfiles(null);
       await refreshFromApi(page, perPage, filters);
-      setMessage("Profile deleted.");
+      toastSuccess(t("profileDeleted"));
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Delete failed");
+      toastError(err instanceof Error ? err.message : tCommon("deleteFailed"));
       throw err;
     }
   }
@@ -255,37 +244,37 @@ export function SendingProfilesClient() {
   const columns: Array<DataTableColumn<Profile>> = [
     {
       id: "name",
-      header: "Name",
+      header: tCommon("name"),
       accessorKey: "name",
       sticky: true,
       cell: (profile) => (
         <span>
           {profile.name}
-          {profile.is_default ? " · default" : ""}
+          {profile.is_default ? ` · ${tCommon("default")}` : ""}
         </span>
       ),
     },
     {
       id: "from_name",
-      header: "From name",
+      header: t("fromName"),
       accessorKey: "from_name",
       cell: (profile) => profile.from_name,
     },
     {
       id: "from_email",
-      header: "From email",
+      header: t("fromEmail"),
       accessorKey: "from_email",
       cell: (profile) => profile.from_email,
     },
     {
       id: "mailer",
-      header: "Mailer",
+      header: tCommon("mailer"),
       accessorKey: "mailer",
       cell: (profile) => profile.mailer,
     },
     {
       id: "actions",
-      header: "Actions",
+      header: tCommon("actions"),
       filter: "none",
       enableSorting: false,
       enableGlobalFilter: false,
@@ -294,18 +283,18 @@ export function SendingProfilesClient() {
           <Button
             type="button"
             variant="outline"
-            className="min-h-0 px-2 py-1 text-xs"
+            size="compact"
             onClick={() => startEdit(profile)}
           >
-            Edit
+            {tCommon("edit")}
           </Button>
           <Button
             type="button"
             variant="outline"
-            className="min-h-0 px-2 py-1 text-xs"
+            size="compact"
             onClick={() => setPendingDelete(profile)}
           >
-            Delete
+            {tCommon("delete")}
           </Button>
         </div>
       ),
@@ -319,24 +308,24 @@ export function SendingProfilesClient() {
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">
       <PageHeader
-        title="Sending profiles"
-        description={statusLabel ?? "Live"}
+        title={t("sendingProfilesTitle")}
+        description={statusLabel ?? tCommon("live")}
         actions={
           <LinkButton href="/org/settings" variant="secondary">
-            Settings
+            {t("title")}
           </LinkButton>
         }
       />
       <form onSubmit={onSubmit} className="mt-8 space-y-4">
         <div className="space-y-1">
           <Label htmlFor="sp-name" className="text-[var(--muted-foreground)]">
-            Name
+            {tCommon("name")}
           </Label>
           <Input id="sp-name" value={name} onChange={(e) => setName(e.target.value)} />
         </div>
         <div className="space-y-1">
           <Label htmlFor="sp-from-name" className="text-[var(--muted-foreground)]">
-            From name
+            {t("fromName")}
           </Label>
           <Input
             id="sp-from-name"
@@ -346,7 +335,7 @@ export function SendingProfilesClient() {
         </div>
         <div className="space-y-1">
           <Label htmlFor="sp-from-email" className="text-[var(--muted-foreground)]">
-            From email
+            {t("fromEmail")}
           </Label>
           <Input
             id="sp-from-email"
@@ -356,38 +345,32 @@ export function SendingProfilesClient() {
           />
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button type="submit">{editingId !== null ? "Update profile" : "Save profile"}</Button>
+          <Button type="submit">
+            {editingId !== null ? t("updateProfile") : t("saveProfile")}
+          </Button>
           {editingId !== null ? (
             <Button type="button" variant="secondary" onClick={resetForm}>
-              Cancel edit
+              {tCommon("cancel")}
             </Button>
           ) : null}
         </div>
       </form>
-      {message ? (
-        <Alert className="mt-4" variant={alertVariantForMessage(message)}>
-          {message}
-        </Alert>
-      ) : null}
-      {liveError ? (
-        <Alert className="mt-4" variant="destructive">
-          {liveError}
-        </Alert>
-      ) : null}
+      
+      
       <DataTable
         className="mt-10"
         mode="server"
-        caption="Sending profiles"
+        caption={t("sendingProfilesTitle")}
         columns={columns}
         rows={profiles}
         filterState={tableQuery.state}
         onFilterStateChange={tableQuery.setState}
         getRowId={(row) => row.id}
-        emptyTitle={status === "live" ? "No sending profiles" : "Connecting…"}
+        emptyTitle={status === "live" ? t("noSendingProfiles") : tCommon("connecting")}
         emptyDescription={
           status === "live"
-            ? "Save a profile to choose From name and email for outbound mail."
-            : (statusLabel ?? "Waiting for live data…")
+            ? t("profileEmptyHint")
+            : (statusLabel ?? t("waitingLive"))
         }
         pagination={{
           page,
@@ -406,9 +389,9 @@ export function SendingProfilesClient() {
         onOpenChange={(open) => {
           if (!open) setPendingDelete(null);
         }}
-        title="Delete sending profile"
-        description={`Delete sending profile “${pendingDelete?.name}”?`}
-        confirmLabel="Delete"
+        title={t("deleteSendingProfile")}
+        description={t("deleteProfileConfirm", { name: pendingDelete?.name ?? "" })}
+        confirmLabel={tCommon("delete")}
         variant="destructive"
         onConfirm={async () => {
           if (!pendingDelete) return;

@@ -102,8 +102,8 @@ class BuildCampaignReport
 
         $openedCount = max($openedFromEnrollment, $openedRecipients);
         $completedCount = max($completedFromEnrollment, $completedRecipients);
-        $metricTotal = max($enrollments->count(), $recipientTotal, 1);
-        $noAction = max(0, $metricTotal - $openedCount);
+        $metricTotal = max($enrollments->count(), $recipientTotal);
+        $noAction = $metricTotal === 0 ? 0 : max(0, $metricTotal - $openedCount);
 
         $employeesQuery = Target::query()->where('status', 'active');
         if ($departmentId) {
@@ -117,9 +117,9 @@ class BuildCampaignReport
             'opened' => $openedCount,
             'completed' => $completedCount,
             'no_action' => $noAction,
-            'opened_pct' => round(($openedCount / $metricTotal) * 100, 1),
-            'completed_pct' => round(($completedCount / $metricTotal) * 100, 1),
-            'no_action_pct' => round(($noAction / $metricTotal) * 100, 1),
+            'opened_pct' => $metricTotal === 0 ? 0 : round(($openedCount / $metricTotal) * 100, 1),
+            'completed_pct' => $metricTotal === 0 ? 0 : round(($completedCount / $metricTotal) * 100, 1),
+            'no_action_pct' => $metricTotal === 0 ? 0 : round(($noAction / $metricTotal) * 100, 1),
             'enrollments' => $enrollments->count(),
             'active_employees' => $employeesQuery->count(),
         ];

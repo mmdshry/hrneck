@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert } from "@/components/ui/alert";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
@@ -25,6 +26,7 @@ import {
 } from "@/lib/pagination";
 import { hasPermission, type SessionUser } from "@/lib/session";
 import { resolveTenant } from "@/lib/tenant";
+import { toastError, toastSuccess } from "@/lib/toast";
 
 type OrgRole = {
   id: number;
@@ -55,6 +57,8 @@ function matchesCells(
 }
 
 export function RolesClient() {
+  const t = useTranslations("org.roles");
+  const tCommon = useTranslations("common");
   const tenant = resolveTenant();
   const channel = tenant ? orgLiveChannel(tenant, "roles") : null;
   const [session, setSession] = useState<SessionUser | null>(null);
@@ -66,7 +70,6 @@ export function RolesClient() {
   const [catalog, setCatalog] = useState<string[]>([]);
   const [name, setName] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
-  const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const tableQuery = useDataTableQuery();
   const filters = useMemo(
@@ -159,7 +162,7 @@ export function RolesClient() {
     }
     void refreshFromApi(page, perPage, filters)
       .catch((err: unknown) => {
-        setMessage(err instanceof Error ? err.message : "Load failed");
+        toastError(err instanceof Error ? err.message : tCommon("loadFailed"));
       })
       .finally(() => setLoading(false));
   }, [
@@ -196,7 +199,7 @@ export function RolesClient() {
 
   async function onCreate(event: FormEvent) {
     event.preventDefault();
-    setMessage(null);
+    
     try {
       await ensureCsrf();
       await api("/api/v1/org/roles", {
@@ -207,15 +210,15 @@ export function RolesClient() {
       });
       setName("");
       setSelected([]);
-      setMessage("Role created.");
+      toastSuccess(t("roleCreated"));
       await afterMutation();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Create failed");
+      toastError(err instanceof Error ? err.message : tCommon("createFailed"));
     }
   }
 
   async function saveRole(role: OrgRole, permissions: string[]) {
-    setMessage(null);
+    
     try {
       await ensureCsrf();
       await api(`/api/v1/org/roles/${role.id}`, {
@@ -224,24 +227,24 @@ export function RolesClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ permissions }),
       });
-      setMessage(`Updated ${role.name}.`);
+      toastSuccess(`Updated ${role.name}.`);
       await afterMutation();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Update failed");
+      toastError(err instanceof Error ? err.message : tCommon("updateFailed"));
     }
   }
 
   const columns: Array<DataTableColumn<OrgRole>> = [
     {
       id: "name",
-      header: "Name",
+      header: tCommon("name"),
       accessorKey: "name",
       sticky: true,
       cell: (role) => role.name,
     },
     {
       id: "permissions",
-      header: "Permissions",
+      header: tCommon("permissions"),
       filter: "none",
       filterValue: (role) => role.permissions.join(" "),
       enableSorting: false,
@@ -275,15 +278,15 @@ export function RolesClient() {
     },
     {
       id: "actions",
-      header: "Actions",
+      header: tCommon("actions"),
       filter: "none",
       enableSorting: false,
       enableGlobalFilter: false,
       cell: (role) => (
         <Button
           type="button"
-          variant="secondary"
-          size="sm"
+          variant="outline"
+          size="compact"
           onClick={() => void saveRole(role, role.permissions)}
         >
           Save permissions
@@ -300,18 +303,20 @@ export function RolesClient() {
     return (
       <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">
         <PageHeader
-          title="Roles & permissions"
-          description="RBAC for organization operators. Employee categorization stays on Employees and Groups."
+          title={t("title")}
+          description={t("description")}
         />
-        <Alert className="mt-4">
-          Sign in required. Use Sign in in the sidebar.
-        </Alert>
-        <Link
-          href="/login?next=%2Forg%2Froles"
-          className="mt-4 inline-flex min-h-11 items-center justify-center rounded-[var(--radius)] bg-[var(--primary)] px-4 py-2.5 text-sm font-medium text-[var(--primary-foreground)]"
-        >
-          Sign in
-        </Link>
+        <EmptyState
+          title="Sign in required. Use Sign in in the sidebar."
+          action={
+            <Link
+              href="/login?next=%2Forg%2Froles"
+              className="inline-flex min-h-11 items-center justify-center rounded-[var(--radius)] bg-[var(--primary)] px-4 py-2.5 text-sm font-medium text-[var(--primary-foreground)]"
+            >
+              {tCommon("signIn")}
+            </Link>
+          }
+        />
       </div>
     );
   }
@@ -319,7 +324,7 @@ export function RolesClient() {
   if (!hasPermission(session, "org.roles.manage")) {
     return (
       <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">
-        <Alert variant="destructive">You do not have permission to manage roles.</Alert>
+        <EmptyState title={"You do not have permission to manage roles."} />
       </div>
     );
   }
@@ -327,31 +332,18 @@ export function RolesClient() {
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">
       <PageHeader
-        title="Roles & permissions"
+        title={t("title")}
         description={
-          statusLabel
-            ? `RBAC for organization operators. Employee categorization stays on Employees and Groups. · ${statusLabel}`
-            : "RBAC for organization operators. Employee categorization stays on Employees and Groups."
+          statusLabel ? `${t("description")} · ${statusLabel}` : t("description")
         }
       />
-      {message ? (
-        <Alert
-          className="mt-4"
-          variant={message.toLowerCase().includes("fail") ? "destructive" : "success"}
-        >
-          {message}
-        </Alert>
-      ) : null}
-      {liveError ? (
-        <Alert className="mt-4" variant="destructive">
-          {liveError}
-        </Alert>
-      ) : null}
+      
+      
 
       <form onSubmit={onCreate} className="mt-8 space-y-3 rounded-2xl border border-[var(--border)] p-4">
-        <p className="text-sm font-medium">Create role</p>
+        <p className="text-sm font-medium">{t("createRole")}</p>
         <div className="space-y-1">
-          <Label htmlFor="role-name">Name</Label>
+          <Label htmlFor="role-name">{tCommon("name")}</Label>
           <Input id="role-name" value={name} onChange={(e) => setName(e.target.value)} required />
         </div>
         <fieldset className="space-y-2">
@@ -369,20 +361,20 @@ export function RolesClient() {
             ))}
           </div>
         </fieldset>
-        <Button type="submit">Create role</Button>
+        <Button type="submit">{t("createRole")}</Button>
       </form>
 
       <DataTable
         className="mt-8"
         mode="server"
-        caption="Roles"
+        caption={t("rolesCaption")}
         columns={columns}
         rows={roles}
         filterState={tableQuery.state}
         onFilterStateChange={tableQuery.setState}
         getRowId={(row) => row.id}
-        emptyTitle="No roles yet."
-        emptyDescription="Create a role and choose its permissions."
+        emptyTitle={t("noRolesYet")}
+        emptyDescription={t("noRolesHint")}
         pagination={{
           page,
           perPage,

@@ -1,3 +1,6 @@
+"use client";
+
+import { useTranslations } from "next-intl";
 import { LinkButton } from "@/components/ui/link-button";
 import type { OrgMembershipMatch } from "@/lib/session";
 import { tenantWorkspaceUrl } from "@/lib/tenant";
@@ -17,20 +20,42 @@ export function OrgMembershipGate({
   pathname,
   search = "",
 }: OrgMembershipGateProps) {
+  const t = useTranslations("account");
+
   if (denial.kind === "org_mismatch") {
     const href = tenantWorkspaceUrl(denial.homeTenant, pathname, { search });
     return (
       <div className="mx-auto flex w-full max-w-xl flex-col gap-4 px-4 py-10">
         <h1 className="text-xl font-semibold tracking-tight text-[var(--foreground)]">
-          You do not belong to this organization
+          {t("membershipMismatchTitle")}
         </h1>
         <p className="text-sm text-[var(--muted-foreground)]">
-          This workspace is <strong>{currentTenant}</strong>, but your account
-          belongs to <strong>{denial.homeTenant}</strong>. Open your organization
-          to continue.
+          {t("membershipMismatchBody", {
+            current: currentTenant,
+            home: denial.homeTenant,
+          })}
         </p>
         <div>
-          <LinkButton href={href}>{`Go to ${denial.homeTenant}`}</LinkButton>
+          <LinkButton href={href}>
+            {t("goToTenant", { tenant: denial.homeTenant })}
+          </LinkButton>
+        </div>
+      </div>
+    );
+  }
+
+  if (denial.kind === "org_selection_required") {
+    const next = encodeURIComponent(`${pathname}${search}`);
+    return (
+      <div className="mx-auto flex w-full max-w-xl flex-col gap-4 px-4 py-10">
+        <h1 className="text-xl font-semibold tracking-tight text-[var(--foreground)]">
+          {t("selectOrgRequiredTitle")}
+        </h1>
+        <p className="text-sm text-[var(--muted-foreground)]">
+          {t("selectOrgRequiredBody", { tenant: currentTenant })}
+        </p>
+        <div>
+          <LinkButton href={`/select-org?next=${next}`}>{t("chooseOrganization")}</LinkButton>
         </div>
       </div>
     );
@@ -39,14 +64,13 @@ export function OrgMembershipGate({
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-4 px-4 py-10">
       <h1 className="text-xl font-semibold tracking-tight text-[var(--foreground)]">
-        Enter an organization first
+        {t("enterOrgFirstTitle")}
       </h1>
       <p className="text-sm text-[var(--muted-foreground)]">
-        Platform staff must open a tenant from Organizations before using{" "}
-        <strong>{currentTenant}</strong> admin pages.
+        {t("enterOrgFirstBody", { tenant: currentTenant })}
       </p>
       <div>
-        <LinkButton href="/msp">Go to Organizations</LinkButton>
+        <LinkButton href="/msp">{t("goToOrganizations")}</LinkButton>
       </div>
     </div>
   );

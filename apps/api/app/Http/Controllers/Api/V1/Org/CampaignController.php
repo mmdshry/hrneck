@@ -52,13 +52,12 @@ class CampaignController extends Controller
         $type = $request->input('type', 'training');
         $campaigns = Campaign::query()->where('type', $type)->with('recipients')->get();
         $recipients = $campaigns->flatMap->recipients;
-        $total = max(1, $recipients->count());
 
         $courseIds = $campaigns->pluck('course_id')->filter()->unique()->values();
         $enrollments = $courseIds->isEmpty()
             ? collect()
             : Enrollment::query()->whereIn('course_id', $courseIds)->get();
-        $enrollmentTotal = max(1, $enrollments->count());
+        $enrollmentTotal = $enrollments->count();
         $openedFromEnrollment = $enrollments->whereNotNull('opened_at')->count();
         $completedFromEnrollment = $enrollments->where('status', 'completed')->count();
         $openedRecipients = $recipients->filter(
@@ -68,7 +67,8 @@ class CampaignController extends Controller
 
         $openedCount = max($openedFromEnrollment, $openedRecipients);
         $completedCount = max($completedFromEnrollment, $completedRecipients);
-        $metricTotal = max($enrollmentTotal, $total);
+        $metricTotal = max($enrollmentTotal, $recipients->count());
+        $noAction = $metricTotal === 0 ? 0 : max(0, $metricTotal - $openedCount);
 
         return response()->json([
             'data' => [
@@ -79,9 +79,9 @@ class CampaignController extends Controller
                 'enrollments_total' => $enrollments->count(),
                 'enrollments_completed' => $completedFromEnrollment,
                 'enrollments_in_progress' => $enrollments->where('status', 'in_progress')->count(),
-                'no_action_pct' => round((($metricTotal - $openedCount) / $metricTotal) * 100, 1),
-                'opened_pct' => round(($openedCount / $metricTotal) * 100, 1),
-                'completed_pct' => round(($completedCount / $metricTotal) * 100, 1),
+                'no_action_pct' => $metricTotal === 0 ? 0 : round(($noAction / $metricTotal) * 100, 1),
+                'opened_pct' => $metricTotal === 0 ? 0 : round(($openedCount / $metricTotal) * 100, 1),
+                'completed_pct' => $metricTotal === 0 ? 0 : round(($completedCount / $metricTotal) * 100, 1),
             ],
         ]);
     }
@@ -96,6 +96,7 @@ class CampaignController extends Controller
             'name' => ['required', 'string', 'max:160'],
             'type' => ['sometimes', 'in:training'],
             'course_id' => ['nullable', 'integer'],
+            'is_remedial' => ['sometimes', 'boolean'],
             'target_ids' => ['required_without:group_ids', 'array'],
             'target_ids.*' => ['integer'],
             'group_ids' => ['required_without:target_ids', 'array'],
@@ -114,12 +115,17 @@ class CampaignController extends Controller
             'name' => $data['name'],
             'type' => 'training',
             'status' => $status,
+            'is_remedial' => $request->boolean('is_remedial'),
             'course_id' => $data['course_id'] ?? Course::query()->value('id'),
             'scheduled_at' => $data['scheduled_at'] ?? null,
         ]);
 
         if ($request->boolean('launch', true)) {
-            $campaign = $train->handle($campaign, $targetIds);
+            $campaign = $train->handle(
+                $campaign,
+                $targetIds,
+                array_map(intval(...), $data['group_ids'] ?? []),
+            );
         } else {
             PublishLive::metricsBundle();
         }

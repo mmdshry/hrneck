@@ -6,14 +6,19 @@ use App\Domains\IdentityAccess\Jobs\SendEmployeeInviteJob;
 use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
 use App\Domains\TargetsGroups\Models\Target;
 use App\Models\Role;
+use App\Models\TenantMembership;
 use App\Models\User;
+use App\Support\ActiveOrgTenant;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class ProvisionEmployeePair
 {
-    public function __construct(private readonly SeedRbacCatalog $rbac) {}
+    public function __construct(
+        private readonly SeedRbacCatalog $rbac,
+        private readonly EnsureTenantMembership $memberships,
+    ) {}
 
     /**
      * Ensure a login User exists for this Target. New users get learner + invite.
@@ -31,6 +36,7 @@ class ProvisionEmployeePair
 
         $user = $this->findUserByEmail($email);
         $invited = false;
+        $created = false;
 
         if ($user === null) {
             $this->rbac->ensureLearnerRole($tenantId);
@@ -53,7 +59,14 @@ class ProvisionEmployeePair
             $user->forceFill([
                 'email_verified_at' => now(),
                 'disabled_at' => null,
+                'department_id' => $target->department_id,
+                'department' => $target->department,
             ])->save();
+
+            $this->memberships->handle($user, $tenantId, [
+                'department_id' => $target->department_id,
+                'department' => $target->department,
+            ]);
 
             $this->assignLearnerRole($user, $tenantId);
 
@@ -62,20 +75,23 @@ class ProvisionEmployeePair
                 $invited = true;
             }
 
+            $this->linkTargetToUser($target, $user);
+
             return ['user' => $user, 'invited' => $invited, 'created' => true];
         }
 
-        if ($user->tenant_id === null) {
+        if ($user->isPlatformStaff()) {
             throw ValidationException::withMessages([
                 'email' => ['This email belongs to a platform staff account and cannot be linked to an employee.'],
             ]);
         }
 
-        if ($user->tenant_id !== $tenantId) {
-            throw ValidationException::withMessages([
-                'email' => ['A user with this email already exists in another organization.'],
-            ]);
-        }
+        $hadMembership = $user->belongsToTenant($tenantId, activeOnly: false);
+
+        $this->memberships->handle($user, $tenantId, [
+            'department_id' => $target->department_id,
+            'department' => $target->department,
+        ]);
 
         if ($user->disabled_at !== null && $target->status === 'active') {
             $user->forceFill(['disabled_at' => null])->save();
@@ -85,38 +101,87 @@ class ProvisionEmployeePair
             $this->assignLearnerRole($user, $tenantId);
         }
 
-        return ['user' => $user->fresh() ?? $user, 'invited' => false, 'created' => false];
+        $this->linkTargetToUser($target, $user);
+        $this->syncUserDepartmentFromTarget($target, $tenantId);
+
+        if (! $hadMembership && $queueInvite && $user->must_set_password) {
+            SendEmployeeInviteJob::dispatch($user->id);
+            $invited = true;
+        }
+
+        return ['user' => $user->fresh(['memberships']) ?? $user, 'invited' => $invited, 'created' => $created];
     }
 
     /**
-     * When a User is given the learner role, ensure a Target exists.
+     * When a User is given the learner role, ensure a Target exists in the given tenant.
      */
-    public function ensureTargetForLearner(User $user): ?Target
+    public function ensureTargetForLearner(User $user, ?string $tenantId = null): ?Target
     {
-        if ($user->tenant_id === null) {
+        $tenantId = $tenantId ?? (is_string(tenant('id')) ? (string) tenant('id') : null)
+            ?? $user->resolvedActiveTenantId()
+            ?? (is_string($user->tenant_id) ? (string) $user->tenant_id : null);
+
+        if ($tenantId === null || ! $user->belongsToTenant($tenantId)) {
             return null;
         }
 
-        if (! $this->userHasLearnerRole($user)) {
+        if (! $this->userHasLearnerRole($user, $tenantId)) {
             return null;
         }
 
-        $email = $this->normalizeEmail((string) $user->email);
         $existing = Target::query()
-            ->whereRaw('LOWER(email) = ?', [$email])
+            ->where('user_id', $user->id)
             ->first();
 
+        if ($existing === null) {
+            $email = $this->normalizeEmail((string) $user->email);
+            $existing = Target::query()
+                ->whereRaw('LOWER(email) = ?', [$email])
+                ->first();
+        }
+
         if ($existing !== null) {
+            $this->linkTargetToUser($existing, $user);
+
             return $existing;
         }
 
         $parts = preg_split('/\s+/', trim((string) $user->name), 2) ?: [];
+        $email = $this->normalizeEmail((string) $user->email);
+        $membership = $user->membershipFor($tenantId);
 
-        return Target::query()->create([
+        $target = Target::query()->create([
             'email' => $email,
             'first_name' => $parts[0] ?? null,
             'last_name' => $parts[1] ?? null,
             'status' => 'active',
+            'user_id' => $user->id,
+            'joined_via' => 'learner_role',
+            'department_id' => $membership?->department_id,
+            'department' => $membership?->department,
+        ]);
+
+        return $target;
+    }
+
+    public function syncUserDepartmentFromTarget(Target $target, string $tenantId): void
+    {
+        if ($target->user_id === null) {
+            return;
+        }
+
+        $user = User::query()
+            ->inTenant($tenantId)
+            ->whereKey($target->user_id)
+            ->first();
+
+        if ($user === null) {
+            return;
+        }
+
+        $this->memberships->handle($user, $tenantId, [
+            'department_id' => $target->department_id,
+            'department' => $target->department,
         ]);
     }
 
@@ -129,7 +194,7 @@ class ProvisionEmployeePair
         }
 
         $user = User::query()
-            ->where('tenant_id', $tenantId)
+            ->inTenant($tenantId)
             ->whereRaw('LOWER(email) = ?', [$from])
             ->first();
 
@@ -154,14 +219,13 @@ class ProvisionEmployeePair
     public function onTargetDeactivated(Target $target, string $tenantId): void
     {
         // Employee surfaces gate on Target.status; operators keep /org access.
-        // No user mutation required beyond ensuring disabled learners stay blocked via Target.
         unset($target, $tenantId);
     }
 
     public function onTargetDeleted(string $email, string $tenantId): void
     {
         $user = User::query()
-            ->where('tenant_id', $tenantId)
+            ->inTenant($tenantId, activeOnly: false)
             ->whereRaw('LOWER(email) = ?', [$this->normalizeEmail($email)])
             ->first();
 
@@ -177,13 +241,55 @@ class ProvisionEmployeePair
 
             $remaining = $user->getRoleNames()->values()->all();
             if ($remaining === []) {
-                $user->forceFill([
-                    'disabled_at' => now(),
-                    'remember_token' => Str::random(60),
-                ])->save();
+                $this->removeMembershipKeepingOthers($user, $tenantId);
             }
         } finally {
             setPermissionsTeamId(null);
+        }
+    }
+
+    public function removeMembershipKeepingOthers(User $user, string $tenantId): void
+    {
+        TenantMembership::query()
+            ->where('user_id', $user->id)
+            ->where('tenant_id', $tenantId)
+            ->delete();
+
+        setPermissionsTeamId($tenantId);
+        try {
+            $user->syncRoles([]);
+        } finally {
+            setPermissionsTeamId(null);
+        }
+
+        $remaining = $user->memberships()->active()->get();
+        if ($remaining->isEmpty()) {
+            $user->forceFill([
+                'tenant_id' => null,
+                'department_id' => null,
+                'department' => null,
+                'disabled_at' => now(),
+                'remember_token' => Str::random(60),
+            ])->save();
+
+            if (ActiveOrgTenant::matches($tenantId)) {
+                ActiveOrgTenant::clear();
+            }
+
+            return;
+        }
+
+        $next = $remaining->first();
+        if ($user->tenant_id === $tenantId && $next !== null) {
+            $user->forceFill([
+                'tenant_id' => $next->tenant_id,
+                'department_id' => $next->department_id,
+                'department' => $next->department,
+            ])->save();
+        }
+
+        if (ActiveOrgTenant::matches($tenantId)) {
+            ActiveOrgTenant::set($remaining->count() === 1 ? $remaining->first()->tenant_id : null);
         }
     }
 
@@ -197,6 +303,15 @@ class ProvisionEmployeePair
         return User::query()
             ->whereRaw('LOWER(email) = ?', [$this->normalizeEmail($email)])
             ->first();
+    }
+
+    public function linkTargetToUser(Target $target, User $user): void
+    {
+        if ((int) $target->user_id === (int) $user->id) {
+            return;
+        }
+
+        $target->forceFill(['user_id' => $user->id])->save();
     }
 
     private function assignLearnerRole(User $user, string $tenantId): void
@@ -214,13 +329,9 @@ class ProvisionEmployeePair
         }
     }
 
-    private function userHasLearnerRole(User $user): bool
+    private function userHasLearnerRole(User $user, string $tenantId): bool
     {
-        if ($user->tenant_id === null) {
-            return false;
-        }
-
-        setPermissionsTeamId($user->tenant_id);
+        setPermissionsTeamId($tenantId);
         try {
             return $user->hasRole(OrgPermissionCatalog::LEARNER);
         } finally {

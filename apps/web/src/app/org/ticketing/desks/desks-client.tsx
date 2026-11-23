@@ -1,10 +1,11 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LinkButton } from "@/components/ui/link-button";
@@ -29,6 +30,7 @@ import {
 } from "@/lib/pagination";
 import { hasPermission, type SessionUser } from "@/lib/session";
 import { resolveTenant } from "@/lib/tenant";
+import { toastError, toastSuccess } from "@/lib/toast";
 import type { SdDesk } from "../ticketing-types";
 
 type DesksPayload = {
@@ -84,51 +86,55 @@ type DeskSla = NonNullable<SdDesk["sla_policies"]>[number];
 type DeskSeverity = NonNullable<SdDesk["severities"]>[number];
 type DeskSupportRow = { id: number; name: string; slug: string };
 
+
+export function DesksClient() {
+  const t = useTranslations("org.ticketing");
+  const tCommon = useTranslations("common");
 const stageColumns: Array<DataTableColumn<DeskStage>> = [
   {
     id: "name",
-    header: "Name",
+    header: tCommon("name"),
     accessorKey: "name",
     sticky: true,
     cell: (stage) => stage.name,
   },
   {
     id: "sequence",
-    header: "Sequence",
+    header: tCommon("sequence"),
     accessorKey: "sequence",
     cell: (stage) => stage.sequence,
   },
   {
     id: "escalation",
-    header: "Escalation",
+    header: t("escalation"),
     filterValue: (stage) => stage.default_escalation_minutes ?? "",
     cell: (stage) =>
-      stage.default_escalation_minutes != null ? `${stage.default_escalation_minutes}m` : "—",
+      stage.default_escalation_minutes != null ? `${stage.default_escalation_minutes}m` : tCommon("emDash"),
   },
   {
     id: "terminal",
-    header: "Terminal",
+    header: tCommon("terminal"),
     filter: "select",
     filterOptions: [
-      { label: "Terminal", value: "yes" },
-      { label: "Open", value: "no" },
+      { label: tCommon("terminal"), value: "yes" },
+      { label: tCommon("open"), value: "no" },
     ],
     filterValue: (stage) => (stage.is_terminal ? "yes" : "no"),
-    cell: (stage) => (stage.is_terminal ? "Terminal" : "—"),
+    cell: (stage) => (stage.is_terminal ? tCommon("terminal") : tCommon("emDash")),
   },
 ];
 
 const supportColumns: Array<DataTableColumn<DeskSupportRow>> = [
   {
     id: "name",
-    header: "Name",
+    header: tCommon("name"),
     accessorKey: "name",
     sticky: true,
     cell: (row) => row.name,
   },
   {
     id: "slug",
-    header: "Slug",
+    header: tCommon("slug"),
     accessorKey: "slug",
     cell: (row) => row.slug,
   },
@@ -137,52 +143,51 @@ const supportColumns: Array<DataTableColumn<DeskSupportRow>> = [
 const procedureColumns: Array<DataTableColumn<DeskProcedure>> = [
   {
     id: "name",
-    header: "Name",
+    header: tCommon("name"),
     accessorKey: "name",
     sticky: true,
     cell: (procedure) => procedure.name,
   },
   {
     id: "hook",
-    header: "Hook",
+    header: t("hook"),
     accessorKey: "hook",
     cell: (procedure) => procedure.hook,
   },
   {
     id: "active",
-    header: "Active",
+    header: tCommon("active"),
     filter: "select",
     filterOptions: [
-      { label: "Active", value: "active" },
-      { label: "Inactive", value: "inactive" },
+      { label: tCommon("active"), value: "active" },
+      { label: tCommon("inactive"), value: "inactive" },
     ],
     filterValue: (procedure) => (procedure.is_active ? "active" : "inactive"),
-    cell: (procedure) => (procedure.is_active ? "Active" : "Inactive"),
+    cell: (procedure) => (procedure.is_active ? tCommon("active") : tCommon("inactive")),
   },
 ];
 
 const slaColumns: Array<DataTableColumn<DeskSla>> = [
   {
     id: "name",
-    header: "Name",
+    header: tCommon("name"),
     accessorKey: "name",
     sticky: true,
     cell: (policy) => policy.name,
   },
   {
     id: "default",
-    header: "Default",
+    header: tCommon("default"),
     filter: "select",
     filterOptions: [
-      { label: "Default", value: "yes" },
-      { label: "No", value: "no" },
+      { label: tCommon("default"), value: "yes" },
+      { label: tCommon("no"), value: "no" },
     ],
     filterValue: (policy) => (policy.is_default ? "yes" : "no"),
-    cell: (policy) => (policy.is_default ? "Default" : "—"),
+    cell: (policy) => (policy.is_default ? tCommon("default") : tCommon("emDash")),
   },
 ];
 
-export function DesksClient() {
   const tenant = resolveTenant();
   const channel = tenant ? orgLiveChannel(tenant, "desks") : null;
   const [session, setSession] = useState<SessionUser | null>(null);
@@ -192,7 +197,6 @@ export function DesksClient() {
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState<PageSize>(DEFAULT_PAGE_SIZE);
   const [selected, setSelected] = useState<SdDesk | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [createName, setCreateName] = useState("");
   const [createType, setCreateType] = useState("incident");
@@ -291,10 +295,26 @@ export function DesksClient() {
   });
 
   useEffect(() => {
+    if (liveError) {
+      toastError(liveError);
+    }
+  }, [liveError]);
+
+  useEffect(() => {
     void fetchSessionUser()
       .then(setSession)
       .catch(() => setSession(null));
   }, []);
+
+  useEffect(() => {
+    if (
+      session &&
+      !hasPermission(session, "org.ticketing.admin") &&
+      !hasPermission(session, "org.ticketing.tickets")
+    ) {
+      toastError(t("insufficientPermissions"));
+    }
+  }, [session, t]);
 
   useEffect(() => {
     if (filtersKeyRef.current !== filtersKey) {
@@ -316,7 +336,7 @@ export function DesksClient() {
       return;
     }
     void refreshFromApi(page, perPage, filters)
-      .catch((err: unknown) => setMessage(err instanceof Error ? err.message : "Load failed"))
+      .catch((err: unknown) => toastError(err instanceof Error ? err.message : tCommon("loadFailed")))
       .finally(() => setLoading(false));
   }, [
     liveDesks,
@@ -380,12 +400,12 @@ export function DesksClient() {
       });
       setCreateName("");
       setCreatePrefix("");
-      setMessage(`Desk ${created.data.name} created.`);
+      toastSuccess(`Desk ${created.data.name} created.`);
       setLiveDesks(null);
       await refreshFromApi(1, perPage, filters);
       await openDesk(created.data.id, true);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Create desk failed");
+      toastError(err instanceof Error ? err.message : t("createDeskFailed"));
     }
   }
 
@@ -404,12 +424,12 @@ export function DesksClient() {
           is_active: editActive,
         }),
       });
-      setMessage("Desk updated.");
+      toastSuccess(t("deskUpdated"));
       await openDesk(selected.id);
       setLiveDesks(null);
       await refreshFromApi(page, perPage, filters);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Update desk failed");
+      toastError(err instanceof Error ? err.message : t("updateDeskFailed"));
     }
   }
 
@@ -449,7 +469,7 @@ export function DesksClient() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-        setMessage("Stage updated.");
+        toastSuccess(t("stageUpdated"));
       } else {
         await api(`/api/v1/org/ticketing/desks/${selected.id}/stages`, {
           method: "POST",
@@ -457,12 +477,12 @@ export function DesksClient() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-        setMessage("Stage added.");
+        toastSuccess(t("stageAdded"));
       }
       resetStageForm();
       await openDesk(selected.id);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Stage save failed");
+      toastError(err instanceof Error ? err.message : t("stageSaveFailed"));
     }
   }
 
@@ -487,10 +507,10 @@ export function DesksClient() {
       setSupportSlug("");
       setSupportClosed(false);
       setSupportWeight("0");
-      setMessage(`${supportTable} row added.`);
+      toastSuccess(`${supportTable} row added.`);
       await openDesk(selected.id);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Add support row failed");
+      toastError(err instanceof Error ? err.message : t("addSupportRowFailed"));
     }
   }
 
@@ -517,7 +537,7 @@ export function DesksClient() {
     if (!canAdmin || !selected) return;
     try {
       const steps = JSON.parse(procedureStepsJson) as unknown[];
-      if (!Array.isArray(steps)) throw new Error("Steps must be a JSON array.");
+      if (!Array.isArray(steps)) throw new Error(t("stepsMustBeJsonArray"));
       await ensureCsrf();
       const payload = {
         name: procedureName,
@@ -533,7 +553,7 @@ export function DesksClient() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-        setMessage("Procedure updated.");
+        toastSuccess(t("procedureUpdated"));
       } else {
         await api(`/api/v1/org/ticketing/desks/${selected.id}/procedures`, {
           method: "POST",
@@ -541,12 +561,12 @@ export function DesksClient() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-        setMessage("Procedure added.");
+        toastSuccess(t("procedureAdded"));
       }
       resetProcedureForm();
       await openDesk(selected.id);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Procedure save failed");
+      toastError(err instanceof Error ? err.message : t("procedureSaveFailed"));
     }
   }
 
@@ -571,7 +591,7 @@ export function DesksClient() {
     if (!canAdmin || !selected) return;
     try {
       const goals = JSON.parse(slaGoalsJson) as unknown[];
-      if (!Array.isArray(goals)) throw new Error("Goals must be a JSON array.");
+      if (!Array.isArray(goals)) throw new Error(t("goalsMustBeJsonArray"));
       await ensureCsrf();
       const payload = {
         name: slaName,
@@ -585,7 +605,7 @@ export function DesksClient() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-        setMessage("SLA policy updated.");
+        toastSuccess(t("slaPolicyUpdated"));
       } else {
         await api(`/api/v1/org/ticketing/desks/${selected.id}/sla`, {
           method: "POST",
@@ -593,12 +613,12 @@ export function DesksClient() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-        setMessage("SLA policy added.");
+        toastSuccess(t("slaPolicyAdded"));
       }
       resetSlaForm();
       await openDesk(selected.id);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "SLA save failed");
+      toastError(err instanceof Error ? err.message : t("slaSaveFailed"));
     }
   }
 
@@ -621,10 +641,10 @@ export function DesksClient() {
       setMessageTemplateName("");
       setMessageTemplateSubject("");
       setMessageTemplateBody("");
-      setMessage("Message template added.");
+      toastSuccess(t("messageTemplateAdded"));
       await loadTemplates(selected.id);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Add message template failed");
+      toastError(err instanceof Error ? err.message : t("addMessageTemplateFailed"));
     }
   }
 
@@ -645,10 +665,10 @@ export function DesksClient() {
       });
       setNoteTemplateName("");
       setNoteTemplateBody("");
-      setMessage("Note template added.");
+      toastSuccess(t("noteTemplateAdded"));
       await loadTemplates(selected.id);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Add note template failed");
+      toastError(err instanceof Error ? err.message : t("addNoteTemplateFailed"));
     }
   }
 
@@ -658,7 +678,7 @@ export function DesksClient() {
       method: "DELETE",
       tenant: resolveTenant(),
     });
-    setMessage("Message template deleted.");
+    toastSuccess(t("messageTemplateDeleted"));
     if (selected) await loadTemplates(selected.id);
   }
 
@@ -668,14 +688,14 @@ export function DesksClient() {
       method: "DELETE",
       tenant: resolveTenant(),
     });
-    setMessage("Note template deleted.");
+    toastSuccess(t("noteTemplateDeleted"));
     if (selected) await loadTemplates(selected.id);
   }
 
   const columns: Array<DataTableColumn<SdDesk>> = [
     {
       id: "name",
-      header: "Name",
+      header: tCommon("name"),
       accessorKey: "name",
       sticky: true,
       cell: (desk) => (
@@ -684,53 +704,58 @@ export function DesksClient() {
     },
     {
       id: "type",
-      header: "Type",
+      header: tCommon("type"),
       accessorKey: "type",
       cell: (desk) => desk.type,
     },
     {
       id: "slug",
-      header: "Slug",
+      header: tCommon("slug"),
       accessorKey: "slug",
       cell: (desk) => desk.slug,
     },
     {
       id: "active",
-      header: "Active",
+      header: tCommon("active"),
       filter: "select",
       filterOptions: [
-        { label: "Active", value: "1" },
-        { label: "Inactive", value: "0" },
+        { label: tCommon("active"), value: "1" },
+        { label: tCommon("inactive"), value: "0" },
       ],
       filterValue: (desk) => (desk.is_active ? "1" : "0"),
       enableSorting: false,
-      cell: (desk) => (desk.is_active ? "Active" : "Inactive"),
+      cell: (desk) => (desk.is_active ? tCommon("active") : tCommon("inactive")),
     },
   ];
 
   const messageTemplateColumns: Array<DataTableColumn<TemplateMessage>> = [
     {
       id: "name",
-      header: "Name",
+      header: tCommon("name"),
       accessorKey: "name",
       sticky: true,
       cell: (row) => row.name,
     },
     {
       id: "subject",
-      header: "Subject",
+      header: tCommon("subject"),
       accessorKey: "subject",
-      cell: (row) => row.subject || "—",
+      cell: (row) => row.subject || tCommon("emDash"),
     },
     {
       id: "actions",
-      header: "Actions",
+      header: tCommon("actions"),
       filter: "none",
       enableSorting: false,
       enableGlobalFilter: false,
       cell: (row) => (
-        <Button type="button" variant="outline" onClick={() => setPendingDeleteMessage(row)}>
-          Delete
+        <Button
+          type="button"
+          variant="outline"
+          size="compact"
+          onClick={() => setPendingDeleteMessage(row)}
+        >
+          {tCommon("delete")}
         </Button>
       ),
     },
@@ -739,27 +764,32 @@ export function DesksClient() {
   const noteTemplateColumns: Array<DataTableColumn<TemplateNote>> = [
     {
       id: "name",
-      header: "Name",
+      header: tCommon("name"),
       accessorKey: "name",
       sticky: true,
       cell: (row) => row.name,
     },
     {
       id: "body",
-      header: "Body",
+      header: tCommon("body"),
       accessorKey: "body",
       className: "max-w-md whitespace-pre-wrap",
       cell: (row) => row.body,
     },
     {
       id: "actions",
-      header: "Actions",
+      header: tCommon("actions"),
       filter: "none",
       enableSorting: false,
       enableGlobalFilter: false,
       cell: (row) => (
-        <Button type="button" variant="outline" onClick={() => setPendingDeleteNote(row)}>
-          Delete
+        <Button
+          type="button"
+          variant="outline"
+          size="compact"
+          onClick={() => setPendingDeleteNote(row)}
+        >
+          {tCommon("delete")}
         </Button>
       ),
     },
@@ -772,8 +802,8 @@ export function DesksClient() {
   if (session && !hasPermission(session, "org.ticketing.admin") && !hasPermission(session, "org.ticketing.tickets")) {
     return (
       <div className="mx-auto w-full max-w-5xl flex-1 space-y-4 px-4 py-8 sm:px-6">
-        <PageHeader title="Desks" description="Desk definitions." />
-        <Alert>Insufficient permissions.</Alert>
+        <PageHeader title={t("desks")} description={t("desksDescription")} />
+        <EmptyState title={t("insufficientPermissions")} />
       </div>
     );
   }
@@ -781,22 +811,19 @@ export function DesksClient() {
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 space-y-6 px-4 py-8 sm:px-6">
       <PageHeader
-        title="Desks"
+        title={t("desks")}
         description={
           statusLabel
-            ? `ITIL desk definitions, stages, procedures, and SLA policies. · ${statusLabel}`
-            : "ITIL desk definitions, stages, procedures, and SLA policies."
+            ? `${t("desksDescription")} · ${statusLabel}`
+            : t("desksDescription")
         }
-        actions={<LinkButton href="/org/ticketing" variant="outline">Queue</LinkButton>}
+        actions={<LinkButton href="/org/ticketing" variant="outline">{t("queue")}</LinkButton>}
       />
-      {message ? <Alert>{message}</Alert> : null}
-      {liveError ? <Alert variant="destructive">{liveError}</Alert> : null}
-
       {canAdmin ? (
-        <Panel title="Create desk">
+        <Panel title={t("createDesk")}>
           <form className="grid gap-3 md:grid-cols-3" onSubmit={createDesk}>
             <div className="space-y-1">
-              <Label htmlFor="desk-create-name">Name</Label>
+              <Label htmlFor="desk-create-name">{tCommon("name")}</Label>
               <Input
                 id="desk-create-name"
                 value={createName}
@@ -805,47 +832,47 @@ export function DesksClient() {
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="desk-create-type">Type</Label>
+              <Label htmlFor="desk-create-type">{tCommon("type")}</Label>
               <Select
                 id="desk-create-type"
                 value={createType}
                 onChange={(e) => setCreateType(e.target.value)}
               >
-                <option value="incident">Incident</option>
-                <option value="problem">Problem</option>
-                <option value="service_request">Service request</option>
-                <option value="change">Change</option>
-                <option value="kb">Knowledge base</option>
+                <option value="incident">{tCommon("incident")}</option>
+                <option value="problem">{tCommon("problem")}</option>
+                <option value="service_request">{tCommon("serviceRequest")}</option>
+                <option value="change">{tCommon("change")}</option>
+                <option value="kb">{tCommon("knowledgeBase")}</option>
               </Select>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="desk-create-prefix">Number prefix</Label>
+              <Label htmlFor="desk-create-prefix">{t("numberPrefix")}</Label>
               <Input
                 id="desk-create-prefix"
                 value={createPrefix}
                 onChange={(e) => setCreatePrefix(e.target.value)}
-                placeholder="Optional"
+                placeholder={tCommon("optional")}
               />
             </div>
             <div>
-              <Button type="submit">Create</Button>
+              <Button type="submit">{tCommon("create")}</Button>
             </div>
           </form>
         </Panel>
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Panel title="All desks">
+        <Panel title={t("allDesks")}>
           <DataTable
             mode="server"
-            caption="Desks"
+            caption={t("desksCaption")}
             columns={columns}
             rows={desks}
             filterState={tableQuery.state}
             onFilterStateChange={tableQuery.setState}
             getRowId={(row) => row.id}
             onRowClick={(desk) => void openDesk(desk.id)}
-            emptyTitle="No desks."
+            emptyTitle={t("noDesksYet")}
             pagination={{
               page,
               perPage,
@@ -858,15 +885,15 @@ export function DesksClient() {
             }}
           />
         </Panel>
-        <Panel title={selected ? selected.name : "Detail"}>
+        <Panel title={selected ? selected.name : t("detail")}>
           {!selected ? (
-            <p className="text-sm text-[var(--muted-foreground)]">Select a desk.</p>
+            <p className="text-sm text-[var(--muted-foreground)]">{t("selectADesk")}</p>
           ) : (
             <div className="space-y-6 text-sm">
               {canAdmin ? (
                 <form className="grid gap-3" onSubmit={saveDesk}>
                   <div className="space-y-1">
-                    <Label htmlFor="desk-edit-name">Name</Label>
+                    <Label htmlFor="desk-edit-name">{tCommon("name")}</Label>
                     <Input
                       id="desk-edit-name"
                       value={editName}
@@ -875,7 +902,7 @@ export function DesksClient() {
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="desk-edit-prefix">Number prefix</Label>
+                    <Label htmlFor="desk-edit-prefix">{t("numberPrefix")}</Label>
                     <Input
                       id="desk-edit-prefix"
                       value={editPrefix}
@@ -883,37 +910,37 @@ export function DesksClient() {
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="desk-edit-active">Active</Label>
+                    <Label htmlFor="desk-edit-active">{tCommon("active")}</Label>
                     <Select
                       id="desk-edit-active"
                       value={editActive ? "1" : "0"}
                       onChange={(e) => setEditActive(e.target.value === "1")}
                     >
-                      <option value="1">Active</option>
-                      <option value="0">Inactive</option>
+                      <option value="1">{tCommon("active")}</option>
+                      <option value="0">{tCommon("inactive")}</option>
                     </Select>
                   </div>
                   <div>
-                    <Button type="submit">Save desk</Button>
+                    <Button type="submit">{t("saveDesk")}</Button>
                   </div>
                 </form>
               ) : null}
 
               <div>
-                <div className="mb-2 font-medium">Stages</div>
+                <div className="mb-2 font-medium">{t("stages")}</div>
                 <DataTable
                   mode="client"
-                  caption="Desk stages"
+                  caption={t("deskStages")}
                   columns={stageColumns}
                   rows={selected.stages ?? []}
                   getRowId={(row) => row.id}
-                  emptyTitle="No stages."
+                  emptyTitle={t("noStages")}
                   onRowClick={canAdmin ? fillStage : undefined}
                 />
                 {canAdmin ? (
                   <form className="mt-3 grid gap-2 md:grid-cols-2" onSubmit={addStage}>
                     <div className="space-y-1 md:col-span-2">
-                      <Label htmlFor="stage-name">Stage name</Label>
+                      <Label htmlFor="stage-name">{t("stageName")}</Label>
                       <Input
                         id="stage-name"
                         value={stageName}
@@ -922,7 +949,7 @@ export function DesksClient() {
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label htmlFor="stage-sequence">Sequence</Label>
+                      <Label htmlFor="stage-sequence">{tCommon("sequence")}</Label>
                       <Input
                         id="stage-sequence"
                         value={stageSequence}
@@ -930,12 +957,12 @@ export function DesksClient() {
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label htmlFor="stage-escalation">Escalation minutes</Label>
+                      <Label htmlFor="stage-escalation">{t("escalationMinutes")}</Label>
                       <Input
                         id="stage-escalation"
                         value={stageEscalation}
                         onChange={(e) => setStageEscalation(e.target.value)}
-                        placeholder="Optional"
+                        placeholder={tCommon("optionalPlaceholder")}
                       />
                     </div>
                     <label htmlFor="stage-terminal" className="flex items-center gap-2">
@@ -946,21 +973,21 @@ export function DesksClient() {
                         onChange={(e) => setStageTerminal(e.target.checked)}
                         className="h-4 w-4 rounded border border-[var(--border)]"
                       />
-                      Terminal
+                      {tCommon("terminal")}
                     </label>
                     <div>
                       <div className="flex flex-wrap gap-2">
                         <Button type="submit">
-                          {editingStageId !== null ? "Update stage" : "Add stage"}
+                          {editingStageId !== null ? t("updateStage") : t("addStage")}
                         </Button>
                         {editingStageId !== null ? (
                           <Button type="button" variant="secondary" onClick={resetStageForm}>
-                            Cancel
+                            {tCommon("cancel")}
                           </Button>
                         ) : null}
                       </div>
                       <p className="text-xs text-[var(--muted-foreground)] md:col-span-2">
-                        Tip: use Edit on a stage row to load it into this form.
+                        {t("editStageTip")}
                       </p>
                     </div>
                   </form>
@@ -968,67 +995,67 @@ export function DesksClient() {
               </div>
 
               <div>
-                <div className="mb-2 font-medium">Statuses</div>
+                <div className="mb-2 font-medium">{t("statuses")}</div>
                 <DataTable
                   mode="client"
-                  caption="Statuses"
+                  caption={t("statuses")}
                   columns={supportColumns}
                   rows={(selected.statuses ?? []) as DeskSupportRow[]}
                   getRowId={(row) => row.id}
-                  emptyTitle="No statuses."
+                  emptyTitle={t("noStatuses")}
                 />
               </div>
               <div>
-                <div className="mb-2 font-medium">Priorities</div>
+                <div className="mb-2 font-medium">{t("priorities")}</div>
                 <DataTable
                   mode="client"
-                  caption="Priorities"
+                  caption={t("priorities")}
                   columns={supportColumns}
                   rows={(selected.priorities ?? []) as DeskSupportRow[]}
                   getRowId={(row) => row.id}
-                  emptyTitle="No priorities."
+                  emptyTitle={t("noPriorities")}
                 />
               </div>
               <div>
-                <div className="mb-2 font-medium">Severities</div>
+                <div className="mb-2 font-medium">{t("severities")}</div>
                 <DataTable
                   mode="client"
-                  caption="Severities"
+                  caption={t("severities")}
                   columns={supportColumns}
                   rows={(selected.severities ?? []) as DeskSeverity[]}
                   getRowId={(row) => row.id}
-                  emptyTitle="No severities."
+                  emptyTitle={t("noSeverities")}
                 />
               </div>
               <div>
-                <div className="mb-2 font-medium">Categories</div>
+                <div className="mb-2 font-medium">{t("categories")}</div>
                 <DataTable
                   mode="client"
-                  caption="Categories"
+                  caption={t("categories")}
                   columns={supportColumns}
                   rows={(selected.categories ?? []) as DeskSupportRow[]}
                   getRowId={(row) => row.id}
-                  emptyTitle="No categories."
+                  emptyTitle={t("noCategories")}
                 />
               </div>
 
               {canAdmin ? (
                 <form className="grid gap-2 md:grid-cols-2" onSubmit={addSupport}>
                   <div className="space-y-1">
-                    <Label htmlFor="support-table">Support table</Label>
+                    <Label htmlFor="support-table">{t("supportTable")}</Label>
                     <Select
                       id="support-table"
                       value={supportTable}
                       onChange={(e) => setSupportTable(e.target.value as SupportTable)}
                     >
-                      <option value="statuses">Statuses</option>
-                      <option value="priorities">Priorities</option>
-                      <option value="severities">Severities</option>
-                      <option value="categories">Categories</option>
+                      <option value="statuses">{t("statuses")}</option>
+                      <option value="priorities">{t("priorities")}</option>
+                      <option value="severities">{t("severities")}</option>
+                      <option value="categories">{t("categories")}</option>
                     </Select>
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="support-name">Name</Label>
+                    <Label htmlFor="support-name">{tCommon("name")}</Label>
                     <Input
                       id="support-name"
                       value={supportName}
@@ -1037,12 +1064,12 @@ export function DesksClient() {
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="support-slug">Slug</Label>
+                    <Label htmlFor="support-slug">{tCommon("slug")}</Label>
                     <Input
                       id="support-slug"
                       value={supportSlug}
                       onChange={(e) => setSupportSlug(e.target.value)}
-                      placeholder="Optional"
+                      placeholder={tCommon("optionalPlaceholder")}
                     />
                   </div>
                   {supportTable === "statuses" ? (
@@ -1054,12 +1081,12 @@ export function DesksClient() {
                         onChange={(e) => setSupportClosed(e.target.checked)}
                         className="h-4 w-4 rounded border border-[var(--border)]"
                       />
-                      Closed status
+                      {t("closedStatus")}
                     </label>
                   ) : null}
                   {supportTable === "priorities" ? (
                     <div className="space-y-1">
-                      <Label htmlFor="support-weight">Weight</Label>
+                      <Label htmlFor="support-weight">{tCommon("weight")}</Label>
                       <Input
                         id="support-weight"
                         value={supportWeight}
@@ -1068,26 +1095,26 @@ export function DesksClient() {
                     </div>
                   ) : null}
                   <div>
-                    <Button type="submit">Add support row</Button>
+                    <Button type="submit">{t("addSupportRow")}</Button>
                   </div>
                 </form>
               ) : null}
 
               <div>
-                <div className="mb-2 font-medium">Procedures</div>
+                <div className="mb-2 font-medium">{t("procedures")}</div>
                 <DataTable
                   mode="client"
-                  caption="Desk procedures"
+                  caption={t("deskProcedures")}
                   columns={procedureColumns}
                   rows={selected.procedures ?? []}
                   getRowId={(row) => row.id}
-                  emptyTitle="No procedures."
+                  emptyTitle={t("noProcedures")}
                   onRowClick={canAdmin ? fillProcedure : undefined}
                 />
                 {canAdmin ? (
                   <form className="mt-3 grid gap-2" onSubmit={addProcedure}>
                     <div className="space-y-1">
-                      <Label htmlFor="procedure-name">Name</Label>
+                      <Label htmlFor="procedure-name">{tCommon("name")}</Label>
                       <Input
                         id="procedure-name"
                         value={procedureName}
@@ -1096,25 +1123,25 @@ export function DesksClient() {
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label htmlFor="procedure-hook">Hook</Label>
+                      <Label htmlFor="procedure-hook">{t("hook")}</Label>
                       <Select
                         id="procedure-hook"
                         value={procedureHook}
                         onChange={(e) => setProcedureHook(e.target.value)}
                       >
-                        <option value="on_create">On create</option>
-                        <option value="on_stage_enter">On stage enter</option>
-                        <option value="on_escalation">On escalation</option>
+                        <option value="on_create">{t("onCreate")}</option>
+                        <option value="on_stage_enter">{t("onStageEnter")}</option>
+                        <option value="on_escalation">{t("onEscalation")}</option>
                       </Select>
                     </div>
                     <div className="space-y-1">
-                      <Label htmlFor="procedure-stage">Stage (optional)</Label>
+                      <Label htmlFor="procedure-stage">{t("stageOptional")}</Label>
                       <Select
                         id="procedure-stage"
                         value={procedureStageId}
                         onChange={(e) => setProcedureStageId(e.target.value)}
                       >
-                        <option value="">None</option>
+                        <option value="">{tCommon("none")}</option>
                         {(selected.stages ?? []).map((s) => (
                           <option key={s.id} value={s.id}>
                             {s.name}
@@ -1123,7 +1150,7 @@ export function DesksClient() {
                       </Select>
                     </div>
                     <div className="space-y-1">
-                      <Label htmlFor="procedure-steps">Steps (JSON array)</Label>
+                      <Label htmlFor="procedure-steps">{t("stepsJson")}</Label>
                       <Textarea
                         id="procedure-steps"
                         rows={3}
@@ -1140,15 +1167,15 @@ export function DesksClient() {
                         onChange={(e) => setProcedureActive(e.target.checked)}
                         className="h-4 w-4 rounded border border-[var(--border)]"
                       />
-                      Active
+                      {tCommon("active")}
                     </label>
                     <div className="flex flex-wrap gap-2">
                       <Button type="submit">
-                        {editingProcedureId !== null ? "Update procedure" : "Add procedure"}
+                        {editingProcedureId !== null ? t("updateProcedure") : t("addProcedure")}
                       </Button>
                       {editingProcedureId !== null ? (
                         <Button type="button" variant="secondary" onClick={resetProcedureForm}>
-                          Cancel
+                          {tCommon("cancel")}
                         </Button>
                       ) : null}
                     </div>
@@ -1157,20 +1184,20 @@ export function DesksClient() {
               </div>
 
               <div>
-                <div className="mb-2 font-medium">SLA</div>
+                <div className="mb-2 font-medium">{t("slaPolicies")}</div>
                 <DataTable
                   mode="client"
-                  caption="SLA policies"
+                  caption={t("slaPoliciesCaption")}
                   columns={slaColumns}
                   rows={selected.sla_policies ?? []}
                   getRowId={(row) => row.id}
-                  emptyTitle="No SLA policies."
+                  emptyTitle={t("noSlaPolicies")}
                   onRowClick={canAdmin ? fillSla : undefined}
                 />
                 {canAdmin ? (
                   <form className="mt-3 grid gap-2" onSubmit={addSla}>
                     <div className="space-y-1">
-                      <Label htmlFor="sla-name">Name</Label>
+                      <Label htmlFor="sla-name">{tCommon("name")}</Label>
                       <Input
                         id="sla-name"
                         value={slaName}
@@ -1179,7 +1206,7 @@ export function DesksClient() {
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label htmlFor="sla-goals">Goals (JSON array)</Label>
+                      <Label htmlFor="sla-goals">{t("goalsJson")}</Label>
                       <Textarea
                         id="sla-goals"
                         rows={3}
@@ -1196,15 +1223,15 @@ export function DesksClient() {
                         onChange={(e) => setSlaDefault(e.target.checked)}
                         className="h-4 w-4 rounded border border-[var(--border)]"
                       />
-                      Default policy
+                      {t("defaultPolicy")}
                     </label>
                     <div className="flex flex-wrap gap-2">
                       <Button type="submit">
-                        {editingSlaId !== null ? "Update SLA" : "Add SLA"}
+                        {editingSlaId !== null ? t("updateSla") : t("addSla")}
                       </Button>
                       {editingSlaId !== null ? (
                         <Button type="button" variant="secondary" onClick={resetSlaForm}>
-                          Cancel
+                          {tCommon("cancel")}
                         </Button>
                       ) : null}
                     </div>
@@ -1217,21 +1244,21 @@ export function DesksClient() {
       </div>
 
       {canAdmin && selected ? (
-        <Panel title={`Templates · ${selected.name}`}>
+        <Panel title={t("templatesFor", { name: selected.name })}>
           <div className="space-y-6">
             <div>
-              <div className="mb-2 font-medium">Message templates</div>
+              <div className="mb-2 font-medium">{t("messageTemplates")}</div>
               <DataTable
                 mode="client"
-                caption="Message templates"
+                caption={t("messageTemplates")}
                 columns={messageTemplateColumns}
                 rows={templates.messages}
                 getRowId={(row) => row.id}
-                emptyTitle="No message templates."
+                emptyTitle={t("noMessageTemplates")}
               />
               <form className="mt-3 grid gap-2" onSubmit={addMessageTemplate}>
                 <div className="space-y-1">
-                  <Label htmlFor="msg-tpl-name">Name</Label>
+                  <Label htmlFor="msg-tpl-name">{tCommon("name")}</Label>
                   <Input
                     id="msg-tpl-name"
                     value={messageTemplateName}
@@ -1240,7 +1267,7 @@ export function DesksClient() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="msg-tpl-subject">Subject</Label>
+                  <Label htmlFor="msg-tpl-subject">{tCommon("subject")}</Label>
                   <Input
                     id="msg-tpl-subject"
                     value={messageTemplateSubject}
@@ -1248,7 +1275,7 @@ export function DesksClient() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="msg-tpl-body">Body</Label>
+                  <Label htmlFor="msg-tpl-body">{tCommon("body")}</Label>
                   <Textarea
                     id="msg-tpl-body"
                     rows={3}
@@ -1258,23 +1285,23 @@ export function DesksClient() {
                   />
                 </div>
                 <div>
-                  <Button type="submit">Add message template</Button>
+                  <Button type="submit">{t("addMessageTemplate")}</Button>
                 </div>
               </form>
             </div>
             <div>
-              <div className="mb-2 font-medium">Note templates</div>
+              <div className="mb-2 font-medium">{t("noteTemplates")}</div>
               <DataTable
                 mode="client"
-                caption="Note templates"
+                caption={t("noteTemplates")}
                 columns={noteTemplateColumns}
                 rows={templates.notes}
                 getRowId={(row) => row.id}
-                emptyTitle="No note templates."
+                emptyTitle={t("noNoteTemplates")}
               />
               <form className="mt-3 grid gap-2" onSubmit={addNoteTemplate}>
                 <div className="space-y-1">
-                  <Label htmlFor="note-tpl-name">Name</Label>
+                  <Label htmlFor="note-tpl-name">{tCommon("name")}</Label>
                   <Input
                     id="note-tpl-name"
                     value={noteTemplateName}
@@ -1283,7 +1310,7 @@ export function DesksClient() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="note-tpl-body">Body</Label>
+                  <Label htmlFor="note-tpl-body">{tCommon("body")}</Label>
                   <Textarea
                     id="note-tpl-body"
                     rows={3}
@@ -1293,7 +1320,7 @@ export function DesksClient() {
                   />
                 </div>
                 <div>
-                  <Button type="submit">Add note template</Button>
+                  <Button type="submit">{t("addNoteTemplate")}</Button>
                 </div>
               </form>
             </div>
@@ -1306,9 +1333,9 @@ export function DesksClient() {
         onOpenChange={(open) => {
           if (!open) setPendingDeleteMessage(null);
         }}
-        title="Delete message template"
-        description={`Delete message template ${pendingDeleteMessage?.name ?? ""}?`}
-        confirmLabel="Delete"
+        title={t("deleteMessageTemplate")}
+        description={t("deleteMessageTemplateConfirm")}
+        confirmLabel={tCommon("delete")}
         variant="destructive"
         onConfirm={async () => {
           if (!pendingDeleteMessage) return;
@@ -1320,9 +1347,9 @@ export function DesksClient() {
         onOpenChange={(open) => {
           if (!open) setPendingDeleteNote(null);
         }}
-        title="Delete note template"
-        description={`Delete note template ${pendingDeleteNote?.name ?? ""}?`}
-        confirmLabel="Delete"
+        title={t("deleteNoteTemplate")}
+        description={t("deleteNoteTemplateConfirm")}
+        confirmLabel={tCommon("delete")}
         variant="destructive"
         onConfirm={async () => {
           if (!pendingDeleteNote) return;

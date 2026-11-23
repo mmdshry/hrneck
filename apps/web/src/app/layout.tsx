@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { Suspense } from "react";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getMessages } from "next-intl/server";
 import { AppToaster } from "@/components/app-toaster";
 import { BrandingProvider } from "@/components/branding-provider";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -9,7 +11,8 @@ import "./globals.css";
 
 const sans = Plus_Jakarta_Sans({
   variable: "--font-sans",
-  subsets: ["latin"],
+  // Plus Jakarta Sans covers Latin + Latin Ext; Cyrillic falls back to system UI.
+  subsets: ["latin", "latin-ext"],
   display: "swap",
 });
 
@@ -43,10 +46,13 @@ export const metadata: Metadata = {
 /** ThemeProvider is a client boundary; skip instant-nav validation for this tree. */
 export const instant = false;
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const locale = await getLocale();
+  const messages = await getMessages();
+
   return (
     <html
-      lang="en"
+      lang={locale}
       dir="ltr"
       className={`${sans.variable} h-full antialiased`}
       data-scroll-behavior="smooth"
@@ -57,12 +63,14 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         {/* Keep the main landmark outside Suspense so axe/SSR always see it. */}
         <main id="main-content" className="flex min-h-full flex-1 flex-col">
           <Suspense fallback={null}>
-            <ThemeProvider>
-              <BrandingProvider>
-                {children}
-                <AppToaster />
-              </BrandingProvider>
-            </ThemeProvider>
+            <NextIntlClientProvider locale={locale} messages={messages}>
+              <ThemeProvider>
+                <BrandingProvider>
+                  {children}
+                  <AppToaster />
+                </BrandingProvider>
+              </ThemeProvider>
+            </NextIntlClientProvider>
           </Suspense>
         </main>
       </body>

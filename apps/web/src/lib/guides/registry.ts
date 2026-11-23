@@ -1,79 +1,58 @@
-import { announcementsNotificationsGuide } from "@/lib/guides/content/announcements-notifications";
-import { authGuide } from "@/lib/guides/content/auth";
-import { checklistsGuide } from "@/lib/guides/content/checklists";
-import { dashboardGuide } from "@/lib/guides/content/dashboard";
-import { gettingStartedGuide } from "@/lib/guides/content/getting-started";
-import { learnerPortalGuide } from "@/lib/guides/content/learner-portal";
-import { mspGuide } from "@/lib/guides/content/msp";
-import { reportingGuide } from "@/lib/guides/content/reporting";
-import { servicePortalGuide } from "@/lib/guides/content/service-portal";
-import { settingsGuide } from "@/lib/guides/content/settings";
-import { targetsGroupsGuide } from "@/lib/guides/content/targets-groups";
-import { ticketingGuide } from "@/lib/guides/content/ticketing";
-import { trainingGuide } from "@/lib/guides/content/training";
-import { usersRolesGuide } from "@/lib/guides/content/users-roles";
+import { loadGuidesForLocale } from "@/lib/guides/content";
 import {
   GUIDE_SLUGS,
   type GuideModule,
   type GuideSlug,
 } from "@/lib/guides/types";
 
-const GUIDES: GuideModule[] = [
-  gettingStartedGuide,
-  dashboardGuide,
-  targetsGroupsGuide,
-  trainingGuide,
-  checklistsGuide,
-  ticketingGuide,
-  reportingGuide,
-  usersRolesGuide,
-  announcementsNotificationsGuide,
-  settingsGuide,
-  learnerPortalGuide,
-  servicePortalGuide,
-  mspGuide,
-  authGuide,
-];
+const DEFAULT_LOCALE = "en";
 
-const BY_SLUG = new Map<GuideSlug, GuideModule>(
-  GUIDES.map((guide) => [guide.slug, guide]),
-);
-
-export function listGuides(): GuideModule[] {
-  return GUIDES;
+export function listGuides(locale: string = DEFAULT_LOCALE): GuideModule[] {
+  return loadGuidesForLocale(locale);
 }
 
-export function getGuide(slug: string): GuideModule | undefined {
+export function getGuide(
+  slug: string,
+  locale: string = DEFAULT_LOCALE,
+): GuideModule | undefined {
   if (!isGuideSlug(slug)) {
     return undefined;
   }
-  return BY_SLUG.get(slug);
+  return loadGuidesForLocale(locale).find((guide) => guide.slug === slug);
 }
 
 export function isGuideSlug(value: string): value is GuideSlug {
   return (GUIDE_SLUGS as readonly string[]).includes(value);
 }
 
-export function getAdjacentGuides(slug: GuideSlug): {
+export function getAdjacentGuides(
+  slug: GuideSlug,
+  locale: string = DEFAULT_LOCALE,
+): {
   previous: GuideModule | null;
   next: GuideModule | null;
 } {
-  const index = GUIDES.findIndex((guide) => guide.slug === slug);
+  const guides = loadGuidesForLocale(locale);
+  const index = guides.findIndex((guide) => guide.slug === slug);
   if (index < 0) {
     return { previous: null, next: null };
   }
   return {
-    previous: index > 0 ? (GUIDES[index - 1] ?? null) : null,
-    next: index < GUIDES.length - 1 ? (GUIDES[index + 1] ?? null) : null,
+    previous: index > 0 ? (guides[index - 1] ?? null) : null,
+    next: index < guides.length - 1 ? (guides[index + 1] ?? null) : null,
   };
 }
 
-export function searchGuides(query: string): GuideModule[] {
+export function searchGuides(
+  query: string,
+  locale: string = DEFAULT_LOCALE,
+): GuideModule[] {
+  const guides = loadGuidesForLocale(locale);
   const normalized = query.trim().toLowerCase();
   if (!normalized) {
-    return GUIDES;
+    return guides;
   }
-  return GUIDES.filter((guide) => {
+  return guides.filter((guide) => {
     const sectionText = (guide.sections ?? []).flatMap((section) => [
       section.title,
       section.body ?? "",

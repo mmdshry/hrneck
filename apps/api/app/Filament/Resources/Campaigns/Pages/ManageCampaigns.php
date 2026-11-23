@@ -24,6 +24,7 @@ class ManageCampaigns extends ManageTenantRecords
                         $data['target_ids'] ?? [],
                         $data['group_ids'] ?? [],
                     );
+                    $groupIds = array_map(intval(...), $data['group_ids'] ?? []);
                     $launch = (bool) ($data['launch_now'] ?? true);
                     unset($data['target_ids'], $data['group_ids'], $data['launch_now']);
 
@@ -33,7 +34,7 @@ class ManageCampaigns extends ManageTenantRecords
                     ]);
 
                     if ($launch && $targetIds !== []) {
-                        app(LaunchTrainingCampaign::class)->handle($campaign, $targetIds);
+                        app(LaunchTrainingCampaign::class)->handle($campaign, $targetIds, $groupIds);
                     }
 
                     return $campaign->fresh() ?? $campaign;

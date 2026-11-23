@@ -196,13 +196,24 @@ class LiveBroadcaster
             return;
         }
 
-        $previous = $this->tenancy->initialized ? $this->tenancy->tenant : null;
-        $this->tenancy->initialize($tenant);
+        $wasInitialized = $this->tenancy->initialized;
+        $previous = $wasInitialized ? $this->tenancy->tenant : null;
+        $alreadyOnTenant = $wasInitialized
+            && $previous !== null
+            && (string) $previous->getTenantKey() === (string) $tenant->getTenantKey();
+
+        if (! $alreadyOnTenant) {
+            $this->tenancy->initialize($tenant);
+        }
 
         try {
             $callback();
         } finally {
-            if ($previous) {
+            if ($alreadyOnTenant) {
+                return;
+            }
+
+            if ($previous !== null) {
                 $this->tenancy->initialize($previous);
             } else {
                 $this->tenancy->end();

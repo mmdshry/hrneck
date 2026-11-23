@@ -1,12 +1,14 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { EmptyState } from "@/components/ui/empty-state";
+import { toastSuccess, toastError } from "@/lib/toast";
+import { useTranslations } from "next-intl";
 import {
   AudiencePicker,
   type AudienceGroup,
   type AudienceTarget,
 } from "@/app/org/training/audience-picker";
-import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Label } from "@/components/ui/label";
@@ -41,12 +43,6 @@ type InstancesPayload = {
   data: ChecklistInstance[];
 };
 
-const STATUS_OPTIONS = [
-  { label: "Not started", value: "not_started" },
-  { label: "In progress", value: "in_progress" },
-  { label: "Completed", value: "completed" },
-  { label: "Cancelled", value: "cancelled" },
-];
 
 function matchesCells(
   q: string,
@@ -74,6 +70,14 @@ function instanceCells(row: ChecklistInstance): Record<string, string> {
 }
 
 export function ChecklistInstancesClient() {
+  const t = useTranslations("org.checklists");
+  const tCommon = useTranslations("common");
+  const STATUS_OPTIONS = [
+    { label: tCommon("notStarted"), value: "not_started" },
+    { label: tCommon("inProgress"), value: "in_progress" },
+    { label: tCommon("completed"), value: "completed" },
+    { label: tCommon("cancelled"), value: "cancelled" },
+  ];
   const tenant = resolveTenant();
   const channel = tenant ? orgLiveChannel(tenant, "checklist-instances") : null;
   const [session, setSession] = useState<SessionUser | null>(null);
@@ -91,7 +95,6 @@ export function ChecklistInstancesClient() {
   const [packId, setPackId] = useState<number | "">("");
   const [selectedTargetIds, setSelectedTargetIds] = useState<number[]>([]);
   const [selectedGroupIds, setSelectedGroupIds] = useState<number[]>([]);
-  const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const tableQuery = useDataTableQuery();
   const filters = useMemo(
@@ -198,7 +201,7 @@ export function ChecklistInstancesClient() {
 
   useEffect(() => {
     void loadAuxiliary().catch((err: unknown) => {
-      setMessage(err instanceof Error ? err.message : "Load failed");
+      toastError(err instanceof Error ? err.message : tCommon("loadFailed"));
     });
   }, [loadAuxiliary]);
 
@@ -223,7 +226,7 @@ export function ChecklistInstancesClient() {
     }
     void refreshFromApi(page, perPage, filters)
       .catch((err: unknown) => {
-        setMessage(err instanceof Error ? err.message : "Load failed");
+        toastError(err instanceof Error ? err.message : tCommon("loadFailed"));
       })
       .finally(() => setLoading(false));
   }, [
@@ -243,7 +246,7 @@ export function ChecklistInstancesClient() {
     event.preventDefault();
     if (assignMode === "template" && !templateId) return;
     if (assignMode === "pack" && !packId) return;
-    setMessage(null);
+    
     try {
       await ensureCsrf();
       if (assignMode === "pack") {
@@ -256,7 +259,7 @@ export function ChecklistInstancesClient() {
             group_ids: selectedGroupIds,
           }),
         });
-        setMessage("Pack connected to employees.");
+        toastSuccess(t("packConnected"));
       } else {
         await api("/api/v1/org/checklists/instances", {
           method: "POST",
@@ -268,7 +271,7 @@ export function ChecklistInstancesClient() {
             group_ids: selectedGroupIds,
           }),
         });
-        setMessage("Checklists connected to employees.");
+        toastSuccess(t("checklistsConnected"));
       }
       setSelectedTargetIds([]);
       setSelectedGroupIds([]);
@@ -277,21 +280,21 @@ export function ChecklistInstancesClient() {
         await refreshFromApi(1, perPage, filters);
       }
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Assign failed");
+      toastError(err instanceof Error ? err.message : t("assignFailed"));
     }
   }
 
   const columns: Array<DataTableColumn<ChecklistInstance>> = [
     {
       id: "title",
-      header: "Title",
+      header: tCommon("titleLabel"),
       accessorKey: "title",
       sticky: true,
       cell: (row) => row.title,
     },
     {
       id: "email",
-      header: "Employee",
+      header: tCommon("employee"),
       filterValue: (row) => row.target?.email ?? "",
       cell: (row) =>
         row.target_id ? (
@@ -308,7 +311,7 @@ export function ChecklistInstancesClient() {
     },
     {
       id: "status",
-      header: "Status",
+      header: tCommon("status"),
       filter: "select",
       filterOptions: STATUS_OPTIONS,
       accessorKey: "status",
@@ -316,19 +319,23 @@ export function ChecklistInstancesClient() {
     },
     {
       id: "progress",
-      header: "Progress",
+      header: tCommon("progress"),
       filter: "none",
       enableSorting: false,
       cell: (row) => `${row.progress_pct}%`,
     },
     {
       id: "actions",
-      header: "Actions",
+      header: tCommon("actions"),
       filter: "none",
       enableSorting: false,
       enableGlobalFilter: false,
       cell: (row) => (
-        <LinkButton href={`/org/checklists/instances/${row.id}`} size="sm">
+        <LinkButton
+          href={`/org/checklists/instances/${row.id}`}
+          variant="outline"
+          size="compact"
+        >
           Fill / review
         </LinkButton>
       ),
@@ -342,8 +349,8 @@ export function ChecklistInstancesClient() {
   if (session && !hasPermission(session, "org.checklists.manage")) {
     return (
       <div className="mx-auto w-full max-w-5xl flex-1 space-y-4 px-4 py-8 sm:px-6">
-        <PageHeader title="Checklist instances" description="Connect checklists to employees." />
-        <Alert>You need org.checklists.manage to manage checklist instances.</Alert>
+        <PageHeader title={t("instancesTitle")} description={t("instancesDescription")} />
+        <EmptyState title={"You need org.checklists.manage to manage checklist instances."} />
       </div>
     );
   }
@@ -351,26 +358,26 @@ export function ChecklistInstancesClient() {
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 space-y-6 px-4 py-8 sm:px-6">
       <PageHeader
-        title="Checklist instances"
+        title={t("instancesTitle")}
         description={
           statusLabel
-            ? `Connect checklists to employees and fill them as HR. Employees have no access. · ${statusLabel}`
-            : "Connect checklists to employees and fill them as HR. Employees have no access."
+            ? `${t("instancesDescription")} · ${statusLabel}`
+            : t("instancesDescription")
         }
         actions={
           <div className="flex flex-wrap gap-2">
             <LinkButton href="/org/checklists/packs" variant="secondary">
-              Packs
+              {t("packs")}
             </LinkButton>
             <LinkButton href="/org/checklists" variant="secondary">
-              Templates
+              {t("templates")}
             </LinkButton>
           </div>
         }
       />
 
-      {message ? <Alert>{message}</Alert> : null}
-      {liveError ? <Alert variant="destructive">{liveError}</Alert> : null}
+      
+      
 
       <Panel className="space-y-4 p-4">
         <h2 className="text-sm font-semibold">Connect checklist to employees</h2>
@@ -435,13 +442,13 @@ export function ChecklistInstancesClient() {
 
       <DataTable
         mode="server"
-        caption="Checklist instances"
+        caption={t("instancesCaption")}
         columns={columns}
         rows={instances}
         filterState={tableQuery.state}
         onFilterStateChange={tableQuery.setState}
         getRowId={(row) => row.id}
-        emptyTitle="No instances yet."
+        emptyTitle={t("noInstancesYet")}
         pagination={{
           page,
           perPage,

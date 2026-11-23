@@ -1,12 +1,15 @@
+import { getTranslations } from "next-intl/server";
 import { DesksClient } from "./desks-client";
 
 export const instant = false;
 
-export const metadata = {
-  title: "Ticketing desks",
-  description: "Service desk definitions, stages, procedures, and SLA.",
-};
-
+export async function generateMetadata() {
+  const t = await getTranslations("org.ticketing");
+  return {
+    title: t("desks"),
+    description: t("desksDescription"),
+  };
+}
 export default function DesksPage() {
   return <DesksClient />;
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { loadGuidesForLocale } from "@/lib/guides/content";
 import {
   getAdjacentGuides,
   getGuide,
@@ -48,4 +49,15 @@ describe("guides registry", () => {
     expect(guideHref("getting-started")).toBe("/docs/getting-started");
     expect(getGuide("missing")).toBeUndefined();
   });
+
+  it("loads translated overlays and falls back for unknown locales", () => {
+    const en = loadGuidesForLocale("en");
+    const es = loadGuidesForLocale("es");
+    expect(es.map((guide) => guide.slug)).toEqual(en.map((guide) => guide.slug));
+    expect(listGuides("fr")).toHaveLength(GUIDE_SLUGS.length);
+    expect(getGuide("training", "de")?.title).not.toBe(getGuide("training")?.title);
+    expect(getGuide("training", "zh")?.title).toBe(getGuide("training")?.title);
+    expect(loadGuidesForLocale("zh")[0]?.title).toBe(en[0]?.title);
+  });
 });
+

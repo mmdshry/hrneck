@@ -151,3 +151,20 @@ test('unknown report section returns not found', function () {
         ->getJson('/api/v1/org/reports/detailed/not-a-section')
         ->assertNotFound();
 });
+
+test('campaign summary reports zero no-action when nobody is assigned', function () {
+    $user = orgAdmin();
+
+    $summary = $this->actingAs($user)
+        ->withHeader('X-Tenant', 'itneck')
+        ->getJson('/api/v1/org/reports/summary')
+        ->assertOk()
+        ->json('data');
+
+    expect($summary['enrollments'])->toBe(0)
+        ->and($summary['recipients'])->toBe(0)
+        ->and($summary['no_action'])->toBe(0)
+        ->and($summary['no_action_pct'])->toBe(0)
+        ->and($summary['opened_pct'])->toBe(0)
+        ->and($summary['completed_pct'])->toBe(0);
+});

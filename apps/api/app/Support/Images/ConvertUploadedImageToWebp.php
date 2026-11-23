@@ -52,6 +52,11 @@ final class ConvertUploadedImageToWebp
             throw new RuntimeException('Unable to decode uploaded image for WebP conversion.');
         }
 
+        if (! imageistruecolor($image) && ! imagepalettetotruecolor($image)) {
+            imagedestroy($image);
+            throw new RuntimeException('Unable to convert palette image for WebP encoding.');
+        }
+
         imagealphablending($image, true);
         imagesavealpha($image, true);
 

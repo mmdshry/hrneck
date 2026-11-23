@@ -6,11 +6,15 @@ use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
 use App\Domains\Notifications\Models\OrgAnnouncement;
 use App\Domains\Notifications\Models\UserNotification;
 use App\Models\User;
+use App\Support\AppLocale;
 use Illuminate\Support\Carbon;
 
 class FanOutAnnouncement
 {
-    public function __construct(private readonly CreateUserNotification $notify) {}
+    public function __construct(
+        private readonly CreateUserNotification $notify,
+        private readonly QueueNotificationEmail $queueEmail,
+    ) {}
 
     public function handle(string $title, string $body, ?int $publishedBy = null): OrgAnnouncement
     {
@@ -27,21 +31,37 @@ class FanOutAnnouncement
         }
 
         $users = User::query()
-            ->where('tenant_id', $tenantId)
+            ->inTenant($tenantId)
             ->whereNull('disabled_at')
-            ->get(['id', 'tenant_id']);
+            ->get(['id', 'tenant_id', 'email', 'locale']);
+
+        $frontend = rtrim((string) config('brand.frontend_url', config('app.url')), '/');
 
         foreach ($users as $user) {
+            $link = $this->announcementLinkFor($user, $tenantId);
+            $locale = AppLocale::normalize(is_string($user->locale) ? $user->locale : null);
             $this->notify->handle(
                 (int) $user->id,
                 UserNotification::TYPE_ANNOUNCEMENT,
                 $title,
                 $body,
                 [
-                    'link' => $this->announcementLinkFor($user, $tenantId),
+                    'link' => $link,
                     'entity_id' => $announcement->id,
                     'announcement_id' => $announcement->id,
                 ],
+            );
+
+            $email = trim((string) $user->email);
+            if ($email === '') {
+                continue;
+            }
+
+            $this->queueEmail->handle(
+                $email,
+                $title,
+                $body.__('notifications.announcement_open', ['url' => $frontend.$link], $locale),
+                $locale,
             );
         }
 

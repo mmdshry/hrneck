@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { CheckCheck } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { notificationTypeIcon } from "@/components/notifications/notification-type-icon";
 import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
@@ -71,6 +72,8 @@ function notificationCells(item: UserNotificationItem): Record<string, string> {
 }
 
 export function NotificationsClient() {
+  const t = useTranslations("org.notifications");
+  const tCommon = useTranslations("common");
   const router = useRouter();
   const [userId, setUserId] = useState<number | null>(null);
   const [tenant, setTenant] = useState<string | null>(null);
@@ -152,12 +155,12 @@ export function NotificationsClient() {
         return;
       }
       setUserId(me.id);
-      const t = resolveTenant() || me.tenant_id;
-      if (!t) return;
-      setTenant(t);
+      const tenantSlug = resolveTenant() || me.tenant_id;
+      if (!tenantSlug) return;
+      setTenant(tenantSlug);
       const res = await api<NotificationsResponse>(
         `/api/v1/org/notifications?${paginationQuery(nextPage, nextPerPage, nextFilters)}`,
-        { tenant: t },
+        { tenant: tenantSlug },
       );
       setItems(res.data ?? []);
       setMeta(res.meta ?? emptyNotificationsMeta(nextPerPage));
@@ -190,7 +193,7 @@ export function NotificationsClient() {
     }
     void loadFromApi(page, perPage, filters)
       .catch((err: unknown) => {
-        toastError(err instanceof Error ? err.message : "Load failed");
+        toastError(err instanceof Error ? err.message : tCommon("loadFailed"));
       })
       .finally(() => setLoading(false));
   }, [
@@ -211,22 +214,22 @@ export function NotificationsClient() {
     setMarking(true);
     try {
       await ensureCsrf();
-      const t = tenant || resolveTenant();
+      const tenantSlug = tenant || resolveTenant();
       await api<{ data: { unread_count: number } }>(
         "/api/v1/org/notifications/read",
         {
           method: "POST",
-          tenant: t,
+          tenant: tenantSlug,
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ all: true }),
         },
       );
-      toastSuccess("All notifications marked as read.");
+      toastSuccess(t("allMarkedRead"));
       if (liveItems === null) {
         await loadFromApi(page, perPage, filters);
       }
     } catch (err) {
-      toastError(err instanceof Error ? err.message : "Update failed");
+      toastError(err instanceof Error ? err.message : tCommon("updateFailed"));
     } finally {
       setMarking(false);
     }
@@ -236,12 +239,12 @@ export function NotificationsClient() {
     if (!item.read_at) {
       try {
         await ensureCsrf();
-        const t = tenant || resolveTenant();
+        const tenantSlug = tenant || resolveTenant();
         await api<{ data: { unread_count: number } }>(
           "/api/v1/org/notifications/read",
           {
             method: "POST",
-            tenant: t,
+            tenant: tenantSlug,
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ ids: [item.id] }),
           },
@@ -256,7 +259,7 @@ export function NotificationsClient() {
   const columns: Array<DataTableColumn<UserNotificationItem>> = [
     {
       id: "title",
-      header: "Title",
+      header: tCommon("titleLabel"),
       accessorKey: "title",
       sticky: true,
       cell: (item) => {
@@ -273,32 +276,32 @@ export function NotificationsClient() {
     },
     {
       id: "body",
-      header: "Message",
+      header: tCommon("message"),
       accessorKey: "body",
       className: "max-w-md whitespace-pre-wrap",
       cell: (item) => item.body || "—",
     },
     {
       id: "unread",
-      header: "Read",
+      header: tCommon("read"),
       filter: "select",
       filterOptions: [
-        { label: "Unread", value: "1" },
-        { label: "Read", value: "0" },
+        { label: tCommon("unread"), value: "1" },
+        { label: tCommon("read"), value: "0" },
       ],
       filterValue: (item) => (item.read_at ? "0" : "1"),
       enableSorting: false,
-      cell: (item) => (item.read_at ? "Read" : "Unread"),
+      cell: (item) => (item.read_at ? tCommon("read") : tCommon("unread")),
     },
     {
       id: "created_at",
-      header: "When",
+      header: tCommon("whenLabel"),
       filter: "none",
       cell: (item) => (item.created_at ? new Date(item.created_at).toLocaleString() : "—"),
     },
     {
       id: "actions",
-      header: "Actions",
+      header: tCommon("actions"),
       filter: "none",
       enableSorting: false,
       enableGlobalFilter: false,
@@ -306,7 +309,7 @@ export function NotificationsClient() {
         <Button
           type="button"
           variant="outline"
-          size="sm"
+          size="compact"
           onClick={(event) => {
             event.stopPropagation();
             void openItem(item);
@@ -325,11 +328,11 @@ export function NotificationsClient() {
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">
       <PageHeader
-        title="Notifications"
+        title={t("title")}
         description={
           statusLabel
-            ? `Assignments, ticket updates, and organization announcements. · ${statusLabel}`
-            : "Assignments, ticket updates, and organization announcements. · Live"
+            ? `${t("description")} · ${statusLabel}`
+            : `${t("description")} · ${tCommon("live")}`
         }
         actions={
           <Button
@@ -340,7 +343,7 @@ export function NotificationsClient() {
             className="gap-1.5"
           >
             <CheckCheck className="h-4 w-4" aria-hidden />
-            {marking ? "Updating…" : "Mark all read"}
+            {marking ? tCommon("updating") : t("markAllRead")}
           </Button>
         }
       />
@@ -348,15 +351,15 @@ export function NotificationsClient() {
       <DataTable
         className="mt-8"
         mode="server"
-        caption="Notifications"
+        caption={t("notificationsCaption")}
         columns={columns}
         rows={items}
         filterState={tableQuery.state}
         onFilterStateChange={tableQuery.setState}
         getRowId={(row) => row.id}
         onRowClick={(item) => void openItem(item)}
-        emptyTitle="You are all caught up"
-        emptyDescription="New assignments and announcements will show up here."
+        emptyTitle={t("allCaughtUp")}
+        emptyDescription={t("allCaughtUpHint")}
         pagination={{
           page,
           perPage,

@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert } from "@/components/ui/alert";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
@@ -16,6 +17,7 @@ import {
 import { orgLiveChannel } from "@/lib/live-topics";
 import { hasPermission, type SessionUser } from "@/lib/session";
 import { resolveTenant } from "@/lib/tenant";
+import { toastError, toastSuccess } from "@/lib/toast";
 
 type Summary = {
   total_open: number;
@@ -29,12 +31,13 @@ type TicketingReportsPayload = {
 };
 
 export function ReportsClient() {
+  const t = useTranslations("org.ticketing");
+  const tCommon = useTranslations("common");
   const tenant = resolveTenant();
   const channel = tenant ? orgLiveChannel(tenant, "ticketing-reports") : null;
   const [session, setSession] = useState<SessionUser | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [liveReady, setLiveReady] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
   const [exporting, setExporting] = useState<"csv" | "pdf" | "png" | null>(null);
   const reportRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
@@ -53,10 +56,10 @@ export function ReportsClient() {
     if (!me) {
       return;
     }
-    const t = resolveTenant();
+    const tenantId = resolveTenant();
     const res = await api<{ data: Summary }>(
       "/api/v1/org/ticketing/reports/summary",
-      { tenant: t },
+      { tenant: tenantId },
     );
     setSummary(res.data);
   }, []);
@@ -73,26 +76,43 @@ export function ReportsClient() {
   }, []);
 
   useEffect(() => {
+    if (liveError) {
+      toastError(liveError);
+    }
+  }, [liveError]);
+
+  useEffect(() => {
+    if (
+      session &&
+      !hasPermission(session, "org.ticketing.reports")
+    ) {
+      toastError(t("needReportsPermission"));
+    }
+  }, [session, t]);
+
+  useEffect(() => {
     if (liveReady) {
       setLoading(false);
       return;
     }
     void refreshFromApi()
-      .catch((err: unknown) => setMessage(err instanceof Error ? err.message : "Load failed"))
+      .catch((err: unknown) =>
+        toastError(err instanceof Error ? err.message : tCommon("loadFailed")),
+      )
       .finally(() => setLoading(false));
-  }, [liveReady, refreshFromApi]);
+  }, [liveReady, refreshFromApi, tCommon]);
 
   const statusLabel = liveStatusLabel(status);
+  const dash = tCommon("emDash");
 
   async function exportReport(format: "csv" | "pdf" | "png") {
-    setMessage(null);
     setExporting(format);
     try {
       if (format === "png") {
         const el = reportRef.current;
-        if (!el) throw new Error("Report panel not ready");
+        if (!el) throw new Error(t("reportPanelNotReady"));
         await captureElementPng(el, "ticketing-report.png");
-        setMessage("Ticketing report PNG downloaded.");
+        toastSuccess(t("reportPngDownloaded"));
         return;
       }
 
@@ -102,9 +122,9 @@ export function ReportsClient() {
           : "/api/v1/org/ticketing/reports/pdf";
       const accept = format === "csv" ? "text/csv" : "application/pdf";
       await downloadAuthenticated(path, `ticketing-report.${format}`, accept);
-      setMessage(`Ticketing report ${format.toUpperCase()} downloaded.`);
+      toastSuccess(t("reportDownloaded", { format: format.toUpperCase() }));
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Export failed");
+      toastError(err instanceof Error ? err.message : tCommon("exportFailed"));
     } finally {
       setExporting(null);
     }
@@ -117,8 +137,8 @@ export function ReportsClient() {
   if (session && !hasPermission(session, "org.ticketing.reports")) {
     return (
       <div className="mx-auto w-full max-w-5xl flex-1 space-y-4 px-4 py-8 sm:px-6">
-        <PageHeader title="Ticketing reports" description="SLA and volume." />
-        <Alert>You need org.ticketing.reports.</Alert>
+        <PageHeader title={t("reportsTitle")} description={t("reportsDescription")} />
+        <EmptyState title={t("needReportsPermission")} />
       </div>
     );
   }
@@ -126,11 +146,11 @@ export function ReportsClient() {
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 space-y-6 px-4 py-8 sm:px-6">
       <PageHeader
-        title="Ticketing reports"
+        title={t("reportsTitle")}
         description={
           statusLabel
-            ? `Open volume and SLA attainment. · ${statusLabel}`
-            : "Open volume and SLA attainment."
+            ? `${t("reportsDescription")} · ${statusLabel}`
+            : t("reportsDescription")
         }
         actions={
           <div className="flex flex-wrap gap-2">
@@ -140,7 +160,7 @@ export function ReportsClient() {
               disabled={exporting !== null}
               onClick={() => void exportReport("csv")}
             >
-              {exporting === "csv" ? "Exporting…" : "Export CSV"}
+              {exporting === "csv" ? tCommon("exporting") : tCommon("exportCsv")}
             </Button>
             <Button
               type="button"
@@ -148,7 +168,7 @@ export function ReportsClient() {
               disabled={exporting !== null}
               onClick={() => void exportReport("pdf")}
             >
-              {exporting === "pdf" ? "Exporting…" : "Export PDF"}
+              {exporting === "pdf" ? tCommon("exporting") : tCommon("exportPdf")}
             </Button>
             <Button
               type="button"
@@ -156,37 +176,39 @@ export function ReportsClient() {
               disabled={exporting !== null}
               onClick={() => void exportReport("png")}
             >
-              {exporting === "png" ? "Exporting…" : "Export PNG"}
+              {exporting === "png" ? tCommon("exporting") : tCommon("exportPng")}
             </Button>
             <LinkButton href="/org/ticketing" variant="outline">
-              Queue
+              {t("queue")}
             </LinkButton>
           </div>
         }
       />
-      {message ? <Alert>{message}</Alert> : null}
-      {liveError ? <Alert variant="destructive">{liveError}</Alert> : null}
       <div ref={reportRef} className="space-y-4">
-        <h2 className="text-lg font-medium">Ticketing summary</h2>
+        <h2 className="text-lg font-medium">{t("ticketingSummary")}</h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Panel title="Open">
-            {summary ? <div className="text-3xl font-semibold">{summary.total_open}</div> : "—"}
+          <Panel title={tCommon("open")}>
+            {summary ? <div className="text-3xl font-semibold">{summary.total_open}</div> : dash}
           </Panel>
-          <Panel title="Resolved">
-            {summary ? <div className="text-3xl font-semibold">{summary.total_resolved}</div> : "—"}
+          <Panel title={tCommon("resolved")}>
+            {summary ? (
+              <div className="text-3xl font-semibold">{summary.total_resolved}</div>
+            ) : (
+              dash
+            )}
           </Panel>
-          <Panel title="Response breach">
+          <Panel title={t("responseBreach")}>
             {summary ? (
               <div className="text-3xl font-semibold">{summary.sla_response_breached}</div>
             ) : (
-              "—"
+              dash
             )}
           </Panel>
-          <Panel title="Resolve breach">
+          <Panel title={t("resolveBreach")}>
             {summary ? (
               <div className="text-3xl font-semibold">{summary.sla_resolve_breached}</div>
             ) : (
-              "—"
+              dash
             )}
           </Panel>
         </div>

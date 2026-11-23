@@ -1,12 +1,14 @@
+import { getTranslations } from "next-intl/server";
 import { IntegrationsClient } from "./integrations-client";
 
 export const instant = false;
 
-export const metadata = {
-  title: "Integrations",
-  description: "SMTP and upcoming directory integrations.",
-};
-
+export async function generateMetadata() {
+  const t = await getTranslations("org.settings");
+  return {
+    title: t("integrationsTitle"),
+  };
+}
 export default function IntegrationsPage() {
   return <IntegrationsClient />;
 }

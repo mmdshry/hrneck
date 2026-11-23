@@ -1,9 +1,10 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert } from "@/components/ui/alert";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LinkButton } from "@/components/ui/link-button";
@@ -75,39 +76,9 @@ function filterTickets(
   });
 }
 
-const ticketColumns: Array<DataTableColumn<Ticket>> = [
-  {
-    id: "number",
-    header: "Number",
-    accessorKey: "number",
-    sticky: true,
-    cell: (ticket) => (
-      <a className="underline-offset-2 hover:underline" href={`/portal/tickets/${ticket.id}`}>
-        {ticket.number}
-      </a>
-    ),
-  },
-  {
-    id: "summary",
-    header: "Summary",
-    accessorKey: "summary",
-    cell: (ticket) => ticket.summary,
-  },
-  {
-    id: "stage",
-    header: "Stage",
-    filterValue: (ticket) => ticket.stage?.name ?? "",
-    cell: (ticket) => ticket.stage?.name || "—",
-  },
-  {
-    id: "status",
-    header: "Status",
-    filterValue: (ticket) => ticket.status?.name ?? "",
-    cell: (ticket) => ticket.status?.name || "—",
-  },
-];
-
 export function PortalTicketsClient() {
+  const t = useTranslations("portal");
+  const tCommon = useTranslations("common");
   const tenant = resolveTenant();
   const [session, setSession] = useState<SessionUser | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
@@ -168,11 +139,11 @@ export function PortalTicketsClient() {
     if (!me) {
       return;
     }
-    const t = resolveTenant();
+    const tenantId = resolveTenant();
     const [deskList, list] = await Promise.all([
-      api<{ data: Desk[] }>("/api/v1/org/portal/ticketing/desks", { tenant: t }),
+      api<{ data: Desk[] }>("/api/v1/org/portal/ticketing/desks", { tenant: tenantId }),
       api(`/api/v1/org/portal/ticketing/tickets?${paginationQuery(nextPage, nextPerPage, nextFilters)}`, {
-        tenant: t,
+        tenant: tenantId,
       }),
     ]);
     const parsed = parsePaginatedResponse<Ticket>(list, nextPerPage);
@@ -220,7 +191,7 @@ export function PortalTicketsClient() {
       return;
     }
     void refreshFromApi(page, perPage, filters).catch((err: unknown) =>
-      toastError(err instanceof Error ? err.message : "Load failed"),
+      toastError(err instanceof Error ? err.message : t("loadFailed")),
     );
   }, [
     authChecked,
@@ -233,9 +204,11 @@ export function PortalTicketsClient() {
     applyLiveSlice,
     refreshFromApi,
     tableQuery.debounced,
+    t,
   ]);
 
   const statusLabel = liveStatusLabel(status);
+  const dash = tCommon("emDash");
 
   async function onCreate(event: FormEvent) {
     event.preventDefault();
@@ -251,11 +224,43 @@ export function PortalTicketsClient() {
       setDescription("");
       window.location.href = `/portal/tickets/${created.data.id}`;
     } catch (err) {
-      toastError(err instanceof Error ? err.message : "Create failed");
+      toastError(err instanceof Error ? err.message : t("createFailed"));
     }
   }
 
   const canPortal = session ? hasPermission(session, "org.ticketing.portal") : false;
+
+  const ticketColumns: Array<DataTableColumn<Ticket>> = [
+    {
+      id: "number",
+      header: tCommon("number"),
+      accessorKey: "number",
+      sticky: true,
+      cell: (ticket) => (
+        <a className="underline-offset-2 hover:underline" href={`/portal/tickets/${ticket.id}`}>
+          {ticket.number}
+        </a>
+      ),
+    },
+    {
+      id: "summary",
+      header: t("summary"),
+      accessorKey: "summary",
+      cell: (ticket) => ticket.summary,
+    },
+    {
+      id: "stage",
+      header: tCommon("stage"),
+      filterValue: (ticket) => ticket.stage?.name ?? "",
+      cell: (ticket) => ticket.stage?.name || dash,
+    },
+    {
+      id: "status",
+      header: tCommon("status"),
+      filterValue: (ticket) => ticket.status?.name ?? "",
+      cell: (ticket) => ticket.status?.name || dash,
+    },
+  ];
 
   if (!authChecked) {
     return <PageSkeleton />;
@@ -264,13 +269,15 @@ export function PortalTicketsClient() {
   if (authChecked && !session) {
     return (
       <div className="space-y-4">
-        <PageHeader title="My tickets" description="End-user service portal." />
-        <Alert>
-          Sign in to view and submit portal tickets.{" "}
-          <LinkButton href="/login?next=/portal/tickets" variant="link" size="sm" className="px-1">
-            Sign in
-          </LinkButton>
-        </Alert>
+        <PageHeader title={t("myTickets")} description={t("endUserPortal")} />
+        <EmptyState
+          title={t("signInToView")}
+          action={
+            <LinkButton href="/login?next=/portal/tickets" variant="link" size="sm" className="px-1">
+              {t("signIn")}
+            </LinkButton>
+          }
+        />
       </div>
     );
   }
@@ -278,8 +285,8 @@ export function PortalTicketsClient() {
   if (session && !canPortal) {
     return (
       <div className="space-y-4">
-        <PageHeader title="My tickets" description="End-user service portal." />
-        <Alert>You need org.ticketing.portal to submit and view portal tickets.</Alert>
+        <PageHeader title={t("myTickets")} description={t("endUserPortal")} />
+        <EmptyState title={t("needPortalPermission")} />
       </div>
     );
   }
@@ -287,19 +294,19 @@ export function PortalTicketsClient() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="My tickets"
+        title={t("myTickets")}
         description={
           statusLabel
-            ? `Submit requests and track open issues. · ${statusLabel}`
-            : "Submit requests and track open issues."
+            ? `${t("submitAndTrack")} · ${statusLabel}`
+            : t("submitAndTrack")
         }
       />
-      {liveError ? <Alert variant="destructive">{liveError}</Alert> : null}
+      
       {canPortal ? (
-        <Panel title="New request">
+        <Panel title={t("newRequest")}>
           <form className="space-y-3" onSubmit={onCreate}>
             <div className="space-y-1">
-              <Label htmlFor="portal-desk">Desk</Label>
+              <Label htmlFor="portal-desk">{t("desk")}</Label>
               <Select
                 id="portal-desk"
                 value={deskId}
@@ -314,7 +321,7 @@ export function PortalTicketsClient() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="portal-summary">Summary</Label>
+              <Label htmlFor="portal-summary">{t("summary")}</Label>
               <Input
                 id="portal-summary"
                 value={summary}
@@ -323,7 +330,7 @@ export function PortalTicketsClient() {
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="portal-details">Details</Label>
+              <Label htmlFor="portal-details">{t("details")}</Label>
               <Textarea
                 id="portal-details"
                 value={description}
@@ -331,20 +338,20 @@ export function PortalTicketsClient() {
                 rows={4}
               />
             </div>
-            <Button type="submit">Submit</Button>
+            <Button type="submit">{t("submit")}</Button>
           </form>
         </Panel>
       ) : null}
-      <Panel title="Open tickets">
+      <Panel title={t("openTickets")}>
         <DataTable
           mode="server"
-          caption="Open tickets"
+          caption={t("openTickets")}
           columns={ticketColumns}
           rows={tickets}
           filterState={tableQuery.state}
           onFilterStateChange={tableQuery.setState}
           getRowId={(row) => row.id}
-          emptyTitle="No tickets yet."
+          emptyTitle={t("noTickets")}
           pagination={{
             page,
             perPage,

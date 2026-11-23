@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert } from "@/components/ui/alert";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +11,7 @@ import { liveStatusLabel, useLiveTopic } from "@/hooks/use-live-topic";
 import { api, ensureCsrf } from "@/lib/api";
 import { paginationQuery, parsePaginatedResponse } from "@/lib/pagination";
 import { resolveTenant } from "@/lib/tenant";
+import { toastError } from "@/lib/toast";
 import { ReportSchedulesPanel } from "./report-schedules-panel";
 import {
   CampaignsSection,
@@ -141,11 +142,12 @@ function OverviewBlock({
 }
 
 export function ReportsClient() {
+  const t = useTranslations("org.reports");
+  const tCommon = useTranslations("common");
   const tenant = resolveTenant();
   const [tab, setTab] = useState<ReportTab>("overview");
   const [summary, setSummary] = useState<CampaignSummary | null>(null);
   const [blocks, setBlocks] = useState<OverviewBlocks | null>(null);
-  const [overviewError, setOverviewError] = useState<string | null>(null);
   const [departmentId, setDepartmentId] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -195,6 +197,12 @@ export function ReportsClient() {
   });
 
   useEffect(() => {
+    if (error) {
+      toastError(error);
+    }
+  }, [error]);
+
+  useEffect(() => {
     void (async () => {
       try {
         await ensureCsrf();
@@ -219,11 +227,35 @@ export function ReportsClient() {
       /* overview may still populate */
     });
     void refreshOverview().catch((err: unknown) => {
-      setOverviewError(err instanceof Error ? err.message : "Failed to load detailed reports");
+      toastError(err instanceof Error ? err.message : t("failedDetailed"));
     });
-  }, [refreshOverview, refreshSummary]);
+  }, [refreshOverview, refreshSummary, t]);
 
   const statusLabel = liveStatusLabel(status);
+
+  const reportTabs = useMemo(
+    () =>
+      REPORT_TABS.map((item) => ({
+        ...item,
+        label:
+          item.id === "overview"
+            ? t("overview")
+            : item.id === "company"
+              ? t("company")
+              : item.id === "users"
+                ? tCommon("users")
+                : item.id === "targets"
+                  ? tCommon("employees")
+                  : item.id === "campaigns"
+                    ? t("campaigns")
+                    : item.id === "training"
+                      ? t("training")
+                      : item.id === "checklists"
+                        ? t("checklists")
+                        : t("ticketing"),
+      })),
+    [t, tCommon],
+  );
 
   function openTab(next: ReportTab) {
     setTab(next);
@@ -232,36 +264,25 @@ export function ReportsClient() {
   return (
     <div className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6">
       <PageHeader
-        title="Reports"
-        description="Organization analytics across training, checklists, ticketing, and campaigns."
+        title={t("title")}
+        description={t("description")}
         actions={
           <span className="text-sm text-[var(--muted-foreground)]">
-            {statusLabel ?? "Live"}
+            {statusLabel ?? tCommon("live")}
           </span>
         }
       />
 
-      {error ? (
-        <Alert className="mt-4" variant="destructive">
-          {error}
-        </Alert>
-      ) : null}
-      {overviewError ? (
-        <Alert className="mt-4" variant="destructive">
-          {overviewError}
-        </Alert>
-      ) : null}
-
       <Panel className="mt-6 grid gap-3 p-4 sm:grid-cols-3">
         <div className="space-y-1.5">
-          <Label htmlFor="report-department">Department</Label>
+          <Label htmlFor="report-department">{tCommon("department")}</Label>
           <select
             id="report-department"
             className="flex min-h-11 w-full rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm"
             value={departmentId}
             onChange={(e) => setDepartmentId(e.target.value)}
           >
-            <option value="">All departments</option>
+            <option value="">{t("allDepartments")}</option>
             {departments.map((dept) => (
               <option key={dept.id} value={String(dept.id)}>
                 {dept.name}
@@ -270,7 +291,7 @@ export function ReportsClient() {
           </select>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="report-from">From</Label>
+          <Label htmlFor="report-from">{tCommon("from")}</Label>
           <Input
             id="report-from"
             type="date"
@@ -279,7 +300,7 @@ export function ReportsClient() {
           />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="report-to">To</Label>
+          <Label htmlFor="report-to">{tCommon("to")}</Label>
           <Input
             id="report-to"
             type="date"
@@ -289,8 +310,8 @@ export function ReportsClient() {
         </div>
       </Panel>
 
-      <div className="mt-6 flex flex-wrap gap-2" role="tablist" aria-label="Report sections">
-        {REPORT_TABS.map((item) => (
+      <div className="mt-6 flex flex-wrap gap-2" role="tablist" aria-label={t("reportSections")}>
+        {reportTabs.map((item) => (
           <Button
             key={item.id}
             type="button"
@@ -309,47 +330,47 @@ export function ReportsClient() {
           <div className="space-y-4">
             {!blocks ? (
               <p className="text-sm text-[var(--muted-foreground)]">
-                {statusLabel ?? "Loading overview…"}
+                {statusLabel ?? tCommon("loadingOverview")}
               </p>
             ) : (
               <div className="grid gap-4 md:grid-cols-2">
                 <OverviewBlock
-                  title="Training"
-                  primaryLabel="Completion rate"
+                  title={t("training")}
+                  primaryLabel={tCommon("completionRate")}
                   primaryValue={`${blocks.training.completion_rate}%`}
                   stats={[
-                    { label: "Assigned", value: blocks.training.assigned },
-                    { label: "In progress", value: blocks.training.in_progress },
-                    { label: "Completed", value: blocks.training.completed },
-                    { label: "Total", value: blocks.training.total },
+                    { label: tCommon("assigned"), value: blocks.training.assigned },
+                    { label: tCommon("inProgress"), value: blocks.training.in_progress },
+                    { label: tCommon("completed"), value: blocks.training.completed },
+                    { label: tCommon("total"), value: blocks.training.total },
                   ]}
                   segments={blocks.training.segments}
                   onOpen={() => openTab("training")}
                 />
                 <OverviewBlock
-                  title="Checklists"
-                  primaryLabel="Completion rate"
+                  title={t("checklists")}
+                  primaryLabel={tCommon("completionRate")}
                   primaryValue={`${blocks.checklists.completion_rate}%`}
                   stats={[
-                    { label: "Open", value: blocks.checklists.open },
-                    { label: "Completed", value: blocks.checklists.completed },
-                    { label: "Total", value: blocks.checklists.total },
+                    { label: tCommon("open"), value: blocks.checklists.open },
+                    { label: tCommon("completed"), value: blocks.checklists.completed },
+                    { label: tCommon("total"), value: blocks.checklists.total },
                   ]}
                   segments={blocks.checklists.segments}
                   onOpen={() => openTab("checklists")}
                 />
                 <OverviewBlock
-                  title="Ticketing"
-                  primaryLabel="Open"
+                  title={t("ticketing")}
+                  primaryLabel={tCommon("open")}
                   primaryValue={blocks.ticketing.open}
                   stats={[
-                    { label: "Resolved", value: blocks.ticketing.resolved },
+                    { label: tCommon("resolved"), value: blocks.ticketing.resolved },
                     {
-                      label: "Response breach",
+                      label: t("responseBreach"),
                       value: blocks.ticketing.sla_response_breached,
                     },
                     {
-                      label: "Resolve breach",
+                      label: t("resolveBreach"),
                       value: blocks.ticketing.sla_resolve_breached,
                     },
                   ]}
@@ -357,21 +378,21 @@ export function ReportsClient() {
                   onOpen={() => openTab("ticketing")}
                 />
                 <OverviewBlock
-                  title="Campaigns / People"
-                  primaryLabel="Complete rate"
+                  title={t("campaignsPeople")}
+                  primaryLabel={tCommon("completeRate")}
                   primaryValue={`${blocks.campaigns_people.completed_pct}%`}
                   stats={[
                     {
-                      label: "Running campaigns",
+                      label: t("runningCampaigns"),
                       value: blocks.campaigns_people.campaigns_running,
                     },
-                    { label: "Open rate", value: `${blocks.campaigns_people.opened_pct}%` },
+                    { label: t("openRate"), value: `${blocks.campaigns_people.opened_pct}%` },
                     {
-                      label: "No-action rate",
+                      label: t("noActionRate"),
                       value: `${blocks.campaigns_people.no_action_pct}%`,
                     },
                     {
-                      label: "Active employees",
+                      label: t("activeEmployees"),
                       value: blocks.campaigns_people.active_employees,
                     },
                   ]}
@@ -382,8 +403,11 @@ export function ReportsClient() {
             )}
             {summary && !blocks ? (
               <p className="text-sm text-[var(--muted-foreground)]">
-                Campaign complete rate {summary.completed_pct}% · Open {summary.opened_pct}% ·
-                No-action {summary.no_action_pct}%
+                {t("campaignSummaryLine", {
+                  completed: summary.completed_pct,
+                  opened: summary.opened_pct,
+                  noAction: summary.no_action_pct,
+                })}
               </p>
             ) : null}
           </div>

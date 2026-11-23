@@ -1,10 +1,11 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Alert } from "@/components/ui/alert";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { Panel } from "@/components/ui/panel";
@@ -16,6 +17,7 @@ import {
   type PaginationMeta,
 } from "@/lib/pagination";
 import { resolveTenant } from "@/lib/tenant";
+import { toastError } from "@/lib/toast";
 import type { SdKbArticle, SdTicket } from "../ticketing-types";
 
 type SearchMeta = {
@@ -45,6 +47,8 @@ function searchQuery(ticketsPage: number, kbPage: number, perPage: number, q: st
 }
 
 export function SearchClient() {
+  const t = useTranslations("org.ticketing");
+  const tCommon = useTranslations("common");
   const [q, setQ] = useState("");
   const [activeQ, setActiveQ] = useState("");
   const [tickets, setTickets] = useState<SdTicket[]>([]);
@@ -54,8 +58,6 @@ export function SearchClient() {
   const [ticketsPage, setTicketsPage] = useState(1);
   const [kbPage, setKbPage] = useState(1);
   const [perPage, setPerPage] = useState<PageSize>(DEFAULT_PAGE_SIZE);
-  const [message, setMessage] = useState<string | null>(null);
-
   const runSearch = useCallback(
     async (
       query: string,
@@ -87,13 +89,12 @@ export function SearchClient() {
       return;
     }
     void runSearch(activeQ, ticketsPage, kbPage, perPage).catch((err: unknown) => {
-      setMessage(err instanceof Error ? err.message : "Search failed");
+      toastError(err instanceof Error ? err.message : t("searchFailed"));
     });
-  }, [activeQ, ticketsPage, kbPage, perPage, runSearch]);
+  }, [activeQ, ticketsPage, kbPage, perPage, runSearch, t]);
 
   async function onSearch(event: FormEvent) {
     event.preventDefault();
-    setMessage(null);
     const trimmed = q.trim();
     if (!trimmed) {
       return;
@@ -103,10 +104,12 @@ export function SearchClient() {
     setActiveQ(trimmed);
   }
 
+  const dash = tCommon("emDash");
+
   const ticketColumns: Array<DataTableColumn<SdTicket>> = [
     {
       id: "number",
-      header: "Number",
+      header: tCommon("number"),
       accessorKey: "number",
       sticky: true,
       cell: (ticket) => (
@@ -120,76 +123,88 @@ export function SearchClient() {
     },
     {
       id: "summary",
-      header: "Summary",
+      header: tCommon("summary"),
       accessorKey: "summary",
       cell: (ticket) => ticket.summary,
     },
     {
       id: "desk",
-      header: "Desk",
+      header: tCommon("desk"),
       filterValue: (ticket) => ticket.desk?.name ?? "",
       enableSorting: false,
-      cell: (ticket) => ticket.desk?.name ?? "—",
+      cell: (ticket) => ticket.desk?.name ?? dash,
     },
     {
       id: "stage",
-      header: "Stage",
+      header: tCommon("stage"),
       filterValue: (ticket) => ticket.stage?.name ?? "",
       enableSorting: false,
-      cell: (ticket) => ticket.stage?.name ?? "—",
+      cell: (ticket) => ticket.stage?.name ?? dash,
     },
     {
       id: "priority",
-      header: "Priority",
+      header: tCommon("priority"),
       filterValue: (ticket) => ticket.priority?.name ?? "",
       enableSorting: false,
-      cell: (ticket) => ticket.priority?.name ?? "—",
+      cell: (ticket) => ticket.priority?.name ?? dash,
     },
   ];
 
   const kbColumns: Array<DataTableColumn<SdKbArticle>> = [
     {
       id: "number",
-      header: "Number",
+      header: tCommon("number"),
       accessorKey: "number",
       sticky: true,
-      cell: (article) => article.number || "—",
+      cell: (article) => article.number || dash,
     },
     {
       id: "summary",
-      header: "Summary",
+      header: tCommon("summary"),
       accessorKey: "summary",
       cell: (article) => article.summary,
     },
     {
       id: "description",
-      header: "Body",
+      header: tCommon("body"),
       accessorKey: "description",
       className: "max-w-md truncate",
-      cell: (article) => article.description || "—",
+      cell: (article) => article.description || dash,
     },
   ];
 
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 space-y-6 px-4 py-8 sm:px-6">
       <PageHeader
-        title="Search all"
-        description="Keyword search across tickets and KB articles."
-        actions={<LinkButton href="/org/ticketing" variant="outline">Queue</LinkButton>}
+        title={t("searchAll")}
+        description={t("searchDescription")}
+        actions={
+          <LinkButton href="/org/ticketing" variant="outline">
+            {t("queue")}
+          </LinkButton>
+        }
       />
-      {message ? <Alert>{message}</Alert> : null}
-      <form className="flex gap-2" onSubmit={onSearch}>
-        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Keyword…" required />
-        <Button type="submit">Search</Button>
+      <form className="flex flex-wrap items-end gap-2" onSubmit={onSearch}>
+        <div className="min-w-[12rem] flex-1 space-y-1">
+          <Label htmlFor="ticketing-search-keyword">{tCommon("keyword")}</Label>
+          <Input
+            id="ticketing-search-keyword"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={tCommon("keywordPlaceholder")}
+            required
+          />
+        </div>
+        <Button type="submit">{tCommon("search")}</Button>
       </form>
-      <Panel title={`Tickets (${ticketsMeta.total})`}>
+      <Panel title={t("ticketsPanel", { count: ticketsMeta.total })}>
         <DataTable
           mode="client"
-          caption="Ticket search results"
+          caption={t("ticketSearchResults")}
           columns={ticketColumns}
           rows={tickets}
           getRowId={(row) => row.id}
-          emptyTitle={activeQ ? "No matching tickets." : "Search to list tickets."}
+          emptyTitle={activeQ ? t("noMatchingTickets") : t("searchToListTickets")}
           pagination={
             activeQ
               ? {
@@ -207,14 +222,14 @@ export function SearchClient() {
           }
         />
       </Panel>
-      <Panel title={`Knowledge base (${kbMeta.total})`}>
+      <Panel title={t("kbPanel", { count: kbMeta.total })}>
         <DataTable
           mode="client"
-          caption="Knowledge base search results"
+          caption={t("kbSearchResults")}
           columns={kbColumns}
           rows={kb}
           getRowId={(row) => row.id}
-          emptyTitle={activeQ ? "No matching articles." : "Search to list articles."}
+          emptyTitle={activeQ ? t("noMatchingArticles") : t("searchToListArticles")}
           pagination={
             activeQ
               ? {

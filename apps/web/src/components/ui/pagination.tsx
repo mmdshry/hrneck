@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import {
@@ -29,6 +30,8 @@ export function Pagination({
   className,
   compact = false,
 }: PaginationProps) {
+  const t = useTranslations("common");
+
   if (total === 0) {
     return null;
   }
@@ -52,12 +55,10 @@ export function Pagination({
       <p className="text-sm text-[var(--muted-foreground)]">
         {compact ? (
           <span className="whitespace-nowrap">
-            {from}–{to} of {total}
+            {t("rangeCompact", { from, to, total })}
           </span>
         ) : (
-          <>
-            Showing {from}–{to} of {total}
-          </>
+          <>{t("showingRange", { from, to, total })}</>
         )}
       </p>
       <div
@@ -72,7 +73,7 @@ export function Pagination({
             compact && "justify-between",
           )}
         >
-          <span className="whitespace-nowrap">Rows</span>
+          <span className="whitespace-nowrap">{t("rows")}</span>
           <Select
             className={cn("w-auto min-w-[4.5rem]", compact && "flex-1")}
             value={String(safePerPage)}
@@ -80,7 +81,7 @@ export function Pagination({
               const next = Number(event.target.value) as PageSize;
               onPerPageChange(next);
             }}
-            aria-label="Rows per page"
+            aria-label={t("rowsPerPage")}
           >
             {PAGE_SIZE_OPTIONS.map((size) => (
               <option key={size} value={size}>
@@ -103,7 +104,7 @@ export function Pagination({
             disabled={currentPage <= 1}
             onClick={() => onPageChange(currentPage - 1)}
           >
-            {compact ? "Prev" : "Previous"}
+            {compact ? t("prev") : t("previous")}
           </Button>
           <span
             className={cn(
@@ -112,8 +113,8 @@ export function Pagination({
             )}
           >
             {compact
-              ? `${currentPage}/${lastPage}`
-              : `Page ${currentPage} / ${lastPage}`}
+              ? t("pageCompact", { current: currentPage, last: lastPage })
+              : t("pageOf", { current: currentPage, last: lastPage })}
           </span>
           <Button
             type="button"
@@ -123,7 +124,7 @@ export function Pagination({
             disabled={currentPage >= lastPage}
             onClick={() => onPageChange(currentPage + 1)}
           >
-            Next
+            {t("next")}
           </Button>
         </div>
       </div>

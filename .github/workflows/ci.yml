@@ -18,7 +18,7 @@ jobs:
         image: mysql:8.4
         env:
           MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
-          MYSQL_DATABASE: hrneck_central
+          MYSQL_DATABASE: hrneck_central_testing
         ports:
           - 3306:3306
         options: >-
@@ -51,6 +51,8 @@ jobs:
             php -r 'try { new PDO("mysql:host=127.0.0.1;port=3306", "root", ""); exit(0);} catch (Throwable $e) { fwrite(STDERR, $e->getMessage().PHP_EOL); exit(1);}' && break
             sleep 2
           done
+          # Align .env with phpunit.xml so pre-test migrate and Feature tests share one schema.
+          php -r "file_put_contents('.env', preg_replace('/^DB_DATABASE=.*/m', 'DB_DATABASE=hrneck_central_testing', file_get_contents('.env')));"
           php artisan migrate --force --no-interaction
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4

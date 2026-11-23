@@ -2,7 +2,11 @@
 
 namespace App\Domains\Campaigns\Jobs;
 
+use App\Domains\Campaigns\Actions\RecordTrainingAssignmentEvent;
 use App\Domains\Campaigns\Models\CampaignRecipient;
+use App\Domains\Campaigns\Models\TrainingAssignment;
+use App\Domains\Campaigns\Models\TrainingAssignmentEvent;
+use App\Domains\Notifications\Support\NotificationEmailGate;
 use App\Domains\TrainingLms\Models\Enrollment;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -19,6 +23,7 @@ class SendTrainingReminderJob implements ShouldQueue
     public function __construct(
         public int $recipientId,
         public int $enrollmentId,
+        public ?int $assignmentId = null,
     ) {}
 
     public function handle(): void
@@ -33,10 +38,22 @@ class SendTrainingReminderJob implements ShouldQueue
             return;
         }
 
+        $targetEmail = (string) $recipient->target->email;
+        if (! app(NotificationEmailGate::class)->allows($targetEmail)) {
+            return;
+        }
+
+        $assignmentId = $this->assignmentId;
+        $tenantId = is_string(tenant('id')) ? (string) tenant('id') : null;
+        $query = array_filter([
+            'tenant' => $tenantId,
+            'course' => $enrollment->course_id,
+            'enrollment' => $enrollment->id,
+            'target' => $enrollment->target_id,
+            'assignment' => $assignmentId,
+        ], static fn ($value): bool => $value !== null && $value !== '');
         $learnUrl = rtrim((string) config('brand.frontend_url', config('app.url')), '/')
-            .'/learn?course='.$enrollment->course_id
-            .'&enrollment='.$enrollment->id
-            .'&target='.$enrollment->target_id;
+            .'/learn?'.http_build_query($query);
         $body = "Hi {$recipient->target->first_name},\n\n"
             ."Please complete: {$enrollment->course->title}\n"
             ."Open: {$learnUrl}\n";
@@ -60,5 +77,13 @@ class SendTrainingReminderJob implements ShouldQueue
             'status' => 'sent',
             'sent_at' => now(),
         ])->save();
+
+        $assignment = $this->assignmentId !== null
+            ? TrainingAssignment::query()->find($this->assignmentId)
+            : TrainingAssignment::query()->where('recipient_id', $recipient->id)->first();
+
+        if ($assignment !== null) {
+            app(RecordTrainingAssignmentEvent::class)->append($assignment, TrainingAssignmentEvent::SENT);
+        }
     }
 }

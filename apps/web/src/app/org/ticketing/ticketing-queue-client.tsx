@@ -1,10 +1,11 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { Alert } from "@/components/ui/alert";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LinkButton } from "@/components/ui/link-button";
@@ -30,7 +31,7 @@ import {
 } from "@/lib/pagination";
 import { hasPermission, type SessionUser } from "@/lib/session";
 import { resolveTenant } from "@/lib/tenant";
-import { notifyResult, toastError, toastInfo, toastSuccess } from "@/lib/toast";
+import { toastError, toastInfo, toastSuccess } from "@/lib/toast";
 import type { SdDesk, SdTicket } from "./ticketing-types";
 
 type TicketsPayload = {
@@ -90,6 +91,8 @@ function filterTicketsLive(
 }
 
 export function TicketingQueueClient() {
+  const t = useTranslations("org.ticketing");
+  const tCommon = useTranslations("common");
   const tenant = resolveTenant();
   const channel = tenant ? orgLiveChannel(tenant, "tickets") : null;
   const [session, setSession] = useState<SessionUser | null>(null);
@@ -221,6 +224,18 @@ export function TicketingQueueClient() {
   });
 
   useEffect(() => {
+    if (liveError) {
+      toastError(liveError);
+    }
+  }, [liveError]);
+
+  useEffect(() => {
+    if (session && !hasPermission(session, "org.ticketing.tickets")) {
+      toastError(t("needTicketsPermission"));
+    }
+  }, [session, t]);
+
+  useEffect(() => {
     void loadDesksOnce().catch(() => {
       /* tickets bootstrap may still succeed */
     });
@@ -297,7 +312,7 @@ export function TicketingQueueClient() {
     void refreshFromApi(page, perPage, appliedFilters, showArchived)
       .catch((err: unknown) => {
         if (!cancelled) {
-          toastError(err instanceof Error ? err.message : "Load failed");
+          toastError(err instanceof Error ? err.message : tCommon("loadFailed"));
         }
       })
       .finally(() => {
@@ -330,19 +345,19 @@ export function TicketingQueueClient() {
     () => [
       {
         id: "select",
-        header: "Select",
+        header: tCommon("select"),
         filter: "none",
         enableSorting: false,
         enableGlobalFilter: false,
         sticky: true,
-        cell: (t) => (
+        cell: (ticket) => (
           <input
             type="checkbox"
-            aria-label={`Select ticket ${t.number}`}
-            checked={selected.includes(t.id)}
+            aria-label={t("selectTicketAria", { number: ticket.number })}
+            checked={selected.includes(ticket.id)}
             onChange={(e) => {
               setSelected((prev) =>
-                e.target.checked ? [...prev, t.id] : prev.filter((id) => id !== t.id),
+                e.target.checked ? [...prev, ticket.id] : prev.filter((id) => id !== ticket.id),
               );
             }}
             onClick={(e) => e.stopPropagation()}
@@ -351,64 +366,66 @@ export function TicketingQueueClient() {
       },
       {
         id: "number",
-        header: "Number",
+        header: tCommon("number"),
         accessorKey: "number",
-        cell: (t) => (
+        cell: (ticket) => (
           <a
             className="font-medium underline-offset-2 hover:underline"
-            href={`/org/ticketing/tickets/${t.id}`}
+            href={`/org/ticketing/tickets/${ticket.id}`}
           >
-            {t.number}
+            {ticket.number}
           </a>
         ),
       },
       {
         id: "summary",
-        header: "Summary",
+        header: tCommon("summary"),
         accessorKey: "summary",
         className: "max-w-xs truncate",
-        cell: (t) => t.summary,
+        cell: (ticket) => ticket.summary,
       },
       {
         id: "desk",
-        header: "Desk",
-        filterValue: (t) => t.desk?.name,
-        cell: (t) => t.desk?.name,
+        header: tCommon("desk"),
+        filterValue: (ticket) => ticket.desk?.name,
+        cell: (ticket) => ticket.desk?.name,
       },
       {
         id: "stage",
-        header: "Stage",
-        filterValue: (t) => t.stage?.name,
-        cell: (t) => t.stage?.name,
+        header: tCommon("stage"),
+        filterValue: (ticket) => ticket.stage?.name,
+        cell: (ticket) => ticket.stage?.name,
       },
       {
         id: "priority",
-        header: "Priority",
-        filterValue: (t) => t.priority?.name,
-        cell: (t) => t.priority?.name,
+        header: tCommon("priority"),
+        filterValue: (ticket) => ticket.priority?.name,
+        cell: (ticket) => ticket.priority?.name,
       },
       {
         id: "sla",
-        header: "SLA",
+        header: t("sla"),
         filter: "select",
         filterOptions: [
-          { label: "OK", value: "ok" },
-          { label: "Breach", value: "breach" },
+          { label: tCommon("ok"), value: "ok" },
+          { label: t("breach"), value: "breach" },
         ],
-        filterValue: (t) =>
-          t.sla_response_breached || t.sla_resolve_breached ? "breach" : "ok",
-        cell: (t) =>
-          t.sla_response_breached || t.sla_resolve_breached ? "Breach" : "OK",
+        filterValue: (ticket) =>
+          ticket.sla_response_breached || ticket.sla_resolve_breached ? "breach" : "ok",
+        cell: (ticket) =>
+          ticket.sla_response_breached || ticket.sla_resolve_breached
+            ? t("breach")
+            : tCommon("ok"),
       },
     ],
-    [selected],
+    [selected, t, tCommon],
   );
 
   async function onCreate(event: FormEvent) {
     event.preventDefault();
     const desk = Number(createDeskId);
     if (!desk) {
-      toastInfo("Select a desk before creating a ticket.");
+      toastInfo(t("selectDeskBeforeCreate"));
       return;
     }
     try {
@@ -425,10 +442,10 @@ export function TicketingQueueClient() {
       });
       setSummary("");
       setDescription("");
-      toastSuccess(`Created ${created.data.number}`);
+      toastSuccess(t("createdTicket", { number: created.data.number }));
       window.location.assign(`/org/ticketing/tickets/${created.data.id}`);
     } catch (err) {
-      notifyResult(err instanceof Error ? err.message : "Create failed");
+      toastError(err instanceof Error ? err.message : tCommon("createFailed"));
     }
   }
 
@@ -443,10 +460,10 @@ export function TicketingQueueClient() {
         body: JSON.stringify({ action, ids: selected, ...extra }),
       });
       setSelected([]);
-      toastSuccess(`Bulk ${action} complete.`);
+      toastSuccess(t("bulkComplete", { action }));
       await afterMutation();
     } catch (err) {
-      notifyResult(err instanceof Error ? err.message : "Bulk failed");
+      toastError(err instanceof Error ? err.message : tCommon("bulkFailed"));
       throw err;
     }
   }
@@ -454,7 +471,7 @@ export function TicketingQueueClient() {
   async function applyGroupUpdate(event: FormEvent) {
     event.preventDefault();
     if (selected.length === 0) {
-      toastInfo("Select tickets first.");
+      toastInfo(t("selectTicketsFirst"));
       return;
     }
     const fields: Record<string, string | number> = {};
@@ -462,7 +479,7 @@ export function TicketingQueueClient() {
     if (groupPriorityId) fields.priority_id = Number(groupPriorityId);
     if (groupAssigneePool.trim()) fields.assignee_pool = groupAssigneePool.trim();
     if (Object.keys(fields).length === 0) {
-      toastInfo("Choose at least one field to update.");
+      toastInfo(t("chooseFieldToUpdate"));
       return;
     }
     try {
@@ -497,16 +514,16 @@ export function TicketingQueueClient() {
       if (res.data.default_desk_id) {
         setCreateDeskId(String(res.data.default_desk_id));
       }
-      toastSuccess("Preferences saved.");
+      toastSuccess(t("preferencesSaved"));
     } catch (err) {
-      notifyResult(err instanceof Error ? err.message : "Preferences failed");
+      toastError(err instanceof Error ? err.message : t("preferencesFailed"));
     }
   }
 
   async function exportSelected() {
     if (!canAdmin) return;
     if (selected.length === 0) {
-      toastInfo("Select tickets to export.");
+      toastInfo(t("selectTicketsToExport"));
       return;
     }
     try {
@@ -521,9 +538,9 @@ export function TicketingQueueClient() {
         new Blob([JSON.stringify(res.data, null, 2)], { type: "application/json" }),
         "ticketing-export.json",
       );
-      toastSuccess("Export downloaded.");
+      toastSuccess(t("exportDownloaded"));
     } catch (err) {
-      notifyResult(err instanceof Error ? err.message : "Export failed");
+      toastError(err instanceof Error ? err.message : tCommon("exportFailed"));
     }
   }
 
@@ -549,10 +566,10 @@ export function TicketingQueueClient() {
         body: JSON.stringify(payload),
       });
       form.reset();
-      toastSuccess("Import complete.");
+      toastSuccess(t("importComplete"));
       await afterMutation();
     } catch (err) {
-      notifyResult(err instanceof Error ? err.message : "Import failed");
+      toastError(err instanceof Error ? err.message : t("importFailed"));
     }
   }
 
@@ -563,8 +580,8 @@ export function TicketingQueueClient() {
   if (session && !hasPermission(session, "org.ticketing.tickets")) {
     return (
       <div className="mx-auto w-full max-w-5xl flex-1 space-y-4 px-4 py-8 sm:px-6">
-        <PageHeader title="Ticketing" description="Service desk queue." />
-        <Alert>You need org.ticketing.tickets to work tickets.</Alert>
+        <PageHeader title={t("title")} description={t("description")} />
+        <EmptyState title={t("needTicketsPermission")} />
       </div>
     );
   }
@@ -572,43 +589,37 @@ export function TicketingQueueClient() {
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 space-y-6 px-4 py-8 sm:px-6">
       <PageHeader
-        title="Ticketing"
+        title={t("title")}
         description={
-          statusLabel
-            ? `Incidents, problems, service requests, and changes. · ${statusLabel}`
-            : "Incidents, problems, service requests, and changes."
+          statusLabel ? `${t("description")} · ${statusLabel}` : t("description")
         }
         actions={
           <div className="flex flex-wrap gap-2">
             <LinkButton href="/org/ticketing/search" variant="outline">
-              Search all
+              {t("searchAll")}
             </LinkButton>
             <LinkButton href="/org/ticketing/kb" variant="outline">
-              Knowledge base
+              {t("knowledgeBase")}
             </LinkButton>
             <LinkButton href="/org/ticketing/desks" variant="outline">
-              Desks
+              {t("desks")}
             </LinkButton>
             <LinkButton href="/org/ticketing/email" variant="outline">
-              Email
+              {t("email")}
             </LinkButton>
             <LinkButton href="/org/ticketing/reports" variant="outline">
-              Reports
+              {t("reports")}
             </LinkButton>
             <LinkButton href="/portal/tickets" variant="outline">
-              Portal
+              {t("portal")}
             </LinkButton>
           </div>
         }
       />
-      {liveError ? (
-        <Alert variant="destructive">{liveError}</Alert>
-      ) : null}
-
-      <Panel title="New ticket">
+      <Panel title={t("newTicket")}>
         <form className="grid gap-3 md:grid-cols-2" onSubmit={onCreate}>
           <div className="space-y-1">
-            <Label htmlFor="desk">Desk</Label>
+            <Label htmlFor="desk">{tCommon("desk")}</Label>
             <Select id="desk" value={createDeskId} onChange={(e) => setCreateDeskId(e.target.value)} required>
               {desks.map((d) => (
                 <option key={d.id} value={d.id}>
@@ -618,35 +629,35 @@ export function TicketingQueueClient() {
             </Select>
           </div>
           <div className="space-y-1 md:col-span-2">
-            <Label htmlFor="summary">Summary</Label>
+            <Label htmlFor="summary">{tCommon("summary")}</Label>
             <Input id="summary" value={summary} onChange={(e) => setSummary(e.target.value)} required />
           </div>
           <div className="space-y-1 md:col-span-2">
-            <Label htmlFor="description">Description</Label>
+            <Label htmlFor="description">{tCommon("descriptionLabel")}</Label>
             <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
           </div>
           <div>
-            <Button type="submit">Create ticket</Button>
+            <Button type="submit">{t("createTicket")}</Button>
           </div>
         </form>
       </Panel>
 
-      <Panel title="Preferences">
+      <Panel title={t("preferences")}>
         <form className="grid gap-3 md:grid-cols-3" onSubmit={savePreferences}>
           <div className="space-y-1">
-            <Label htmlFor="pref-scope">Ticket scope</Label>
+            <Label htmlFor="pref-scope">{t("ticketScope")}</Label>
             <Select
               id="pref-scope"
               value={prefs.ticket_scope}
               onChange={(e) => setPrefs({ ...prefs, ticket_scope: e.target.value })}
             >
-              <option value="all">All</option>
-              <option value="assigned">Assigned</option>
-              <option value="own">Own</option>
+              <option value="all">{tCommon("all")}</option>
+              <option value="assigned">{tCommon("assigned")}</option>
+              <option value="own">{tCommon("own")}</option>
             </Select>
           </div>
           <div className="space-y-1">
-            <Label htmlFor="pref-delay">Email send delay (minutes)</Label>
+            <Label htmlFor="pref-delay">{t("emailSendDelay")}</Label>
             <Input
               id="pref-delay"
               type="number"
@@ -659,7 +670,7 @@ export function TicketingQueueClient() {
             />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="pref-desk">Default desk</Label>
+            <Label htmlFor="pref-desk">{t("defaultDesk")}</Label>
             <Select
               id="pref-desk"
               value={prefs.default_desk_id != null ? String(prefs.default_desk_id) : ""}
@@ -670,7 +681,7 @@ export function TicketingQueueClient() {
                 })
               }
             >
-              <option value="">None</option>
+              <option value="">{tCommon("none")}</option>
               {desks.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.name}
@@ -679,13 +690,13 @@ export function TicketingQueueClient() {
             </Select>
           </div>
           <div>
-            <Button type="submit">Save preferences</Button>
+            <Button type="submit">{t("savePreferences")}</Button>
           </div>
         </form>
       </Panel>
 
       <Panel
-        title={showArchived ? "Archived queue" : "Queue"}
+        title={showArchived ? t("archivedQueue") : t("queue")}
         actions={
           <div className="flex flex-wrap gap-2">
             <Button
@@ -696,58 +707,58 @@ export function TicketingQueueClient() {
                 setSelected([]);
               }}
             >
-              {showArchived ? "Showing archived" : "Show archived"}
+              {showArchived ? t("showingArchived") : t("showArchived")}
             </Button>
             <Button type="button" variant="outline" onClick={() => void bulk("archive")}>
-              Archive
+              {tCommon("archive")}
             </Button>
             <Button type="button" variant="outline" onClick={() => void bulk("unarchive")}>
-              Unarchive
+              {tCommon("unarchive")}
             </Button>
             <Button type="button" variant="outline" onClick={() => void bulk("read")}>
-              Mark read
+              {tCommon("markRead")}
             </Button>
             <Button type="button" variant="outline" onClick={() => void bulk("unread")}>
-              Mark unread
+              {tCommon("markUnread")}
             </Button>
             <Button type="button" variant="outline" onClick={() => void bulk("stop_notification")}>
-              Stop notification
+              {tCommon("stopNotification")}
             </Button>
             <Button type="button" variant="outline" onClick={() => void bulk("link")}>
-              Link
+              {tCommon("link")}
             </Button>
             <Button type="button" variant="outline" onClick={() => void bulk("unlock")}>
-              Unlock
+              {tCommon("unlock")}
             </Button>
             <Button
               type="button"
               variant="outline"
               onClick={() => {
                 if (selected.length < 2) {
-                  toastInfo("Select at least two tickets to merge.");
+                  toastInfo(t("selectAtLeastTwoToMerge"));
                   return;
                 }
                 setConfirmMergeOpen(true);
               }}
             >
-              Merge
+              {tCommon("merge")}
             </Button>
             <Button
               type="button"
               variant="outline"
               onClick={() => {
                 if (selected.length === 0) {
-                  toastInfo("Select tickets to delete.");
+                  toastInfo(t("selectTicketsToDelete"));
                   return;
                 }
                 setConfirmDeleteOpen(true);
               }}
             >
-              Delete
+              {tCommon("delete")}
             </Button>
             {canAdmin ? (
               <Button type="button" variant="outline" onClick={() => void exportSelected()}>
-                Export JSON
+                {tCommon("exportJson")}
               </Button>
             ) : null}
           </div>
@@ -755,13 +766,13 @@ export function TicketingQueueClient() {
       >
         <DataTable
           mode="server"
-          caption="Service desk ticket queue"
+          caption={t("serviceDeskQueueCaption")}
           columns={ticketColumns}
           rows={tickets}
           filterState={tableQuery.state}
           onFilterStateChange={tableQuery.setState}
           getRowId={(row) => row.id}
-          emptyTitle="No tickets yet."
+          emptyTitle={t("noTicketsYet")}
           pagination={{
             page,
             perPage,
@@ -775,16 +786,16 @@ export function TicketingQueueClient() {
         />
       </Panel>
 
-      <Panel title="Group update">
+      <Panel title={t("groupUpdate")}>
         <form className="grid gap-3 md:grid-cols-3" onSubmit={applyGroupUpdate}>
           <div className="space-y-1">
-            <Label htmlFor="group-stage">Stage</Label>
+            <Label htmlFor="group-stage">{tCommon("stage")}</Label>
             <Select
               id="group-stage"
               value={groupStageId}
               onChange={(e) => setGroupStageId(e.target.value)}
             >
-              <option value="">No change</option>
+              <option value="">{t("noChange")}</option>
               {(groupDesk?.stages ?? []).map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
@@ -793,13 +804,13 @@ export function TicketingQueueClient() {
             </Select>
           </div>
           <div className="space-y-1">
-            <Label htmlFor="group-priority">Priority</Label>
+            <Label htmlFor="group-priority">{tCommon("priority")}</Label>
             <Select
               id="group-priority"
               value={groupPriorityId}
               onChange={(e) => setGroupPriorityId(e.target.value)}
             >
-              <option value="">No change</option>
+              <option value="">{t("noChange")}</option>
               {(groupDesk?.priorities ?? []).map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
@@ -808,34 +819,33 @@ export function TicketingQueueClient() {
             </Select>
           </div>
           <div className="space-y-1">
-            <Label htmlFor="group-pool">Assignee pool</Label>
+            <Label htmlFor="group-pool">{t("assigneePool")}</Label>
             <Input
               id="group-pool"
               value={groupAssigneePool}
               onChange={(e) => setGroupAssigneePool(e.target.value)}
-              placeholder="e.g. tier1"
+              placeholder={t("assigneePoolPlaceholder")}
             />
           </div>
           <div>
-            <Button type="submit">Apply to selected</Button>
+            <Button type="submit">{t("applyToSelected")}</Button>
           </div>
         </form>
         {!groupDesk ? (
           <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-            Select tickets to load stage and priority options for their desk. Assignee pool can
-            still be set without desk metadata.
+            {t("groupUpdateHint")}
           </p>
         ) : null}
       </Panel>
 
       {canAdmin ? (
-        <Panel title="Import tickets">
+        <Panel title={t("importTickets")}>
           <form className="flex flex-wrap items-end gap-2" onSubmit={importTickets}>
             <div className="space-y-1">
-              <Label htmlFor="import-file">JSON export file</Label>
+              <Label htmlFor="import-file">{t("jsonExportFile")}</Label>
               <Input id="import-file" name="import_file" type="file" accept="application/json,.json" required />
             </div>
-            <Button type="submit">Import</Button>
+            <Button type="submit">{tCommon("import")}</Button>
           </form>
         </Panel>
       ) : null}
@@ -843,9 +853,9 @@ export function TicketingQueueClient() {
       <ConfirmDialog
         open={confirmDeleteOpen}
         onOpenChange={setConfirmDeleteOpen}
-        title="Delete tickets"
-        description={`Permanently delete ${selected.length} selected ticket(s)? This cannot be undone.`}
-        confirmLabel="Delete"
+        title={t("deleteTickets")}
+        description={t("deleteTicketsConfirm", { count: selected.length })}
+        confirmLabel={tCommon("delete")}
         variant="destructive"
         onConfirm={async () => {
           await bulk("delete");
@@ -855,9 +865,9 @@ export function TicketingQueueClient() {
       <ConfirmDialog
         open={confirmMergeOpen}
         onOpenChange={setConfirmMergeOpen}
-        title="Merge tickets"
-        description={`Merge ${selected.length} tickets into #${selected[0] ?? "—"} (first selected becomes primary)?`}
-        confirmLabel="Merge"
+        title={t("mergeTickets")}
+        description={t("mergeTicketsConfirm", { count: selected.length, primary: selected[0] ?? tCommon("emDash") })}
+        confirmLabel={tCommon("merge")}
         onConfirm={async () => {
           await bulk("merge", { primary_id: selected[0] });
         }}

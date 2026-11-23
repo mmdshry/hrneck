@@ -58,10 +58,10 @@ test.describe("Notifications and branding", () => {
     await expect(page.getByText("White-label and sending domain saved.")).toBeVisible({
       timeout: 15_000,
     });
-    await page.goto("/org");
-    // Brand chrome can appear in the sidebar wordmark or mobile header BrandMark.
-    await expect(
-      page.getByText("ITneck Demo Brand").filter({ visible: true }).first(),
-    ).toBeVisible({ timeout: 20_000 });
+    // Org sidebar is logo-only (no display-name chrome); assert persistence on settings.
+    await page.goto("/org/settings");
+    await expect(page.locator("#settings-display-name")).toHaveValue("ITneck Demo Brand", {
+      timeout: 20_000,
+    });
   });
 });

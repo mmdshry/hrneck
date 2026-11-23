@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\User;
+use App\Support\ActiveOrgTenant;
 use App\Support\StaffTenant;
 use Closure;
 use Illuminate\Http\Request;
@@ -23,7 +24,11 @@ class EnsureOrgMembership
             abort(400, 'Tenant context is required.');
         }
 
-        if ($user->tenant_id === $tenantId) {
+        if ($user->belongsToTenant($tenantId)) {
+            if (! ActiveOrgTenant::matches($tenantId)) {
+                ActiveOrgTenant::set($tenantId);
+            }
+
             return $next($request);
         }
 

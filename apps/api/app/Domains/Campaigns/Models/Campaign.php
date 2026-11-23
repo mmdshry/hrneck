@@ -13,13 +13,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Campaign extends Model
 {
     protected $fillable = [
-        'name', 'type', 'status', 'course_id',
+        'name', 'type', 'status', 'course_id', 'is_remedial',
         'scheduled_at', 'starts_at', 'ends_at',
     ];
 
     protected function casts(): array
     {
         return [
+            'is_remedial' => 'boolean',
             'scheduled_at' => 'datetime',
             'starts_at' => 'datetime',
             'ends_at' => 'datetime',

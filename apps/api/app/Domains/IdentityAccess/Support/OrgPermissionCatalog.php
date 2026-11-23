@@ -124,4 +124,22 @@ final class OrgPermissionCatalog
     {
         return [self::PLATFORM_SUPER_ADMIN, self::PLATFORM_AGENT];
     }
+
+    /**
+     * Org permissions elevated for platform staff after MSP tenant enter.
+     * Excludes role/settings management to limit privilege blast radius.
+     *
+     * @return list<string>
+     */
+    public static function staffTenantPermissions(): array
+    {
+        return array_values(array_filter(
+            self::all(),
+            static fn (string $permission): bool => ! in_array($permission, [
+                self::ROLES_MANAGE,
+                self::SETTINGS_MANAGE,
+            ], true),
+        ));
+    }
 }
+

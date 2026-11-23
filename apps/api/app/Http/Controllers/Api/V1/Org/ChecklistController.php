@@ -17,6 +17,7 @@ use App\Http\Controllers\Controller;
 use App\Support\ApiPagination;
 use App\Support\Images\ConvertUploadedImageToWebp;
 use App\Support\ListQuery;
+use App\Support\Storage\AssertTenantStoragePath;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -37,7 +38,7 @@ class ChecklistController extends Controller
             $query->where('is_system', true);
         }
         if ($request->boolean('editable_only')) {
-            $query->where('is_system', false);
+            $query->where('is_system', false)->where('status', '!=', 'archived');
         }
 
         ListQuery::applySearch($query, $request, ['name', 'description', 'category', 'status']);
@@ -321,14 +322,22 @@ class ChecklistController extends Controller
     {
         $model = ChecklistInstance::query()->with('answers')->findOrFail($instance);
         $answer = $model->answers->firstWhere('item_key', $itemKey);
-        abort_unless($answer && $answer->file_disk_path && Storage::disk($this->disk())->exists($answer->file_disk_path), 404);
+        abort_unless($answer && $answer->file_disk_path, 404);
+
+        $path = AssertTenantStoragePath::handle(
+            (string) $answer->file_disk_path,
+            'checklists',
+            $this->disk(),
+            mustExist: true,
+            attribute: 'file_disk_path',
+        );
 
         return Storage::disk($this->disk())->response(
-            $answer->file_disk_path,
-            basename($answer->file_disk_path),
+            $path,
+            basename($path),
             [
                 'Content-Type' => $answer->file_mime ?: 'application/octet-stream',
-                'Content-Disposition' => 'inline; filename="'.basename($answer->file_disk_path).'"',
+                'Content-Disposition' => 'inline; filename="'.basename($path).'"',
             ],
         );
     }

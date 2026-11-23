@@ -1,3 +1,6 @@
+"use client";
+
+import { useTranslations } from "next-intl";
 import { LinkButton } from "@/components/ui/link-button";
 import { guideIcon } from "@/lib/guides/icons";
 import { guideHref } from "@/lib/guides/registry";
@@ -13,13 +16,15 @@ export function GuideNav({
   next: GuideModule | null;
   className?: string;
 }) {
+  const t = useTranslations("guides");
+
   if (!previous && !next) {
     return null;
   }
 
   return (
     <nav
-      aria-label="Adjacent guides"
+      aria-label={t("adjacent")}
       className={cn(
         "flex flex-col gap-3 border-t border-[var(--border)] pt-6 sm:flex-row sm:justify-between",
         className,
@@ -31,7 +36,7 @@ export function GuideNav({
           variant="outline"
           className="justify-start sm:max-w-[45%]"
         >
-          <PrevNextLabel guide={previous} direction="Previous" />
+          <PrevNextLabel guide={previous} direction={t("previous")} />
         </LinkButton>
       ) : (
         <span />
@@ -42,7 +47,7 @@ export function GuideNav({
           variant="outline"
           className="justify-start sm:max-w-[45%] sm:ml-auto"
         >
-          <PrevNextLabel guide={next} direction="Next" alignEnd />
+          <PrevNextLabel guide={next} direction={t("next")} alignEnd />
         </LinkButton>
       ) : null}
     </nav>
@@ -55,7 +60,7 @@ function PrevNextLabel({
   alignEnd = false,
 }: {
   guide: GuideModule;
-  direction: "Previous" | "Next";
+  direction: string;
   alignEnd?: boolean;
 }) {
   const Icon = guideIcon(guide.slug);

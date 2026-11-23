@@ -10,8 +10,54 @@ type BrandMarkProps = {
   iconClassName?: string;
   showName?: boolean;
   nameClassName?: string;
-  size?: "sm" | "md";
+  size?: "sm" | "md" | "lg";
 };
+
+function logoBoxClass(size: "sm" | "md" | "lg", logoOnly: boolean): string {
+  switch (size) {
+    case "lg":
+      // Sidebar width is ~15rem; fill it and allow a tall mark when logo-only.
+      return logoOnly ? "h-24 w-full max-h-24" : "h-20 w-20";
+    case "sm":
+      return "h-9 w-9";
+    case "md":
+      return "h-[58px] w-[58px]";
+    default: {
+      const _exhaustive: never = size;
+      return _exhaustive;
+    }
+  }
+}
+
+function wordmarkHeightClass(size: "sm" | "md" | "lg"): string {
+  switch (size) {
+    case "sm":
+      return "h-7";
+    case "md":
+      return "h-9";
+    case "lg":
+      return "h-10";
+    default: {
+      const _exhaustive: never = size;
+      return _exhaustive;
+    }
+  }
+}
+
+function nameTextClass(size: "sm" | "md" | "lg"): string {
+  switch (size) {
+    case "sm":
+      return "text-base";
+    case "md":
+      return "text-xl";
+    case "lg":
+      return "text-2xl";
+    default: {
+      const _exhaustive: never = size;
+      return _exhaustive;
+    }
+  }
+}
 
 export function BrandMark({
   className,
@@ -21,20 +67,35 @@ export function BrandMark({
   size = "md",
 }: BrandMarkProps) {
   const { displayName, logoUrl, loading } = useBranding();
-  const wordmarkHeight = size === "sm" ? "h-7" : "h-9";
-  const box = size === "sm" ? "h-9 w-9" : "h-[58px] w-[58px]";
+  const wordmarkHeight = wordmarkHeightClass(size);
+  const logoOnly = !showName;
+  const box = logoBoxClass(size, logoOnly);
+  const nameText = nameTextClass(size);
 
   if (loading && !logoUrl) {
     return (
       <div className={cn("flex min-w-0 items-center", className)}>
-        <Skeleton className={cn(wordmarkHeight, "w-28 rounded-[var(--radius)]", iconClassName)} />
+        <Skeleton
+          className={cn(
+            logoOnly && size === "lg" ? "h-24 w-full" : wordmarkHeight,
+            logoOnly && size === "lg" ? undefined : "w-28",
+            "rounded-[var(--radius)]",
+            iconClassName,
+          )}
+        />
       </div>
     );
   }
 
   if (logoUrl) {
     return (
-      <div className={cn("flex min-w-0 items-center gap-2", className)}>
+      <div
+        className={cn(
+          "flex min-w-0 items-center",
+          logoOnly ? "w-full" : "gap-2",
+          className,
+        )}
+      >
         {/* eslint-disable-next-line @next/next/no-img-element -- tenant logo streamed from API */}
         <img
           src={logoUrl}
@@ -52,7 +113,7 @@ export function BrandMark({
             <span
               className={cn(
                 "truncate font-[family-name:var(--font-display)]",
-                size === "sm" ? "text-base" : "text-xl",
+                nameText,
                 nameClassName,
               )}
             >
@@ -64,15 +125,15 @@ export function BrandMark({
     );
   }
 
-  // Without a custom logo, show the org display name when white-labeled;
-  // otherwise keep the default HRNECK wordmark.
+  // Without a custom logo: optional white-label name, else HRNECK wordmark.
+  // showName=false never renders the text name (sidebar logo-only mode).
   if (showName && displayName.trim() !== "" && displayName !== "HRNECK") {
     return (
       <div className={cn("flex min-w-0 items-center", className)}>
         <span
           className={cn(
             "truncate font-[family-name:var(--font-display)]",
-            size === "sm" ? "text-base" : "text-xl",
+            nameText,
             nameClassName,
           )}
         >

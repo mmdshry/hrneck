@@ -13,8 +13,15 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class CampaignRecipient extends Model
 {
     protected $fillable = [
-        'campaign_id', 'target_id', 'status',
-        'sent_at', 'opened_at',
+        'campaign_id',
+        'target_id',
+        'tracking_token',
+        'status',
+        'sent_at',
+        'opened_at',
+        'clicked_at',
+        'submitted_at',
+        'reported_at',
     ];
 
     protected function casts(): array
@@ -22,6 +29,9 @@ class CampaignRecipient extends Model
         return [
             'sent_at' => 'datetime',
             'opened_at' => 'datetime',
+            'clicked_at' => 'datetime',
+            'submitted_at' => 'datetime',
+            'reported_at' => 'datetime',
         ];
     }
 

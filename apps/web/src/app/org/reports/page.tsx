@@ -1,13 +1,15 @@
+import { getTranslations } from "next-intl/server";
 import { ReportsClient } from "./reports-client";
 
 export const instant = false;
 
-export const metadata = {
-  title: "Reports",
-  description:
-    "Detailed organization analytics across company, employees, campaigns, training, checklists, and ticketing.",
-};
-
+export async function generateMetadata() {
+  const t = await getTranslations("org.reports");
+  return {
+    title: t("title"),
+    description: t("description"),
+  };
+}
 export default function ReportsPage() {
   return <ReportsClient />;
 }

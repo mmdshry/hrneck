@@ -26,12 +26,6 @@ class IntegrationController extends Controller
                     ],
                 ],
                 [
-                    'id' => 'entra_directory_sync',
-                    'name' => 'Microsoft Entra Directory Sync',
-                    'status' => 'coming_soon',
-                    'details' => ['message' => 'Add when credentials are available'],
-                ],
-                [
                     'id' => 'graphus',
                     'name' => 'Graphus',
                     'status' => 'coming_soon',

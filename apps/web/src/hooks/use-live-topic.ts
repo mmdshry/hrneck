@@ -37,6 +37,11 @@ export function nextReconnectDelayMs(attempt: number): number {
   return exp;
 }
 
+/** A channel Echo already subscribed should not sit on "Connecting…". */
+export function liveStatusForExistingSubscription(alreadySubscribed: boolean): LiveStatus {
+  return alreadySubscribed ? "live" : "connecting";
+}
+
 type UseLiveTopicOptions<T> = {
   channel: string | null;
   enabled?: boolean;
@@ -127,6 +132,15 @@ export function useLiveTopic<T = Record<string, unknown>>({
           setStatus((current) => nextLiveStatus(current, "subscribed"));
           setError(null);
         });
+
+        const alreadySubscribed = Boolean(
+          (sub as { subscription?: { subscribed?: boolean } }).subscription?.subscribed,
+        );
+        if (alreadySubscribed) {
+          attempt = 0;
+          setStatus(liveStatusForExistingSubscription(true));
+          setError(null);
+        }
 
         sub.error((err: unknown) => {
           if (cancelled) return;

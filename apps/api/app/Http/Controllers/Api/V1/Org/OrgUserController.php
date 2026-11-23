@@ -4,9 +4,14 @@ namespace App\Http\Controllers\Api\V1\Org;
 
 use App\Domains\Audit\Actions\LogOrgActivity;
 use App\Domains\IdentityAccess\Actions\CreateOrgUser;
+use App\Domains\IdentityAccess\Actions\EnsureTenantMembership;
+use App\Domains\IdentityAccess\Actions\ProvisionEmployeePair;
 use App\Domains\IdentityAccess\Actions\SyncOrgUserRoles;
 use App\Domains\Realtime\Support\LiveTopics;
 use App\Domains\Realtime\Support\PublishLive;
+use App\Domains\TargetsGroups\Models\Target;
+use App\Domains\TargetsGroups\Support\ResolveActiveTarget;
+use App\Domains\TargetsGroups\Support\ResolveDepartmentFields;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Api\V1\UserResource;
 use App\Models\User;
@@ -16,6 +21,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password;
 
 class OrgUserController extends Controller
 {
@@ -23,7 +29,10 @@ class OrgUserController extends Controller
     {
         $tenantId = (string) tenant('id');
 
-        $query = User::query()->where('tenant_id', $tenantId);
+        $query = User::query()
+            ->inTenant($tenantId)
+            ->whereNull('disabled_at')
+            ->with(['roles', 'memberships']);
         ListQuery::applySearch($query, $request, ['name', 'email']);
         ListQuery::applyLikeFilters($query, $request, [
             'name' => 'name',
@@ -39,6 +48,7 @@ class OrgUserController extends Controller
         ], 'name', 'asc');
 
         $users = $query->paginate(ApiPagination::perPage($request));
+        app(ResolveActiveTarget::class)->attachLinkedTargets($users->getCollection());
 
         return UserResource::collection($users);
     }
@@ -48,9 +58,10 @@ class OrgUserController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'email' => ['required', 'email', 'max:255'],
-            'password' => ['required', 'string', 'min:8'],
+            'password' => ['required', Password::defaults()],
             'roles' => ['sometimes', 'array'],
             'roles.*' => ['string', 'max:80'],
+            'department_id' => ['sometimes', 'nullable', 'integer', Rule::exists('departments', 'id')],
         ]);
 
         $user = $createOrgUser->handle(
@@ -59,11 +70,14 @@ class OrgUserController extends Controller
             $data['email'],
             $data['password'],
             $data['roles'] ?? ['org_admin'],
+            array_key_exists('department_id', $data) ? $data['department_id'] : null,
+            array_key_exists('department_id', $data),
         );
 
         $audit->handle('users', 'created', 'Org user created', $user, [
             'email' => $user->email,
             'roles' => $data['roles'] ?? ['org_admin'],
+            'department_id' => $user->membershipFor((string) tenant('id'))?->department_id ?? $user->department_id,
         ]);
 
         PublishLive::org([LiveTopics::USERS, LiveTopics::REPORTS_DETAILED]);
@@ -71,10 +85,15 @@ class OrgUserController extends Controller
         return response()->json(['data' => new UserResource($user)], 201);
     }
 
-    public function update(Request $request, User $user, LogOrgActivity $audit): UserResource
-    {
+    public function update(
+        Request $request,
+        User $user,
+        LogOrgActivity $audit,
+        ResolveDepartmentFields $resolveDepartment,
+        EnsureTenantMembership $memberships,
+    ): UserResource {
         $tenantId = (string) tenant('id');
-        if ($user->tenant_id !== $tenantId) {
+        if (! $user->belongsToTenant($tenantId, activeOnly: false)) {
             abort(404);
         }
 
@@ -86,19 +105,47 @@ class OrgUserController extends Controller
                 'max:255',
                 Rule::unique('users', 'email')->ignore($user->id),
             ],
+            'department_id' => ['sometimes', 'nullable', 'integer', Rule::exists('departments', 'id')],
         ]);
 
-        $before = $user->only(['name', 'email']);
-        $user->fill($data)->save();
+        $membership = $user->membershipFor($tenantId);
+        $before = [
+            'name' => $user->name,
+            'email' => $user->email,
+            'department_id' => $membership?->department_id,
+            'department' => $membership?->department,
+        ];
+
+        $departmentFields = null;
+        if (array_key_exists('department_id', $data)) {
+            $departmentFields = $resolveDepartment->fromId($data['department_id']);
+            unset($data['department_id']);
+        }
+
+        if ($data !== []) {
+            $user->fill($data)->save();
+        }
+
+        if ($departmentFields !== null) {
+            $memberships->handle($user, $tenantId, $departmentFields);
+        }
+
+        $user->refresh()->load(['roles', 'memberships']);
+        $afterMembership = $user->membershipFor($tenantId);
 
         $audit->handle('users', 'updated', 'Org user updated', $user, [
             'before' => $before,
-            'after' => $user->only(['name', 'email']),
+            'after' => [
+                'name' => $user->name,
+                'email' => $user->email,
+                'department_id' => $afterMembership?->department_id,
+                'department' => $afterMembership?->department,
+            ],
         ]);
 
         PublishLive::org([LiveTopics::USERS, LiveTopics::REPORTS_DETAILED]);
 
-        return new UserResource($user->load('roles'));
+        return new UserResource($user);
     }
 
     public function syncRoles(Request $request, User $user, SyncOrgUserRoles $syncOrgUserRoles, LogOrgActivity $audit): UserResource
@@ -121,10 +168,10 @@ class OrgUserController extends Controller
         return new UserResource($updated);
     }
 
-    public function destroy(User $user, LogOrgActivity $audit): JsonResponse
+    public function destroy(User $user, LogOrgActivity $audit, ProvisionEmployeePair $provision): JsonResponse
     {
         $tenantId = (string) tenant('id');
-        if ($user->tenant_id !== $tenantId) {
+        if (! $user->belongsToTenant($tenantId, activeOnly: false)) {
             abort(404);
         }
 
@@ -133,13 +180,35 @@ class OrgUserController extends Controller
         }
 
         $snapshot = ['id' => $user->id, 'email' => $user->email, 'name' => $user->name];
-        $user->delete();
+        Target::query()->where('user_id', $user->id)->each(function (Target $target): void {
+            if ($target->joined_via === 'learner_role') {
+                $target->groups()->detach();
+                $target->delete();
+
+                return;
+            }
+
+            $target->forceFill(['user_id' => null])->save();
+        });
+
+        $hadOtherMemberships = $user->memberships()
+            ->where('tenant_id', '!=', $tenantId)
+            ->exists();
+
+        $provision->removeMembershipKeepingOthers($user, $tenantId);
+
+        if (! $hadOtherMemberships) {
+            $user->delete();
+        }
 
         $audit->handle('users', 'deleted', 'Org user deleted', null, [
             'user' => $snapshot,
+            'tenant_id' => $tenantId,
+            'removed_globally' => ! $hadOtherMemberships,
         ]);
 
-        PublishLive::org([LiveTopics::USERS, LiveTopics::REPORTS_DETAILED]);
+        PublishLive::org([LiveTopics::USERS]);
+        PublishLive::metricsBundle();
 
         return response()->json(['message' => 'Deleted']);
     }

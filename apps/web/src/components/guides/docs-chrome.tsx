@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, type ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
+import { useLocale } from "next-intl";
 import {
   GuidesSearchProvider,
   useGuidesSearch,
@@ -23,9 +24,10 @@ export function DocsChrome({ children }: { children: ReactNode }) {
 
 function DocsChromeInner({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const locale = useLocale();
   const { query, setQuery } = useGuidesSearch();
-  const guides = useMemo(() => searchGuides(query), [query]);
-  const allCount = listGuides().length;
+  const guides = useMemo(() => searchGuides(query, locale), [query, locale]);
+  const allCount = listGuides(locale).length;
   const SearchIcon = guidesSearchIcon;
 
   return (

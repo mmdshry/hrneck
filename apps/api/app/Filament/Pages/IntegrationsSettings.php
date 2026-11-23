@@ -2,9 +2,6 @@
 
 namespace App\Filament\Pages;
 
-use App\Domains\DirectorySync\Actions\RunDirectorySync;
-use App\Support\FilamentTenant;
-use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 
 class IntegrationsSettings extends Page
@@ -33,20 +30,5 @@ class IntegrationsSettings extends Page
             'from' => config('mail.from.address'),
             'support' => config('brand.support_address'),
         ];
-    }
-
-    public function runDirectorySync(): void
-    {
-        if (! FilamentTenant::has()) {
-            Notification::make()->title('Select an organization first')->danger()->send();
-
-            return;
-        }
-        $result = app(RunDirectorySync::class)->handle();
-        Notification::make()
-            ->title('Mock directory sync finished')
-            ->body('Users: '.($result['users'] ?? 0).' / Groups: '.($result['groups'] ?? 0))
-            ->success()
-            ->send();
     }
 }

@@ -106,11 +106,7 @@ export function xsrfHeaders(): HeadersInit {
   return token ? { "X-XSRF-TOKEN": token } : {};
 }
 
-export async function ensureCsrf(): Promise<void> {
-  await fetch(`${API_BASE}/sanctum/csrf-cookie`, {
-    credentials: "include",
-  });
-}
+let csrfFlight: Promise<void> | null = null;
 
 function xsrfToken(): string | null {
   if (typeof document === "undefined") return null;
@@ -118,12 +114,57 @@ function xsrfToken(): string | null {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
+function isSafeMethod(method: string): boolean {
+  return method === "GET" || method === "HEAD" || method === "OPTIONS";
+}
+
+/** Always hits `/sanctum/csrf-cookie`. Concurrent callers share one request. */
+function refreshCsrf(): Promise<void> {
+  if (csrfFlight) return csrfFlight;
+
+  const flight = fetch(`${API_BASE}/sanctum/csrf-cookie`, {
+    credentials: "include",
+  }).then(() => undefined);
+
+  csrfFlight = flight;
+  const release = () => {
+    if (csrfFlight === flight) csrfFlight = null;
+  };
+  void flight.then(release, release);
+  return flight;
+}
+
+export async function ensureCsrf(): Promise<void> {
+  if (xsrfToken()) return;
+  await refreshCsrf();
+}
+
+let sessionCache: SessionUser | null = null;
+let sessionFlight: Promise<SessionUser | null> | null = null;
+let sessionEpoch = 0;
+
+export function invalidateSessionUser(): void {
+  sessionEpoch += 1;
+  sessionCache = null;
+  sessionFlight = null;
+}
+
+/** Keep cached session locale in sync after a successful language switch. */
+export function patchSessionLocale(locale: string): void {
+  if (!sessionCache) return;
+  sessionCache = { ...sessionCache, locale };
+}
+
+function invalidateSessionCache(): void {
+  invalidateSessionUser();
+}
+
 export async function api<T>(
   path: string,
   init: RequestInit & { tenant?: string } = {},
 ): Promise<T> {
   const method = (init.method ?? "GET").toUpperCase();
-  if (method !== "GET" && method !== "HEAD" && method !== "OPTIONS" && !xsrfToken()) {
+  if (!isSafeMethod(method) && !xsrfToken()) {
     await ensureCsrf();
   }
 
@@ -145,6 +186,11 @@ export async function api<T>(
   if (!response.ok) {
     const body = await response.text();
     throw new ApiError(response.status, body || response.statusText);
+  }
+
+  // Mutations can change /auth/me (MFA, profile). Drop the cached user so the next read is fresh.
+  if (!isSafeMethod(method)) {
+    invalidateSessionCache();
   }
 
   if (response.status === 204) {
@@ -169,38 +215,103 @@ export async function apiOptional<T>(
   }
 }
 
+const SESSION_LOCALES = new Set(["en", "es", "fr", "pt", "de", "ru"]);
+
 function normalizeSessionUser(raw: Partial<SessionUser> | null | undefined): SessionUser | null {
   if (!raw || typeof raw.email !== "string") {
     return null;
   }
+
+  const localeRaw =
+    typeof raw.locale === "string" ? raw.locale.trim().toLowerCase() : null;
 
   return {
     id: Number(raw.id ?? 0),
     name: String(raw.name ?? ""),
     email: raw.email,
     tenant_id: raw.tenant_id ?? null,
+    department_id:
+      raw.department_id === null || raw.department_id === undefined
+        ? null
+        : Number(raw.department_id),
+    department:
+      typeof raw.department === "string" && raw.department.trim() !== ""
+        ? raw.department.trim()
+        : null,
+    job_title:
+      typeof raw.job_title === "string" && raw.job_title.trim() !== ""
+        ? raw.job_title.trim()
+        : null,
+    target_department:
+      typeof raw.target_department === "string" && raw.target_department.trim() !== ""
+        ? raw.target_department.trim()
+        : null,
+    avatar_url:
+      typeof raw.avatar_url === "string" && raw.avatar_url.trim() !== ""
+        ? raw.avatar_url.trim()
+        : null,
+    avatar_path:
+      typeof raw.avatar_path === "string" && raw.avatar_path.trim() !== ""
+        ? raw.avatar_path.trim()
+        : null,
     roles: Array.isArray(raw.roles) ? raw.roles.map(String) : [],
     permissions: Array.isArray(raw.permissions) ? raw.permissions.map(String) : [],
     is_platform_staff: Boolean(raw.is_platform_staff),
     mfa_enabled: Boolean(raw.mfa_enabled),
+    locale: localeRaw && SESSION_LOCALES.has(localeRaw) ? localeRaw : null,
     staff_tenant_id: raw.staff_tenant_id ?? null,
     acting_in_tenant: Boolean(raw.acting_in_tenant),
+    memberships: Array.isArray(raw.memberships)
+      ? raw.memberships
+          .map((m) => {
+            if (!m || typeof m !== "object") return null;
+            const tenantId =
+              typeof m.tenant_id === "string" ? m.tenant_id.trim() : "";
+            if (!tenantId) return null;
+            return {
+              tenant_id: tenantId,
+              name:
+                typeof m.name === "string" && m.name.trim() !== ""
+                  ? m.name.trim()
+                  : tenantId,
+              department_id:
+                m.department_id === null || m.department_id === undefined
+                  ? null
+                  : Number(m.department_id),
+              department:
+                typeof m.department === "string" && m.department.trim() !== ""
+                  ? m.department.trim()
+                  : null,
+            };
+          })
+          .filter((m): m is NonNullable<typeof m> => m !== null)
+      : undefined,
+    needs_org_selection: Boolean(raw.needs_org_selection),
+    active_tenant_id:
+      typeof raw.active_tenant_id === "string" && raw.active_tenant_id.trim() !== ""
+        ? raw.active_tenant_id.trim()
+        : null,
   };
 }
 
-export async function fetchSessionUser(): Promise<SessionUser | null> {
+async function requestSessionUser(): Promise<SessionUser | null> {
+  const res = await api<{ data?: SessionUser } & Partial<SessionUser>>("/api/v1/auth/me");
+  return normalizeSessionUser((res.data ?? res) as SessionUser);
+}
+
+async function loadSessionUser(): Promise<SessionUser | null> {
   try {
-    await ensureCsrf();
-    const res = await api<{ data?: SessionUser } & Partial<SessionUser>>("/api/v1/auth/me");
-    return normalizeSessionUser((res.data ?? res) as SessionUser);
+    return await requestSessionUser();
   } catch (err) {
     if (err instanceof ApiError && err.status === 419) {
       try {
-        await ensureCsrf();
-        const res = await api<{ data?: SessionUser } & Partial<SessionUser>>("/api/v1/auth/me");
-        return normalizeSessionUser((res.data ?? res) as SessionUser);
+        await refreshCsrf();
+        return await requestSessionUser();
       } catch (retryErr) {
-        if (retryErr instanceof ApiError && (retryErr.status === 401 || retryErr.status === 419)) {
+        if (
+          retryErr instanceof ApiError &&
+          (retryErr.status === 401 || retryErr.status === 419)
+        ) {
           return null;
         }
         throw retryErr;
@@ -213,13 +324,39 @@ export async function fetchSessionUser(): Promise<SessionUser | null> {
   }
 }
 
+function startSessionLoad(epoch: number): Promise<SessionUser | null> {
+  const flight = loadSessionUser().then((user) => {
+    if (epoch === sessionEpoch && user) sessionCache = user;
+    return user;
+  });
+  sessionFlight = flight;
+  const release = () => {
+    if (sessionFlight === flight) sessionFlight = null;
+  };
+  void flight.then(release, release);
+  return flight;
+}
+
+export async function fetchSessionUser(): Promise<SessionUser | null> {
+  if (sessionCache) return sessionCache;
+
+  const epoch = sessionEpoch;
+  if (!sessionFlight) {
+    return startSessionLoad(epoch);
+  }
+
+  return sessionFlight;
+}
+
 export async function signOut(): Promise<void> {
+  invalidateSessionCache();
   await ensureCsrf();
   try {
     await api("/api/v1/auth/logout", { method: "POST" });
   } catch (err) {
     // Already unauthenticated is fine; CSRF/other failures must surface.
     if (err instanceof ApiError && err.status === 401) {
+      invalidateSessionCache();
       return;
     }
     throw err;

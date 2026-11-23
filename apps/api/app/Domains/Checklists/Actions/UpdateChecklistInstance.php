@@ -6,6 +6,7 @@ use App\Domains\Checklists\Models\ChecklistAnswer;
 use App\Domains\Checklists\Models\ChecklistInstance;
 use App\Domains\Checklists\Support\ChecklistItemTypes;
 use App\Domains\Checklists\Support\ChecklistVisibility;
+use App\Support\Storage\AssertTenantStoragePath;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -78,7 +79,19 @@ class UpdateChecklistInstance
                         $answer->value_json = ['value' => $row['value']];
                     }
                     if (array_key_exists('file_disk_path', $row)) {
-                        $answer->file_disk_path = $row['file_disk_path'];
+                        $filePath = $row['file_disk_path'];
+                        if ($filePath !== null && $filePath !== '') {
+                            $filePath = AssertTenantStoragePath::handle(
+                                (string) $filePath,
+                                'checklists',
+                                (string) config('filesystems.training_disk', 'local'),
+                                mustExist: true,
+                                attribute: 'answers.'.$key.'.file_disk_path',
+                            );
+                        } else {
+                            $filePath = null;
+                        }
+                        $answer->file_disk_path = $filePath;
                         $answer->file_mime = $row['file_mime'] ?? null;
                         $answer->file_size = $row['file_size'] ?? null;
                         if ($answer->file_disk_path && ! array_key_exists('value', $row)) {

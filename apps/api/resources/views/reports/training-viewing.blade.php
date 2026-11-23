@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
 <head>
   <meta charset="utf-8">
-  <title>{{ $brand }} Training Viewing Report</title>
+  <title>{{ __('reports.training_viewing_title', ['brand' => $brand]) }}</title>
   <style>
     body { font-family: DejaVu Sans, sans-serif; font-size: 10px; color: #0f172a; }
     h1 { font-size: 16px; margin-bottom: 4px; }
@@ -14,21 +14,21 @@
   </style>
 </head>
 <body>
-  <h1>{{ $brand }} — Training Viewing Report</h1>
-  <p class="muted">Tenant {{ $tenant }} · Generated {{ $generatedAt }}</p>
+  <h1>{{ __('reports.training_viewing_heading', ['brand' => $brand]) }}</h1>
+  <p class="muted">{{ __('reports.ticketing_meta', ['tenant' => $tenant, 'datetime' => $generatedAt]) }}</p>
 
   <table>
     <thead>
       <tr>
-        <th>Learner</th>
-        <th>Email</th>
-        <th>Course</th>
-        <th>Lesson</th>
-        <th>Lesson status</th>
-        <th>Progress %</th>
-        <th>Watched (s)</th>
-        <th>Enrollment</th>
-        <th>Quiz</th>
+        <th>{{ __('reports.col_learner') }}</th>
+        <th>{{ __('reports.col_email') }}</th>
+        <th>{{ __('reports.col_course') }}</th>
+        <th>{{ __('reports.col_lesson') }}</th>
+        <th>{{ __('reports.col_lesson_status') }}</th>
+        <th>{{ __('reports.col_progress_pct') }}</th>
+        <th>{{ __('reports.col_watched_seconds') }}</th>
+        <th>{{ __('reports.col_enrollment') }}</th>
+        <th>{{ __('reports.col_quiz') }}</th>
       </tr>
     </thead>
     <tbody>
@@ -46,14 +46,14 @@
         </tr>
       @empty
         <tr>
-          <td colspan="9">No enrollment rows for the current filters.</td>
+          <td colspan="9">{{ __('reports.no_enrollment_rows') }}</td>
         </tr>
       @endforelse
     </tbody>
   </table>
 
   @if($truncated)
-    <p class="footer">Showing the first {{ $maxRows }} rows. Download CSV for the full export.</p>
+    <p class="footer">{{ __('reports.truncated_footer', ['max' => $maxRows]) }}</p>
   @endif
 </body>
 </html>

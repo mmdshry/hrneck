@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert } from "@/components/ui/alert";
+import { toastError } from "@/lib/toast";
+import { useTranslations } from "next-intl";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import { EmptyState } from "@/components/ui/empty-state";
 import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
@@ -60,30 +62,9 @@ function filterArticles(
   });
 }
 
-const articleColumns: Array<DataTableColumn<Article>> = [
-  {
-    id: "number",
-    header: "Number",
-    accessorKey: "number",
-    sticky: true,
-    cell: (article) => article.number || "—",
-  },
-  {
-    id: "summary",
-    header: "Summary",
-    accessorKey: "summary",
-    cell: (article) => article.summary,
-  },
-  {
-    id: "description",
-    header: "Description",
-    accessorKey: "description",
-    className: "max-w-md whitespace-pre-wrap",
-    cell: (article) => article.description || "—",
-  },
-];
-
 export function PortalKbClient() {
+  const t = useTranslations("portal");
+  const tCommon = useTranslations("common");
   const tenant = resolveTenant();
   const [userId, setUserId] = useState<number | null>(null);
   const [articles, setArticles] = useState<Article[]>([]);
@@ -91,7 +72,6 @@ export function PortalKbClient() {
   const [meta, setMeta] = useState<PaginationMeta>(emptyMeta());
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState<PageSize>(DEFAULT_PAGE_SIZE);
-  const [message, setMessage] = useState<string | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [signedIn, setSignedIn] = useState(false);
   const tableQuery = useDataTableQuery();
@@ -187,7 +167,7 @@ export function PortalKbClient() {
       return;
     }
     void refreshFromApi(page, perPage, filters).catch((err: unknown) =>
-      setMessage(err instanceof Error ? err.message : "Load failed"),
+      toastError(err instanceof Error ? err.message : t("loadFailed")),
     );
   }, [
     authChecked,
@@ -200,9 +180,34 @@ export function PortalKbClient() {
     applyLiveSlice,
     refreshFromApi,
     tableQuery.debounced,
+    t,
   ]);
 
   const statusLabel = liveStatusLabel(status);
+  const dash = tCommon("emDash");
+
+  const articleColumns: Array<DataTableColumn<Article>> = [
+    {
+      id: "number",
+      header: tCommon("number"),
+      accessorKey: "number",
+      sticky: true,
+      cell: (article) => article.number || dash,
+    },
+    {
+      id: "summary",
+      header: t("summary"),
+      accessorKey: "summary",
+      cell: (article) => article.summary,
+    },
+    {
+      id: "description",
+      header: t("details"),
+      accessorKey: "description",
+      className: "max-w-md whitespace-pre-wrap",
+      cell: (article) => article.description || dash,
+    },
+  ];
 
   if (!authChecked) {
     return <PageSkeleton />;
@@ -211,13 +216,15 @@ export function PortalKbClient() {
   if (authChecked && !signedIn) {
     return (
       <div className="space-y-4">
-        <PageHeader title="Knowledge base" description="Self-service articles published by IT." />
-        <Alert>
-          Sign in to browse the knowledge base.{" "}
-          <LinkButton href="/login?next=/portal/kb" variant="link" size="sm" className="px-1">
-            Sign in
-          </LinkButton>
-        </Alert>
+        <PageHeader title={t("knowledgeBase")} description={t("kbDescription")} />
+        <EmptyState
+          title={t("signInToBrowseKb")}
+          action={
+            <LinkButton href="/login?next=/portal/kb" variant="link" size="sm" className="px-1">
+              {t("signIn")}
+            </LinkButton>
+          }
+        />
       </div>
     );
   }
@@ -225,25 +232,25 @@ export function PortalKbClient() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Knowledge base"
+        title={t("knowledgeBase")}
         description={
           statusLabel
-            ? `Self-service articles published by IT. · ${statusLabel}`
-            : "Self-service articles published by IT."
+            ? `${t("kbDescription")} · ${statusLabel}`
+            : t("kbDescription")
         }
       />
-      {message ? <Alert>{message}</Alert> : null}
-      {liveError ? <Alert variant="destructive">{liveError}</Alert> : null}
-      <Panel title="Articles">
+      
+      
+      <Panel title={t("articles")}>
         <DataTable
           mode="server"
-          caption="Knowledge base articles"
+          caption={t("articlesCaption")}
           columns={articleColumns}
           rows={articles}
           filterState={tableQuery.state}
           onFilterStateChange={tableQuery.setState}
           getRowId={(row) => row.id}
-          emptyTitle="No published articles."
+          emptyTitle={t("noArticles")}
           pagination={{
             page,
             perPage,

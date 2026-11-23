@@ -51,4 +51,10 @@ class Tenant extends BaseTenant implements TenantWithDatabase
     {
         return $this->hasMany(Domain::class);
     }
+
+    /** @return HasMany<TenantMembership, $this> */
+    public function memberships(): HasMany
+    {
+        return $this->hasMany(TenantMembership::class);
+    }
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import { GuideIconBadge, SectionHeading } from "@/components/guides/section-heading";
 import { useGuidesSearch } from "@/components/guides/guides-search-context";
 import { LinkButton } from "@/components/ui/link-button";
@@ -24,21 +25,23 @@ const START_HERE = [
 ] as const;
 
 export function GuidesHub() {
+  const t = useTranslations("guides");
+  const locale = useLocale();
   const { query, setQuery } = useGuidesSearch();
-  const guides = useMemo(() => searchGuides(query), [query]);
+  const guides = useMemo(() => searchGuides(query, locale), [query, locale]);
   const startHere = useMemo((): GuideModule[] => {
     return START_HERE.map((slug) =>
-      listGuides().find((guide) => guide.slug === slug),
+      listGuides(locale).find((guide) => guide.slug === slug),
     ).filter((guide): guide is GuideModule => Boolean(guide));
-  }, []);
+  }, [locale]);
   const SearchIcon = guidesSearchIcon;
   const HubIcon = guidesHubIcon;
 
   return (
     <div className="space-y-10">
       <PageHeader
-        title="Guides"
-        description="Illustrated guides for org operators, learners, the service portal, and MSP staff—diagrams, annotated mock screens, and real scenarios. No live API calls."
+        title={t("hubTitle")}
+        description={t("hubDescription")}
         actions={
           <span
             className="inline-flex h-11 w-11 items-center justify-center rounded-[var(--radius)] bg-[var(--muted)] text-[var(--primary)]"
@@ -55,21 +58,21 @@ export function GuidesHub() {
           className="flex items-center gap-1.5 text-xs font-medium text-[var(--muted-foreground)]"
         >
           <SearchIcon className="h-3.5 w-3.5" aria-hidden />
-          Search guides
+          {t("search")}
         </label>
         <Input
           id="docs-hub-search"
           type="search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search training, ticketing, SMTP…"
+          placeholder={t("searchPlaceholder")}
           autoComplete="off"
         />
       </div>
 
       {!query ? (
         <section className="space-y-4">
-          <SectionHeading icon={guidesStepsIcon}>Start here</SectionHeading>
+          <SectionHeading icon={guidesStepsIcon}>{t("startHere")}</SectionHeading>
           <ol className="grid gap-3 sm:grid-cols-2">
             {startHere.map((guide, index) => {
               const Icon = guideIcon(guide.slug);
@@ -83,7 +86,7 @@ export function GuidesHub() {
                     <GuideIconBadge icon={Icon} />
                     <span className="flex min-w-0 flex-col items-start gap-1">
                       <span className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
-                        Step {index + 1}
+                        {t("step", { n: index + 1 })}
                       </span>
                       <span className="font-semibold">{guide.title}</span>
                       <span className="text-xs font-normal text-[var(--muted-foreground)]">
@@ -100,14 +103,14 @@ export function GuidesHub() {
 
       <section className="space-y-4">
         <div className="flex items-end justify-between gap-3">
-          <SectionHeading icon={guidesHubIcon}>All capabilities</SectionHeading>
+          <SectionHeading icon={guidesHubIcon}>{t("allCapabilities")}</SectionHeading>
           <p className="text-xs text-[var(--muted-foreground)]">
-            {guides.length} guide{guides.length === 1 ? "" : "s"}
+            {t("guideCount", { count: guides.length })}
           </p>
         </div>
         {guides.length === 0 ? (
           <p className="text-sm text-[var(--muted-foreground)]">
-            No guides match “{query}”. Try training, portal, MFA, or SMTP.
+            {t("noMatch", { query })}
           </p>
         ) : (
           <ul className="grid gap-3 sm:grid-cols-2">

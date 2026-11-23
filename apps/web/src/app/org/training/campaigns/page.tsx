@@ -1,12 +1,15 @@
+import { getTranslations } from "next-intl/server";
 import { TrainingCampaignsClient } from "./training-campaigns-client";
 
 export const instant = false;
 
-export const metadata = {
-  title: "Training campaigns",
-  description: "Assign courses and track training campaign metrics.",
-};
-
+export async function generateMetadata() {
+  const t = await getTranslations("org.campaigns");
+  return {
+    title: t("title"),
+    description: t("description"),
+  };
+}
 export default function TrainingCampaignsPage() {
   return <TrainingCampaignsClient />;
 }

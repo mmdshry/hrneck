@@ -1,12 +1,14 @@
+import { getTranslations } from "next-intl/server";
 import { ChecklistFillClient } from "./fill-client";
 
 export const instant = false;
 
-export const metadata = {
-  title: "Fill checklist",
-  description: "Complete an internal HR checklist for an employee.",
-};
-
+export async function generateMetadata() {
+  const t = await getTranslations("org.checklists");
+  return {
+    title: t("fillChecklist"),
+  };
+}
 export default async function ChecklistFillPage({
   params,
 }: {

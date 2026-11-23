@@ -16,9 +16,12 @@ class DispatchDueReportSchedules
             ->get();
 
         foreach ($due as $schedule) {
+            $tenantId = tenant('id');
             SendScheduledReportJob::dispatch(
                 $schedule->recipient_email,
                 (string) $schedule->format,
+                (string) $schedule->cadence,
+                $tenantId === null ? null : (string) $tenantId,
             );
             $schedule->forceFill([
                 'last_run_at' => now(),

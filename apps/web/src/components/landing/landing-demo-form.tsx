@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState, type FormEvent } from "react";
 import { Reveal } from "@/components/landing/reveal";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ const contactEmail =
   process.env.NEXT_PUBLIC_CONTACT_EMAIL ?? "support@hrneck.com";
 
 export function LandingDemoForm() {
+  const t = useTranslations("landing");
   const [submitted, setSubmitted] = useState(false);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -51,21 +53,22 @@ export function LandingDemoForm() {
       <div className="mx-auto grid w-full max-w-6xl gap-12 px-6 py-16 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] md:gap-16 md:py-20">
         <Reveal>
           <h2 className="font-[family-name:var(--font-display)] text-3xl tracking-tight md:text-4xl">
-            Request a demo
+            {t("demoTitle")}
           </h2>
           <p className="mt-3 text-[var(--muted-foreground)]">
-            Tell us whether you run an MSP or a single organization. We will
-            follow up at your work email.
+            {t("demoBody")}
           </p>
           <p className="mt-6 text-sm text-[var(--muted-foreground)]">
-            Opens your email client to{" "}
-            <a
-              href={`mailto:${contactEmail}`}
-              className="font-medium text-[var(--primary)] underline-offset-4 hover:underline"
-            >
-              {contactEmail}
-            </a>
-            .
+            {t.rich("opensEmail", {
+              email: () => (
+                <a
+                  href={`mailto:${contactEmail}`}
+                  className="font-medium text-[var(--link)] underline-offset-4 hover:underline"
+                >
+                  {contactEmail}
+                </a>
+              ),
+            })}
           </p>
         </Reveal>
 
@@ -76,60 +79,60 @@ export function LandingDemoForm() {
             noValidate
           >
             <div className="space-y-2 sm:col-span-1">
-              <Label htmlFor="demo-name">Name</Label>
+              <Label htmlFor="demo-name">{t("name")}</Label>
               <Input
                 id="demo-name"
                 name="name"
                 autoComplete="name"
                 required
-                placeholder="Alex Morgan"
+                placeholder={t("namePlaceholder")}
               />
             </div>
             <div className="space-y-2 sm:col-span-1">
-              <Label htmlFor="demo-email">Work email</Label>
+              <Label htmlFor="demo-email">{t("workEmail")}</Label>
               <Input
                 id="demo-email"
                 name="email"
                 type="email"
                 autoComplete="email"
                 required
-                placeholder="alex@company.com"
+                placeholder={t("workEmailPlaceholder")}
               />
             </div>
             <div className="space-y-2 sm:col-span-1">
-              <Label htmlFor="demo-company">Company</Label>
+              <Label htmlFor="demo-company">{t("company")}</Label>
               <Input
                 id="demo-company"
                 name="company"
                 autoComplete="organization"
                 required
-                placeholder="Acme MSP"
+                placeholder={t("companyPlaceholder")}
               />
             </div>
             <div className="space-y-2 sm:col-span-1">
-              <Label htmlFor="demo-role">I am with</Label>
+              <Label htmlFor="demo-role">{t("iAmWith")}</Label>
               <Select id="demo-role" name="role" required defaultValue="msp">
-                <option value="msp">An MSP (multi-organization)</option>
-                <option value="organization">A single organization</option>
-                <option value="other">Other / evaluating</option>
+                <option value="msp">{t("roleMsp")}</option>
+                <option value="organization">{t("roleOrganization")}</option>
+                <option value="other">{t("roleOther")}</option>
               </Select>
             </div>
             <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="demo-message">Message</Label>
+              <Label htmlFor="demo-message">{t("message")}</Label>
               <Textarea
                 id="demo-message"
                 name="message"
                 rows={4}
-                placeholder="What would you like to see in a demo?"
+                placeholder={t("messagePlaceholder")}
               />
             </div>
             <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
               <Button type="submit" variant="default" size="lg">
-                Send request
+                {t("sendRequest")}
               </Button>
               {submitted ? (
                 <p className="text-sm text-[var(--muted-foreground)]" role="status">
-                  If your email app did not open, write to {contactEmail}.
+                  {t("emailDidNotOpen", { email: contactEmail })}
                 </p>
               ) : null}
             </div>

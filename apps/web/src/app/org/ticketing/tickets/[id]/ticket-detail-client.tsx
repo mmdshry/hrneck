@@ -1,7 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ import { downloadAuthenticated } from "@/lib/download";
 import { orgLiveChannel } from "@/lib/live-topics";
 import { hasPermission, type SessionUser } from "@/lib/session";
 import { resolveTenant } from "@/lib/tenant";
+import { toastError, toastSuccess, toastWarning } from "@/lib/toast";
 import type { SdDesk, SdTicket } from "../../ticketing-types";
 
 type TicketsPayload = {
@@ -58,63 +59,62 @@ function formatBytes(size: number | undefined): string {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-const noteColumns: Array<DataTableColumn<TicketNoteRow>> = [
-  {
-    id: "visibility",
-    header: "Visibility",
-    accessorKey: "visibility",
-    filter: "select",
-    filterOptions: [
-      { label: "Public", value: "public" },
-      { label: "Private", value: "private" },
-    ],
-    cell: (note) => (note.visibility === "public" ? "Public" : "Private"),
-  },
-  {
-    id: "created_at",
-    header: "Created",
-    accessorKey: "created_at",
-    cell: (note) => note.created_at || "—",
-  },
-  {
-    id: "body",
-    header: "Note",
-    accessorKey: "body",
-    className: "max-w-md whitespace-pre-wrap",
-    cell: (note) => note.body,
-  },
-];
-
-const linkColumns: Array<DataTableColumn<TicketLink>> = [
-  {
-    id: "link_type",
-    header: "Link",
-    accessorKey: "link_type",
-    sticky: true,
-    cell: (link) => link.link_type,
-  },
-  {
-    id: "related_type",
-    header: "Related type",
-    accessorKey: "related_type",
-    cell: (link) => link.related_type,
-  },
-  {
-    id: "related_id",
-    header: "Related id",
-    accessorKey: "related_id",
-    filterValue: (link) => link.related_id,
-    cell: (link) => `#${link.related_id}`,
-  },
-];
-
 export function TicketDetailClient({ ticketId }: { ticketId: number }) {
+  const t = useTranslations("org.ticketing");
+  const tCommon = useTranslations("common");
+  const noteColumnsI18n: Array<DataTableColumn<TicketNoteRow>> = [
+    {
+      id: "visibility",
+      header: tCommon("visibility"),
+      accessorKey: "visibility",
+      filter: "select",
+      filterOptions: [
+        { label: tCommon("public"), value: "public" },
+        { label: tCommon("private"), value: "private" },
+      ],
+      cell: (note) => (note.visibility === "public" ? tCommon("public") : tCommon("private")),
+    },
+    {
+      id: "created_at",
+      header: tCommon("created"),
+      accessorKey: "created_at",
+      cell: (note) => note.created_at || tCommon("emDash"),
+    },
+    {
+      id: "body",
+      header: t("note"),
+      accessorKey: "body",
+      className: "max-w-md whitespace-pre-wrap",
+      cell: (note) => note.body,
+    },
+  ];
+  const linkColumnsI18n: Array<DataTableColumn<TicketLink>> = [
+    {
+      id: "link_type",
+      header: tCommon("link"),
+      accessorKey: "link_type",
+      sticky: true,
+      cell: (link) => link.link_type,
+    },
+    {
+      id: "related_type",
+      header: t("relatedType"),
+      accessorKey: "related_type",
+      cell: (link) => link.related_type,
+    },
+    {
+      id: "related_id",
+      header: t("relatedId"),
+      accessorKey: "related_id",
+      filterValue: (link) => link.related_id,
+      cell: (link) => `#${link.related_id}`,
+    },
+  ];
   const tenant = resolveTenant();
   const channel = tenant ? orgLiveChannel(tenant, "tickets") : null;
   const [ticket, setTicket] = useState<SdTicket | null>(null);
   const [desk, setDesk] = useState<SdDesk | null>(null);
   const [desks, setDesks] = useState<SdDesk[]>([]);
-  const [message, setMessage] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [noteIsPublic, setNoteIsPublic] = useState(false);
   const [taskTitle, setTaskTitle] = useState("");
@@ -131,14 +131,14 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
 
   const refreshDetail = useCallback(async () => {
     await ensureCsrf();
-    const t = resolveTenant();
+    const tenantId = resolveTenant();
     const res = await api<{ data: SdTicket }>(`/api/v1/org/ticketing/tickets/${ticketId}`, {
-      tenant: t,
+      tenant: tenantId,
     });
     setTicket(res.data);
     if (res.data.desk_id) {
       const d = await api<{ data: SdDesk }>(`/api/v1/org/ticketing/desks/${res.data.desk_id}`, {
-        tenant: t,
+        tenant: tenantId,
       });
       setDesk(d.data);
       setCopyDeskId((prev) => prev || String(res.data.desk_id));
@@ -165,9 +165,15 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
   });
 
   useEffect(() => {
+    if (liveError) {
+      toastError(liveError);
+    }
+  }, [liveError]);
+
+  useEffect(() => {
     setLoading(true);
     void refreshDetail()
-      .catch((err: unknown) => setMessage(err instanceof Error ? err.message : "Load failed"))
+      .catch((err: unknown) => toastError(err instanceof Error ? err.message : tCommon("loadFailed")))
       .finally(() => setLoading(false));
   }, [refreshDetail]);
 
@@ -193,7 +199,6 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
   async function saveDetails(event: FormEvent) {
     event.preventDefault();
     if (!ticket) return;
-    setMessage(null);
     try {
       await ensureCsrf();
       const updated = await api<{ data: SdTicket }>(`/api/v1/org/ticketing/tickets/${ticketId}`, {
@@ -210,9 +215,9 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
         }),
       });
       setTicket(updated.data);
-      setMessage("Saved.");
+      toastSuccess(t("saved"));
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Save failed");
+      toastError(err instanceof Error ? err.message : tCommon("saveFailed"));
     }
   }
 
@@ -232,7 +237,7 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
         await refreshDetail();
       }
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Note failed");
+      toastError(err instanceof Error ? err.message : t("noteFailed"));
     }
   }
 
@@ -251,7 +256,7 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
         await refreshDetail();
       }
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Task failed");
+      toastError(err instanceof Error ? err.message : t("taskFailed"));
     }
   }
 
@@ -279,7 +284,7 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
         );
       }
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Task update failed");
+      toastError(err instanceof Error ? err.message : t("taskUpdateFailed"));
     }
   }
 
@@ -290,7 +295,6 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
     const file = fileInput.files?.[0];
     if (!file) return;
     setUploading(true);
-    setMessage(null);
     try {
       await ensureCsrf();
       const body = new FormData();
@@ -301,10 +305,10 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
         body,
       });
       form.reset();
-      setMessage("Attachment uploaded.");
+      toastSuccess(t("attachmentUploaded"));
       await refreshDetail();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Upload failed");
+      toastError(err instanceof Error ? err.message : tCommon("uploadFailed"));
     } finally {
       setUploading(false);
     }
@@ -318,7 +322,7 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
         attachment.mime || "*/*",
       );
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Download failed");
+      toastError(err instanceof Error ? err.message : tCommon("downloadFailed"));
     }
   }
 
@@ -326,7 +330,7 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
     event.preventDefault();
     const deskId = Number(copyDeskId);
     if (!deskId) {
-      setMessage("Select a desk for the copy.");
+      toastWarning(t("selectDeskForCopy"));
       return;
     }
     try {
@@ -343,7 +347,7 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
       });
       window.location.assign(`/org/ticketing/tickets/${res.data.id}`);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Copy failed");
+      toastError(err instanceof Error ? err.message : tCommon("copyFailed"));
     }
   }
 
@@ -359,41 +363,41 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
           body: JSON.stringify({ publish: true }),
         },
       );
-      setMessage(`KB article #${res.data.id} created.`);
+      toastSuccess(t("kbArticleCreated", { id: res.data.id }));
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Convert failed");
+      toastError(err instanceof Error ? err.message : t("convertFailed"));
     }
   }
 
   const taskColumns: Array<DataTableColumn<TicketTaskRow>> = [
     {
       id: "title",
-      header: "Title",
+      header: tCommon("titleLabel"),
       accessorKey: "title",
       sticky: true,
       cell: (task) => task.title,
     },
     {
       id: "completion",
-      header: "Status",
+      header: tCommon("status"),
       accessorKey: "completion",
       filter: "select",
       filterOptions: [
-        { label: "Done", value: "done" },
-        { label: "Open", value: "open" },
+        { label: tCommon("done"), value: "done" },
+        { label: tCommon("open"), value: "open" },
       ],
-      cell: (task) => (task.completion === "done" ? "Done" : "Open"),
+      cell: (task) => (task.completion === "done" ? tCommon("done") : tCommon("open")),
     },
     {
       id: "hours",
-      header: "Hours",
+      header: tCommon("hours"),
       accessorKey: "hours",
       filterValue: (task) => task.hours,
       cell: (task) => `${task.hours}h`,
     },
     {
       id: "actions",
-      header: "Actions",
+      header: tCommon("actions"),
       filter: "none",
       enableSorting: false,
       enableGlobalFilter: false,
@@ -401,9 +405,10 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
         <Button
           type="button"
           variant="outline"
+          size="compact"
           onClick={() => void toggleTaskComplete(task.id, !task.is_completed)}
         >
-          {task.is_completed ? "Mark open" : "Mark done"}
+          {task.is_completed ? t("markOpen") : t("markDone")}
         </Button>
       ),
     },
@@ -412,20 +417,20 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
   const attachmentColumns: Array<DataTableColumn<TicketAttachment>> = [
     {
       id: "original_name",
-      header: "File",
+      header: tCommon("file"),
       accessorKey: "original_name",
       sticky: true,
       cell: (row) => row.original_name,
     },
     {
       id: "mime",
-      header: "Type",
+      header: tCommon("type"),
       accessorKey: "mime",
       cell: (row) => row.mime || "—",
     },
     {
       id: "size",
-      header: "Size",
+      header: tCommon("size"),
       filterValue: (row) => row.size ?? "",
       cell: (row) => formatBytes(row.size),
     },
@@ -436,8 +441,13 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
       enableSorting: false,
       enableGlobalFilter: false,
       cell: (row) => (
-        <Button type="button" variant="outline" onClick={() => void downloadAttachment(row)}>
-          Download
+        <Button
+          type="button"
+          variant="outline"
+          size="compact"
+          onClick={() => void downloadAttachment(row)}
+        >
+          {tCommon("download")}
         </Button>
       ),
     },
@@ -450,8 +460,7 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
   if (!ticket) {
     return (
       <div className="mx-auto w-full max-w-5xl flex-1 space-y-4 px-4 py-8 sm:px-6">
-        <PageHeader title="Ticket" description="Could not load this ticket." />
-        {message ? <Alert>{message}</Alert> : null}
+        <PageHeader title={t("ticketDetail")} description={t("couldNotLoadTicket")} />
       </div>
     );
   }
@@ -466,40 +475,46 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
         actions={
           <div className="flex flex-wrap gap-2">
             <LinkButton href="/org/ticketing" variant="outline">
-              Back to queue
+              {t("backToQueue")}
             </LinkButton>
             {canConvertKb ? (
               <Button type="button" variant="outline" onClick={() => void convertKb()}>
-                Convert to KB
+                {t("convertToKb")}
               </Button>
             ) : null}
           </div>
         }
       />
-      {message ? <Alert>{message}</Alert> : null}
-      {liveError ? <Alert variant="destructive">{liveError}</Alert> : null}
 
-      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Ticket sections">
-        {(["details", "notes", "tasks", "attachments", "related"] as const).map((t) => (
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label={t("ticketSections")}>
+        {(["details", "notes", "tasks", "attachments", "related"] as const).map((section) => (
           <Button
-            key={t}
+            key={section}
             type="button"
             role="tab"
-            aria-selected={tab === t}
-            variant={tab === t ? "default" : "outline"}
-            onClick={() => setTab(t)}
+            aria-selected={tab === section}
+            variant={tab === section ? "default" : "outline"}
+            onClick={() => setTab(section)}
           >
-            {t}
+            {section === "details"
+              ? t("detailsPanel")
+              : section === "notes"
+                ? t("notesPanel")
+                : section === "tasks"
+                  ? t("tasksPanel")
+                  : section === "attachments"
+                    ? t("attachmentsPanel")
+                    : t("relatedPanel")}
           </Button>
         ))}
       </div>
 
       {tab === "details" ? (
         <>
-          <Panel title="Details">
+          <Panel title={t("detailsPanel")}>
             <form className="grid gap-3 md:grid-cols-2" onSubmit={saveDetails}>
               <div className="space-y-1 md:col-span-2">
-                <Label htmlFor="ticket-summary">Summary</Label>
+                <Label htmlFor="ticket-summary">{tCommon("summary")}</Label>
                 <Input
                   id="ticket-summary"
                   value={ticket.summary}
@@ -507,7 +522,7 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
                 />
               </div>
               <div className="space-y-1 md:col-span-2">
-                <Label htmlFor="ticket-description">Description</Label>
+                <Label htmlFor="ticket-description">{tCommon("descriptionLabel")}</Label>
                 <Textarea
                   id="ticket-description"
                   rows={5}
@@ -516,7 +531,7 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="ticket-stage">Stage</Label>
+                <Label htmlFor="ticket-stage">{tCommon("stage")}</Label>
                 <Select
                   id="ticket-stage"
                   value={String(ticket.stage_id ?? "")}
@@ -530,7 +545,7 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label htmlFor="ticket-priority">Priority</Label>
+                <Label htmlFor="ticket-priority">{tCommon("priority")}</Label>
                 <Select
                   id="ticket-priority"
                   value={String(ticket.priority_id ?? "")}
@@ -544,7 +559,7 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label htmlFor="ticket-status">Status</Label>
+                <Label htmlFor="ticket-status">{tCommon("status")}</Label>
                 <Select
                   id="ticket-status"
                   value={String(ticket.status_id ?? "")}
@@ -558,7 +573,7 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label htmlFor="ticket-assignee-pool">Assignee pool</Label>
+                <Label htmlFor="ticket-assignee-pool">{t("assigneePool")}</Label>
                 <Input
                   id="ticket-assignee-pool"
                   value={ticket.assignee_pool ?? ""}
@@ -566,19 +581,21 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
                 />
               </div>
               <div className="md:col-span-2 text-sm text-[var(--muted-foreground)]">
-                Escalation level: {ticket.escalation_level ?? 0}
-                {ticket.sla_response_breached || ticket.sla_resolve_breached ? " · SLA breach" : ""}
+                {t("escalationLevel", { level: ticket.escalation_level ?? 0 })}
+                {ticket.sla_response_breached || ticket.sla_resolve_breached
+                  ? t("slaBreachSuffix")
+                  : ""}
               </div>
               <div>
-                <Button type="submit">Save</Button>
+                <Button type="submit">{tCommon("save")}</Button>
               </div>
             </form>
           </Panel>
 
-          <Panel title="Copy ticket">
+          <Panel title={t("copyTicket")}>
             <form className="grid gap-3 md:grid-cols-2" onSubmit={copyTicket}>
               <div className="space-y-1">
-                <Label htmlFor="copy-desk">Target desk</Label>
+                <Label htmlFor="copy-desk">{t("targetDesk")}</Label>
                 <Select
                   id="copy-desk"
                   value={copyDeskId}
@@ -601,7 +618,7 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
                     onChange={(e) => setCopyLink(e.target.checked)}
                     className="h-4 w-4 rounded border border-[var(--border)]"
                   />
-                  Link to original
+                  {t("linkToOriginal")}
                 </label>
                 <label htmlFor="copy-notes" className="flex items-center gap-2">
                   <input
@@ -611,11 +628,11 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
                     onChange={(e) => setCopyIncludeNotes(e.target.checked)}
                     className="h-4 w-4 rounded border border-[var(--border)]"
                   />
-                  Include notes
+                  {t("includeNotes")}
                 </label>
               </div>
               <div>
-                <Button type="submit">Copy ticket</Button>
+                <Button type="submit">{t("copyTicket")}</Button>
               </div>
             </form>
           </Panel>
@@ -623,12 +640,12 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
       ) : null}
 
       {tab === "notes" ? (
-        <Panel title="Notes">
+        <Panel title={tCommon("notes")}>
           <div className="mb-4">
             <DataTable
               mode="client"
-              caption="Ticket notes"
-              columns={noteColumns}
+              caption={t("ticketNotes")}
+              columns={noteColumnsI18n}
               rows={(ticket.notes ?? []).map((noteRow) => ({
                 id: noteRow.id,
                 visibility: noteRow.is_public ? "public" : "private",
@@ -636,11 +653,11 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
                 body: noteRow.body,
               }))}
               getRowId={(row) => row.id}
-              emptyTitle="No notes yet."
+              emptyTitle={tCommon("noRows")}
             />
           </div>
           <form className="space-y-2" onSubmit={addNote}>
-            <Label htmlFor="ticket-note-body">Note</Label>
+            <Label htmlFor="ticket-note-body">{t("note")}</Label>
             <Textarea
               id="ticket-note-body"
               value={note}
@@ -656,19 +673,19 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
                 onChange={(e) => setNoteIsPublic(e.target.checked)}
                 className="h-4 w-4 rounded border border-[var(--border)]"
               />
-              Visible in portal (public)
+              {t("visibleInPortal")}
             </label>
-            <Button type="submit">Add note</Button>
+            <Button type="submit">{t("addNote")}</Button>
           </form>
         </Panel>
       ) : null}
 
       {tab === "tasks" ? (
-        <Panel title="Tasks">
+        <Panel title={tCommon("tasks")}>
           <div className="mb-4">
             <DataTable
               mode="client"
-              caption="Ticket tasks"
+              caption={t("ticketTasks")}
               columns={taskColumns}
               rows={(ticket.tasks ?? []).map((task) => ({
                 id: task.id,
@@ -678,7 +695,7 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
                 is_completed: task.is_completed,
               }))}
               getRowId={(row) => row.id}
-              emptyTitle="No tasks yet."
+              emptyTitle={tCommon("noRows")}
             />
           </div>
           <form className="flex gap-2" onSubmit={addTask}>
@@ -689,48 +706,48 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
               id="ticket-task-title"
               value={taskTitle}
               onChange={(e) => setTaskTitle(e.target.value)}
-              placeholder="Task title"
-              aria-label="Task title"
+              placeholder={t("taskTitle")}
+              aria-label={t("taskTitle")}
               required
             />
-            <Button type="submit">Add</Button>
+            <Button type="submit">{tCommon("add")}</Button>
           </form>
         </Panel>
       ) : null}
 
       {tab === "attachments" ? (
-        <Panel title="Attachments">
+        <Panel title={tCommon("attachments")}>
           <div className="mb-4">
             <DataTable
               mode="client"
-              caption="Ticket attachments"
+              caption={t("ticketAttachments")}
               columns={attachmentColumns}
               rows={ticket.attachments ?? []}
               getRowId={(row) => row.id}
-              emptyTitle="No attachments yet."
+              emptyTitle={tCommon("noRows")}
             />
           </div>
           <form className="flex flex-wrap items-end gap-2" onSubmit={uploadAttachment}>
             <div className="space-y-1">
-              <Label htmlFor="ticket-attachment-file">File</Label>
+              <Label htmlFor="ticket-attachment-file">{tCommon("file")}</Label>
               <Input id="ticket-attachment-file" name="file" type="file" required />
             </div>
             <Button type="submit" disabled={uploading}>
-              {uploading ? "Uploading…" : "Upload"}
+              {uploading ? tCommon("uploading") : tCommon("upload")}
             </Button>
           </form>
         </Panel>
       ) : null}
 
       {tab === "related" ? (
-        <Panel title="Related">
+        <Panel title={tCommon("related")}>
           <DataTable
             mode="client"
-            caption="Related links"
-            columns={linkColumns}
+            caption={t("ticketRelated")}
+            columns={linkColumnsI18n}
             rows={ticket.links ?? []}
             getRowId={(row) => row.id}
-            emptyTitle="No links."
+            emptyTitle={tCommon("noRows")}
           />
         </Panel>
       ) : null}

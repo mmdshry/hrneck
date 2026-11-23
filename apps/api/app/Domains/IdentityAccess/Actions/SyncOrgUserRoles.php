@@ -21,7 +21,7 @@ class SyncOrgUserRoles
      */
     public function handle(User $user, string $tenantId, array $roleNames): User
     {
-        if ($user->tenant_id !== $tenantId) {
+        if (! $user->belongsToTenant($tenantId, activeOnly: false)) {
             throw ValidationException::withMessages([
                 'user' => ['User does not belong to this organization.'],
             ]);
@@ -56,7 +56,7 @@ class SyncOrgUserRoles
                 }
             }
             try {
-                $this->provision->ensureTargetForLearner($user);
+                $this->provision->ensureTargetForLearner($user, $tenantId);
             } finally {
                 if ($was !== $tenantId) {
                     Tenancy::end();
@@ -64,6 +64,6 @@ class SyncOrgUserRoles
             }
         }
 
-        return $user->fresh(['roles']);
+        return $user->fresh(['roles', 'memberships.tenant']);
     }
 }

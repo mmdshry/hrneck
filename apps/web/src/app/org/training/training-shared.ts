@@ -1,16 +1,21 @@
 import { api } from "@/lib/api";
 import { resolveTenant } from "@/lib/tenant";
 
+export type LessonContentType = "text" | "video" | "audio" | "document" | "pdf";
+
 export type Lesson = {
   id: number;
   title: string;
-  content_type: "text" | "video" | "pdf";
+  content_type: LessonContentType;
   body?: string | null;
   media_url?: string | null;
   media_disk_path?: string | null;
+  media_mime?: string | null;
   duration_seconds?: number | null;
   sort_order: number;
 };
+
+export type UploadableContentType = "video" | "audio" | "document";
 
 export type QuizQuestionType = "mcq" | "essay";
 
@@ -183,13 +188,85 @@ export function formatTs(value?: string | null): string {
   return Number.isNaN(d.getTime()) ? value : d.toLocaleString();
 }
 
+export function isUploadableContentType(
+  type: Lesson["content_type"],
+): type is UploadableContentType {
+  return type === "video" || type === "audio" || type === "document";
+}
+
+export function isDocumentLesson(lesson: {
+  content_type?: LessonContentType | null;
+}): boolean {
+  return lesson.content_type === "document" || lesson.content_type === "pdf";
+}
+
+export function isTimedMediaLesson(lesson: {
+  content_type?: LessonContentType | null;
+}): boolean {
+  return lesson.content_type === "video" || lesson.content_type === "audio";
+}
+
+export function mediaAcceptForContentType(
+  contentType: UploadableContentType,
+): string {
+  switch (contentType) {
+    case "video":
+      return "video/mp4,video/webm,video/quicktime,video/x-matroska,.mp4,.webm,.mov,.mkv";
+    case "audio":
+      return "audio/mpeg,audio/wav,audio/mp4,audio/ogg,.mp3,.wav,.m4a,.ogg";
+    case "document":
+      return ".pdf,.txt,.md,.doc,.docx,application/pdf,text/plain,text/markdown,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    default: {
+      const _exhaustive: never = contentType;
+      return _exhaustive;
+    }
+  }
+}
+
+export function documentKind(
+  lesson: Pick<Lesson, "media_mime" | "media_disk_path" | "media_url">,
+): "pdf" | "text" | "office" | "unknown" {
+  const mime = (lesson.media_mime ?? "").toLowerCase();
+  const path = (
+    lesson.media_disk_path ??
+    lesson.media_url ??
+    ""
+  ).toLowerCase();
+
+  if (
+    mime === "application/pdf" ||
+    path.endsWith(".pdf") ||
+    path.includes(".pdf.")
+  ) {
+    return "pdf";
+  }
+  if (
+    mime.startsWith("text/") ||
+    path.endsWith(".txt") ||
+    path.endsWith(".md")
+  ) {
+    return "text";
+  }
+  if (
+    mime === "application/msword" ||
+    mime ===
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+    path.endsWith(".doc") ||
+    path.endsWith(".docx")
+  ) {
+    return "office";
+  }
+  return "unknown";
+}
+
 export async function uploadTrainingMedia(
   file: File,
-  contentType: "video" | "pdf",
+  contentType: UploadableContentType,
 ): Promise<{
   media_disk_path: string;
   media_mime: string;
   media_size: number;
+  content_type: UploadableContentType;
 }> {
   const form = new FormData();
   form.append("file", file);
@@ -199,6 +276,7 @@ export async function uploadTrainingMedia(
       media_disk_path: string;
       media_mime: string;
       media_size: number;
+      content_type: UploadableContentType;
     };
   }>("/api/v1/org/training/media/upload", {
     method: "POST",
@@ -206,4 +284,46 @@ export async function uploadTrainingMedia(
     body: form,
   });
   return uploaded.data;
+}
+
+export function lessonVideoEmbed(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.replace(/^www\./, "");
+    if (host === "youtu.be") {
+      const id = parsed.pathname.split("/").filter(Boolean)[0];
+      return id ? `https://www.youtube.com/embed/${id}` : null;
+    }
+    if (host === "youtube.com" || host === "m.youtube.com") {
+      const id = parsed.searchParams.get("v");
+      return id ? `https://www.youtube.com/embed/${id}` : null;
+    }
+    if (host.includes("vimeo.com")) {
+      const id = parsed.pathname.split("/").filter(Boolean).pop();
+      return id ? `https://player.vimeo.com/video/${id}` : null;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+/** Stream URL for uploaded lesson media, or embed/external URL when present. */
+export function lessonMediaSrc(
+  lesson: Pick<Lesson, "id" | "media_disk_path" | "media_url">,
+  tenant: string,
+): string | null {
+  if (lesson.media_disk_path) {
+    return `/api/v1/org/training/media/${lesson.id}?tenant=${encodeURIComponent(tenant)}`;
+  }
+  if (lesson.media_url) {
+    return lessonVideoEmbed(lesson.media_url) || lesson.media_url;
+  }
+  return null;
+}
+
+export function lessonHasPreviewableMedia(
+  lesson: Pick<Lesson, "media_disk_path" | "media_url">,
+): boolean {
+  return Boolean(lesson.media_disk_path || lesson.media_url);
 }

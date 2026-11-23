@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { nextLiveStatus, nextReconnectDelayMs } from "./use-live-topic";
+import {
+  liveStatusForExistingSubscription,
+  nextLiveStatus,
+  nextReconnectDelayMs,
+} from "./use-live-topic";
 
 describe("nextLiveStatus", () => {
   it("marks a successful subscription as live", () => {
@@ -26,6 +30,16 @@ describe("nextLiveStatus", () => {
 
   it("keeps error visible while reconnecting after a failure", () => {
     expect(nextLiveStatus("error", "reconnecting")).toBe("error");
+  });
+});
+
+describe("liveStatusForExistingSubscription", () => {
+  it("is live when the private channel is already subscribed", () => {
+    expect(liveStatusForExistingSubscription(true)).toBe("live");
+  });
+
+  it("stays connecting until the first subscription succeeds", () => {
+    expect(liveStatusForExistingSubscription(false)).toBe("connecting");
   });
 });
 

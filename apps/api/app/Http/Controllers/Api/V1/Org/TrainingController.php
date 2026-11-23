@@ -6,6 +6,7 @@ use App\Domains\Audit\Actions\LogOrgActivity;
 use App\Domains\Campaigns\Actions\LaunchTrainingCampaign;
 use App\Domains\Campaigns\Actions\ResolveCampaignAudience;
 use App\Domains\Campaigns\Models\Campaign;
+use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
 use App\Domains\Realtime\Support\LiveTopics;
 use App\Domains\Realtime\Support\PublishLive;
 use App\Domains\TargetsGroups\Support\ResolveActiveTarget;
@@ -20,12 +21,15 @@ use App\Domains\TrainingLms\Models\QuizQuestion;
 use App\Http\Controllers\Controller;
 use App\Support\ApiPagination;
 use App\Support\ListQuery;
+use App\Support\Storage\AssertTenantStoragePath;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class TrainingController extends Controller
@@ -104,14 +108,33 @@ class TrainingController extends Controller
     public function destroyCourse(int $course, LogOrgActivity $audit): JsonResponse
     {
         $model = Course::query()->findOrFail($course);
+        if (Campaign::query()->where('course_id', $model->id)->exists()) {
+            throw ValidationException::withMessages([
+                'course' => ['This course is still used by a campaign. Archive or delete that campaign first.'],
+            ]);
+        }
+
+        $mediaPaths = Lesson::query()
+            ->where('course_id', $model->id)
+            ->whereNotNull('media_disk_path')
+            ->pluck('media_disk_path')
+            ->filter(fn ($path) => is_string($path) && $path !== '')
+            ->values()
+            ->all();
+
         $snapshot = ['id' => $model->id, 'title' => $model->title];
         $model->delete();
+
+        $disk = Storage::disk($this->trainingDisk());
+        foreach ($mediaPaths as $path) {
+            $disk->delete($path);
+        }
 
         $audit->handle('training', 'course_deleted', 'Course deleted', null, [
             'course' => $snapshot,
         ]);
 
-        PublishLive::org([LiveTopics::TRAINING_CAMPAIGNS, LiveTopics::TRAINING, LiveTopics::REPORTS_DETAILED]);
+        PublishLive::metricsBundle();
 
         return response()->json(['deleted' => true]);
     }
@@ -175,50 +198,62 @@ class TrainingController extends Controller
     public function uploadMedia(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'file' => ['required', 'file', 'max:102400', 'mimetypes:video/mp4,video/webm,video/quicktime,application/pdf'],
-            'content_type' => ['required', 'in:video,pdf'],
+            'file' => [
+                'required',
+                'file',
+                'max:102400',
+                'mimetypes:'.implode(',', self::UPLOAD_MIMETYPES),
+            ],
+            'content_type' => ['required', 'in:video,audio,document,pdf'],
         ]);
 
         $file = $data['file'];
+        $contentType = $data['content_type'] === 'pdf' ? 'document' : $data['content_type'];
+        $mime = (string) ($file->getMimeType() ?: '');
+        $this->assertUploadMimeMatchesContentType($contentType, $mime);
+
         $tenant = (string) (tenant('id') ?: 'central');
-        $ext = $file->getClientOriginalExtension() ?: ($data['content_type'] === 'pdf' ? 'pdf' : 'mp4');
+        $ext = $file->getClientOriginalExtension()
+            ?: match ($contentType) {
+                'audio' => 'mp3',
+                'document' => 'pdf',
+                default => 'mp4',
+            };
         $path = sprintf('tenants/%s/training/%s.%s', $tenant, Str::uuid()->toString(), $ext);
         Storage::disk($this->trainingDisk())->put($path, file_get_contents($file->getRealPath()) ?: '');
 
         return response()->json([
             'data' => [
                 'media_disk_path' => $path,
-                'media_mime' => $file->getMimeType(),
+                'media_mime' => $mime !== '' ? $mime : $file->getClientMimeType(),
                 'media_size' => $file->getSize(),
-                'content_type' => $data['content_type'],
+                'content_type' => $contentType,
             ],
         ], 201);
     }
 
-    public function streamMedia(Request $request, int $lesson): StreamedResponse
+    public function streamMedia(Request $request, int $lesson): BinaryFileResponse|StreamedResponse
     {
         $model = Lesson::query()->findOrFail($lesson);
-        $targetId = $this->ownedTargetId($request);
-        if ($targetId === null) {
-            $this->abortWithoutLearnerProfile();
+        $canManage = $request->user()?->can(OrgPermissionCatalog::TRAINING_MANAGE) === true;
+
+        if (! $canManage) {
+            $targetId = $this->ownedTargetId($request);
+            if ($targetId === null) {
+                $this->abortWithoutLearnerProfile();
+            }
+            abort_unless(
+                Enrollment::query()
+                    ->where('target_id', $targetId)
+                    ->where('course_id', $model->course_id)
+                    ->exists(),
+                403,
+            );
         }
-        abort_unless(
-            Enrollment::query()
-                ->where('target_id', $targetId)
-                ->where('course_id', $model->course_id)
-                ->exists(),
-            403,
-        );
+
         abort_unless($model->media_disk_path && Storage::disk($this->trainingDisk())->exists($model->media_disk_path), 404);
 
-        return Storage::disk($this->trainingDisk())->response(
-            $model->media_disk_path,
-            basename($model->media_disk_path),
-            [
-                'Content-Type' => $model->media_mime ?: 'application/octet-stream',
-                'Content-Disposition' => 'inline; filename="'.basename($model->media_disk_path).'"',
-            ],
-        );
+        return $this->streamTrainingFile($model);
     }
 
     public function enrollments(Request $request): JsonResponse
@@ -407,7 +442,7 @@ class TrainingController extends Controller
             'course_ids.*' => ['integer'],
             'content' => ['required_without_all:course_id,course_ids', 'nullable', 'array'],
             'content.title' => ['required_with:content', 'string', 'max:160'],
-            'content.content_type' => ['required_with:content', 'in:text,video,pdf'],
+            'content.content_type' => ['required_with:content', 'in:text,video,audio,document,pdf'],
             'content.body' => ['nullable', 'string'],
             'content.media_url' => ['nullable', 'string', 'max:2048'],
             'content.media_disk_path' => ['nullable', 'string', 'max:512'],
@@ -420,6 +455,7 @@ class TrainingController extends Controller
             'target_ids.*' => ['integer'],
             'group_ids' => ['required_without:target_ids', 'array'],
             'group_ids.*' => ['integer'],
+            'is_remedial' => ['sometimes', 'boolean'],
             'launch' => ['sometimes', 'boolean'],
         ]);
 
@@ -429,6 +465,15 @@ class TrainingController extends Controller
 
         if (! empty($data['content'])) {
             $content = $data['content'];
+            if (filled($content['media_disk_path'] ?? null)) {
+                $content['media_disk_path'] = AssertTenantStoragePath::handle(
+                    (string) $content['media_disk_path'],
+                    'training',
+                    $this->trainingDisk(),
+                    mustExist: true,
+                    attribute: 'content.media_disk_path',
+                );
+            }
             $course = Course::query()->create([
                 'title' => $content['title'],
                 'description' => $content['description'] ?? null,
@@ -490,11 +535,16 @@ class TrainingController extends Controller
                 'name' => $campaignName,
                 'type' => 'training',
                 'status' => 'draft',
+                'is_remedial' => $request->boolean('is_remedial'),
                 'course_id' => $course->id,
             ]);
 
             if ($shouldLaunch) {
-                $campaign = $train->handle($campaign, $targetIds);
+                $campaign = $train->handle(
+                    $campaign,
+                    $targetIds,
+                    array_map(intval(...), $data['group_ids'] ?? []),
+                );
             }
 
             $campaigns->push($campaign->load(['recipients', 'course.lessons']));
@@ -534,11 +584,13 @@ class TrainingController extends Controller
     {
         $data = $request->validate([
             'enrollment_id' => ['required', 'integer'],
+            'assignment_id' => ['sometimes', 'nullable', 'integer'],
             'progress' => ['required', 'integer', 'min:0', 'max:100'],
         ]);
 
+        $assignmentId = isset($data['assignment_id']) ? (int) $data['assignment_id'] : null;
         $enrollment = $this->ownedEnrollment($request, (int) $data['enrollment_id']);
-        $sync->markOpened($enrollment);
+        $sync->markOpened($enrollment, $assignmentId);
         $enrollment->forceFill([
             'progress' => $data['progress'],
             'status' => $data['progress'] >= 100 ? 'completed' : 'in_progress',
@@ -546,7 +598,7 @@ class TrainingController extends Controller
         ])->save();
 
         if ($data['progress'] >= 100) {
-            $sync->recompute($enrollment->fresh() ?? $enrollment);
+            $sync->recompute($enrollment->fresh() ?? $enrollment, $assignmentId);
         }
 
         PublishLive::metricsBundle(throttled: true);
@@ -567,12 +619,14 @@ class TrainingController extends Controller
             'watched_seconds' => ['sometimes', 'integer', 'min:0'],
             'completed' => ['sometimes', 'boolean'],
             'opened' => ['sometimes', 'boolean'],
+            'assignment_id' => ['sometimes', 'nullable', 'integer'],
         ]);
 
+        $assignmentId = isset($data['assignment_id']) ? (int) $data['assignment_id'] : null;
         $enrollment = $this->ownedEnrollment($request, (int) $data['enrollment_id'])->load('course.lessons');
         $lesson = Lesson::query()->where('course_id', $enrollment->course_id)->findOrFail($data['lesson_id']);
 
-        $sync->markOpened($enrollment);
+        $sync->markOpened($enrollment, $assignmentId);
 
         $row = LessonProgress::query()->firstOrNew([
             'enrollment_id' => $enrollment->id,
@@ -586,12 +640,13 @@ class TrainingController extends Controller
         $watched = max((int) $row->watched_seconds, (int) ($data['watched_seconds'] ?? 0));
         $pct = (int) ($data['progress_pct'] ?? $row->progress_pct ?? 0);
 
-        if ($lesson->content_type === 'video' && $lesson->duration_seconds && $watched > 0) {
+        $isTimedMedia = in_array($lesson->content_type, ['video', 'audio'], true);
+        if ($isTimedMedia && $lesson->duration_seconds && $watched > 0) {
             $pct = max($pct, (int) min(100, round(($watched / max(1, $lesson->duration_seconds)) * 100)));
         }
 
         $markComplete = $request->boolean('completed');
-        if ($lesson->content_type === 'video' && $pct >= 80) {
+        if ($isTimedMedia && $pct >= 80) {
             $markComplete = true;
         }
 
@@ -606,7 +661,10 @@ class TrainingController extends Controller
             'completed_at' => $pct >= 100 ? ($row->completed_at ?? now()) : null,
         ])->save();
 
-        $enrollment = $sync->recompute($enrollment->fresh(['course.lessons', 'course.quizzes', 'target']) ?? $enrollment);
+        $enrollment = $sync->recompute(
+            $enrollment->fresh(['course.lessons', 'course.quizzes', 'target']) ?? $enrollment,
+            $assignmentId,
+        );
 
         PublishLive::metricsBundle(throttled: true);
         if ($enrollment->target?->email) {
@@ -629,6 +687,7 @@ class TrainingController extends Controller
             'enrollment_id' => ['sometimes', 'integer'],
             'answers' => ['required', 'array'],
             'started_at' => ['nullable', 'date'],
+            'assignment_id' => ['sometimes', 'nullable', 'integer'],
         ]);
 
         $targetId = $this->ownedTargetId($request);
@@ -684,8 +743,12 @@ class TrainingController extends Controller
                 ->first();
         }
         if ($enrollment) {
-            $sync->markOpened($enrollment);
-            $enrollment = $sync->recompute($enrollment->fresh(['course.lessons', 'course.quizzes', 'target']) ?? $enrollment);
+            $assignmentId = isset($data['assignment_id']) ? (int) $data['assignment_id'] : null;
+            $sync->markOpened($enrollment, $assignmentId);
+            $enrollment = $sync->recompute(
+                $enrollment->fresh(['course.lessons', 'course.quizzes', 'target']) ?? $enrollment,
+                $assignmentId,
+            );
         }
 
         PublishLive::metricsBundle(throttled: true);
@@ -771,7 +834,7 @@ class TrainingController extends Controller
 
         $targetId = $this->ownedTargetId($request);
         if ($targetId === null) {
-            $this->abortWithoutLearnerProfile();
+            return response()->json(['data' => []]);
         }
         $courseId = $request->integer('course_id') ?: null;
 
@@ -1018,11 +1081,52 @@ class TrainingController extends Controller
     /**
      * @return array<string, mixed>
      */
+    private const UPLOAD_MIMETYPES = [
+        'video/mp4',
+        'video/webm',
+        'video/quicktime',
+        'video/x-matroska',
+        'audio/mpeg',
+        'audio/wav',
+        'audio/x-wav',
+        'audio/mp4',
+        'audio/ogg',
+        'application/pdf',
+        'text/plain',
+        'text/markdown',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ];
+
+    /** @var array<string, list<string>> */
+    private const UPLOAD_MIMES_BY_TYPE = [
+        'video' => [
+            'video/mp4',
+            'video/webm',
+            'video/quicktime',
+            'video/x-matroska',
+        ],
+        'audio' => [
+            'audio/mpeg',
+            'audio/wav',
+            'audio/x-wav',
+            'audio/mp4',
+            'audio/ogg',
+        ],
+        'document' => [
+            'application/pdf',
+            'text/plain',
+            'text/markdown',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        ],
+    ];
+
     private function validatedLesson(Request $request, bool $creating): array
     {
         $data = $request->validate([
             'title' => [$creating ? 'required' : 'sometimes', 'string', 'max:160'],
-            'content_type' => [$creating ? 'required' : 'sometimes', 'in:text,video,pdf'],
+            'content_type' => [$creating ? 'required' : 'sometimes', 'in:text,video,audio,document,pdf'],
             'body' => ['nullable', 'string'],
             'media_url' => ['nullable', 'string', 'max:2048'],
             'media_disk_path' => ['nullable', 'string', 'max:512'],
@@ -1032,6 +1136,20 @@ class TrainingController extends Controller
             'sort_order' => ['sometimes', 'integer', 'min:1'],
         ]);
 
+        if (($data['content_type'] ?? null) === 'pdf') {
+            $data['content_type'] = 'document';
+        }
+
+        if (array_key_exists('media_disk_path', $data) && filled($data['media_disk_path'])) {
+            $data['media_disk_path'] = AssertTenantStoragePath::handle(
+                (string) $data['media_disk_path'],
+                'training',
+                $this->trainingDisk(),
+                mustExist: true,
+                attribute: 'media_disk_path',
+            );
+        }
+
         $type = $data['content_type'] ?? 'text';
         if ($type === 'text' && $creating && blank($data['body'] ?? null)) {
             $data['body'] = '';
@@ -1040,8 +1158,48 @@ class TrainingController extends Controller
         return $data;
     }
 
+    private function assertUploadMimeMatchesContentType(string $contentType, string $mime): void
+    {
+        $allowed = self::UPLOAD_MIMES_BY_TYPE[$contentType] ?? [];
+        if ($mime === '' || ! in_array($mime, $allowed, true)) {
+            throw ValidationException::withMessages([
+                'file' => ['The uploaded file type does not match the selected content type.'],
+            ]);
+        }
+    }
+
     private function trainingDisk(): string
     {
         return (string) config('filesystems.training_disk', 'local');
+    }
+
+    private function streamTrainingFile(Lesson $model): BinaryFileResponse|StreamedResponse
+    {
+        $path = AssertTenantStoragePath::handle(
+            (string) $model->media_disk_path,
+            'training',
+            $this->trainingDisk(),
+            mustExist: true,
+            attribute: 'media_disk_path',
+        );
+        $filename = basename($path);
+        $headers = [
+            'Content-Type' => $model->media_mime ?: 'application/octet-stream',
+            'Content-Disposition' => 'inline; filename="'.$filename.'"',
+            'Accept-Ranges' => 'bytes',
+        ];
+
+        $disk = Storage::disk($this->trainingDisk());
+
+        try {
+            $fullPath = $disk->path($path);
+            if (is_string($fullPath) && is_file($fullPath)) {
+                return response()->file($fullPath, $headers);
+            }
+        } catch (\Throwable) {
+            // Remote disks may not expose a local path; fall back below.
+        }
+
+        return $disk->response($path, $filename, $headers);
     }
 }

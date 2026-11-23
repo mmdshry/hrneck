@@ -1,19 +1,27 @@
+import { getTranslations } from "next-intl/server";
 import { Suspense } from "react";
 import { HrneckWordmark } from "@/components/hrneck-wordmark";
+import { LanguageSwitcher } from "@/components/language-switcher";
 import { LinkButton } from "@/components/ui/link-button";
 import { MinimalLoader } from "@/components/ui/minimal-loader";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LoginForm } from "./login-form";
 
-export const metadata = {
-  title: "Sign in",
-  description: "Sign in to the HRNECK Training Portal with email and password.",
-};
+export async function generateMetadata() {
+  const t = await getTranslations("auth");
+  return {
+    title: t("signInTitle"),
+    description: t("signInMetaDescription"),
+  };
+}
 
-export default function LoginPage() {
+export default async function LoginPage() {
+  const t = await getTranslations("auth");
+
   return (
     <div className="mx-auto flex min-h-full w-full max-w-md flex-1 flex-col justify-center px-6 py-16">
-      <div className="mb-6 flex items-center justify-end">
+      <div className="mb-6 flex items-center justify-end gap-2">
+        <LanguageSwitcher />
         <ThemeToggle />
       </div>
       <HrneckWordmark className="h-8" />
@@ -22,10 +30,10 @@ export default function LoginPage() {
         style={{ borderTopColor: "var(--spark)" }}
       >
         <h1 className="font-[family-name:var(--font-display)] text-3xl tracking-tight">
-          Sign in
+          {t("signInTitle")}
         </h1>
         <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-          Use your MSP or organization credentials.
+          {t("signInDescription")}
           {process.env.NODE_ENV === "development"
             ? " Demo: admin@hrneck.test"
             : null}
@@ -35,7 +43,7 @@ export default function LoginPage() {
         </Suspense>
         <p className="mt-6 text-center text-sm text-[var(--muted-foreground)]">
           <LinkButton href="/" variant="link" size="sm">
-            Back to home
+            {t("backToHome")}
           </LinkButton>
         </p>
       </div>

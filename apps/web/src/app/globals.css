@@ -26,6 +26,8 @@
   /* Status only. Not a brand color. */
   --success: #047857;
   --success-foreground: #ffffff;
+  /* Inline text links (not filled buttons). Must stay ≥4.5:1 on background/card. */
+  --link: #083a6d;
   --space-xs: 0.25rem;
   --space-sm: 0.5rem;
   --space-md: 0.75rem;
@@ -63,6 +65,8 @@
   --ring: #2a73bc;
   --success: #34d399;
   --success-foreground: #064e3b;
+  /* Sky-300 on navy canvas ≈ 8.5:1 — do not reuse --primary for body links. */
+  --link: #93c5fd;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
   --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
@@ -86,6 +90,11 @@
   --color-ring: var(--ring);
   --color-brand: var(--brand);
   --color-spark: var(--spark);
+  --color-link: var(--link);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  /* Do NOT map --space-* onto --spacing-{xs,sm,md,lg,xl,2xl,3xl}:
+     Tailwind max-w-xl / max-w-2xl resolve through those names and collapse to 24–32px. */
   --font-sans: var(--font-sans);
   --font-display: var(--font-sans);
 }

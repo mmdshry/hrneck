@@ -1,9 +1,14 @@
+"use client";
+
+import { useTranslations } from "next-intl";
 import { LinkButton } from "@/components/ui/link-button";
 import { ProductMock } from "@/components/landing/product-mock";
 
 const brand = process.env.NEXT_PUBLIC_BRAND_SHORT ?? "HRNECK";
 
 export function LandingHero() {
+  const t = useTranslations("landing");
+
   return (
     <section
       className="relative overflow-hidden border-t-2"
@@ -19,18 +24,17 @@ export function LandingHero() {
             {brand}
           </p>
           <h1 className="max-w-xl font-[family-name:var(--font-display)] text-2xl leading-snug tracking-tight text-[var(--foreground)] md:text-3xl">
-            Security awareness training for MSPs and every client organization.
+            {t("heroTitle")}
           </h1>
           <p className="max-w-lg text-lg leading-relaxed text-[var(--muted-foreground)]">
-            Train people, run HR checklists, operate an ITIL service desk, and
-            measure risk — from one calm, modern workspace.
+            {t("heroBody")}
           </p>
           <div className="flex flex-wrap gap-3 pt-2">
             <LinkButton href="/login" variant="primary" size="lg">
-              Sign in
+              {t("signIn")}
             </LinkButton>
             <LinkButton href="#demo" variant="secondary" size="lg">
-              Request a demo
+              {t("requestDemo")}
             </LinkButton>
           </div>
         </div>

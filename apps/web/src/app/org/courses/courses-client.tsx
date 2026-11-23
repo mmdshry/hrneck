@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert } from "@/components/ui/alert";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import { Dialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,10 +31,17 @@ import {
 } from "@/lib/pagination";
 import { hasPermission, type SessionUser } from "@/lib/session";
 import { resolveTenant } from "@/lib/tenant";
-import { toastSuccess } from "@/lib/toast";
+import { toastSuccess, toastWarning, toastError } from "@/lib/toast";
 import {
+  documentKind,
   emptyLessonForm,
   emptyQuickContentForm,
+  isDocumentLesson,
+  isTimedMediaLesson,
+  isUploadableContentType,
+  lessonHasPreviewableMedia,
+  lessonMediaSrc,
+  mediaAcceptForContentType,
   uploadTrainingMedia,
   type Course,
   type Lesson,
@@ -73,6 +81,9 @@ function courseCells(course: Course): Record<string, string> {
 }
 
 export function CoursesClient() {
+  const t = useTranslations("org.courses");
+  const tCommon = useTranslations("common");
+  const tNav = useTranslations("nav");
   const tenant = resolveTenant();
   const channel = tenant ? orgLiveChannel(tenant, "training") : null;
   const [courses, setCourses] = useState<Course[]>([]);
@@ -96,7 +107,7 @@ export function CoursesClient() {
   const [quickForm, setQuickForm] = useState(emptyQuickContentForm);
   const [quickUpload, setQuickUpload] = useState<File | null>(null);
   const [createMode, setCreateMode] = useState<"course" | "quick">("course");
-  const [error, setError] = useState<string | null>(null);
+  const [previewLesson, setPreviewLesson] = useState<Lesson | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [confirmDeleteCourse, setConfirmDeleteCourse] = useState(false);
@@ -139,18 +150,18 @@ export function CoursesClient() {
       nextCoursesPerPage: number,
       nextFilters: Record<string, string>,
     ) => {
-      setError(null);
+      
       await ensureCsrf();
       const me = await fetchSessionUser();
       if (!me) {
-        setError("Sign in required to manage courses.");
+        toastWarning(t("signInRequired"));
         return;
       }
       setSession(me);
-      const t = resolveTenant();
+      const tenantSlug = resolveTenant();
       const courseRes = await api(
         `/api/v1/org/training/courses?${paginationQuery(nextCoursesPage, nextCoursesPerPage, nextFilters)}`,
-        { tenant: t },
+        { tenant: tenantSlug },
       );
       const coursesParsed = parsePaginatedResponse<Course>(courseRes, nextCoursesPerPage);
       setCourses(coursesParsed.data);
@@ -173,6 +184,12 @@ export function CoursesClient() {
   });
 
   useEffect(() => {
+    if (liveError) {
+      toastError(liveError);
+    }
+  }, [liveError]);
+
+  useEffect(() => {
     if (filtersKeyRef.current !== filtersKey) {
       filtersKeyRef.current = filtersKey;
       if (coursesPage !== 1) {
@@ -193,7 +210,7 @@ export function CoursesClient() {
     }
     void refreshFromApi(coursesPage, coursesPerPage, filters)
       .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : "Failed to load courses");
+        toastError(err instanceof Error ? err.message : t("failedLoad"));
       })
       .finally(() => setLoading(false));
   }, [
@@ -217,11 +234,11 @@ export function CoursesClient() {
 
   async function createCourse() {
     if (!title.trim()) {
-      setError("Course title is required.");
+      toastWarning(t("courseTitleRequired"));
       return;
     }
     setBusy(true);
-    setError(null);
+    
     try {
       await ensureCsrf();
       const res = await api<{ data: Course }>("/api/v1/org/training/courses", {
@@ -242,7 +259,7 @@ export function CoursesClient() {
       await afterMutation();
       setSelectedId(res.data.id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Create failed");
+      toastError(err instanceof Error ? err.message : tCommon("createFailed"));
     } finally {
       setBusy(false);
     }
@@ -250,11 +267,11 @@ export function CoursesClient() {
 
   async function createQuickContent() {
     if (!quickForm.title.trim()) {
-      setError("Content title is required.");
+      toastWarning(t("contentTitleRequired"));
       return;
     }
     setBusy(true);
-    setError(null);
+    
     try {
       await ensureCsrf();
       const tenant = resolveTenant();
@@ -263,10 +280,7 @@ export function CoursesClient() {
         media_mime?: string;
         media_size?: number;
       } = {};
-      if (
-        quickUpload &&
-        (quickForm.content_type === "video" || quickForm.content_type === "pdf")
-      ) {
+      if (quickUpload && isUploadableContentType(quickForm.content_type)) {
         mediaMeta = await uploadTrainingMedia(quickUpload, quickForm.content_type);
       }
 
@@ -298,7 +312,7 @@ export function CoursesClient() {
           media_mime: mediaMeta.media_mime ?? null,
           media_size: mediaMeta.media_size ?? null,
           duration_seconds:
-            quickForm.content_type === "video" && quickForm.duration_seconds
+            isTimedMediaLesson(quickForm) && quickForm.duration_seconds
               ? Number(quickForm.duration_seconds)
               : null,
         }),
@@ -310,7 +324,7 @@ export function CoursesClient() {
       await afterMutation();
       setSelectedId(courseRes.data.id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Create failed");
+      toastError(err instanceof Error ? err.message : tCommon("createFailed"));
     } finally {
       setBusy(false);
     }
@@ -319,11 +333,11 @@ export function CoursesClient() {
   async function addLesson() {
     if (!selected) return;
     if (!lessonForm.title.trim()) {
-      setError("Lesson title is required.");
+      toastWarning(t("lessonTitleRequired"));
       return;
     }
     setBusy(true);
-    setError(null);
+    
     try {
       await ensureCsrf();
       let mediaMeta: {
@@ -332,10 +346,7 @@ export function CoursesClient() {
         media_size?: number;
       } = {};
 
-      if (
-        uploadFile &&
-        (lessonForm.content_type === "video" || lessonForm.content_type === "pdf")
-      ) {
+      if (uploadFile && isUploadableContentType(lessonForm.content_type)) {
         mediaMeta = await uploadTrainingMedia(uploadFile, lessonForm.content_type);
       }
 
@@ -355,17 +366,17 @@ export function CoursesClient() {
           media_mime: mediaMeta.media_mime ?? null,
           media_size: mediaMeta.media_size ?? null,
           duration_seconds:
-            lessonForm.content_type === "video" && lessonForm.duration_seconds
+            isTimedMediaLesson(lessonForm) && lessonForm.duration_seconds
               ? Number(lessonForm.duration_seconds)
               : null,
         }),
       });
       setLessonForm(emptyLessonForm);
       setUploadFile(null);
-      toastSuccess("Lesson added.");
+      toastSuccess(t("lessonAdded"));
       await afterMutation();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Lesson create failed");
+      toastError(err instanceof Error ? err.message : t("lessonCreateFailed"));
     } finally {
       setBusy(false);
     }
@@ -374,17 +385,17 @@ export function CoursesClient() {
   async function deleteLesson(lessonId: number) {
     if (!selected) return;
     setBusy(true);
-    setError(null);
+    
     try {
       await ensureCsrf();
       await api(`/api/v1/org/training/courses/${selected.id}/lessons/${lessonId}`, {
         method: "DELETE",
         tenant: resolveTenant(),
       });
-      toastSuccess("Lesson deleted.");
+      toastSuccess(t("lessonDeleted"));
       await afterMutation();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Delete failed");
+      toastError(err instanceof Error ? err.message : tCommon("deleteFailed"));
     } finally {
       setBusy(false);
     }
@@ -393,18 +404,18 @@ export function CoursesClient() {
   async function deleteCourse() {
     if (!selected) return;
     setBusy(true);
-    setError(null);
+    
     try {
       await ensureCsrf();
       await api(`/api/v1/org/training/courses/${selected.id}`, {
         method: "DELETE",
         tenant: resolveTenant(),
       });
-      toastSuccess("Course deleted.");
+      toastSuccess(t("courseDeleted"));
       setSelectedId(null);
       await afterMutation();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Delete failed");
+      toastError(err instanceof Error ? err.message : tCommon("deleteFailed"));
       throw err;
     } finally {
       setBusy(false);
@@ -414,7 +425,7 @@ export function CoursesClient() {
   const courseColumns: Array<DataTableColumn<Course>> = [
     {
       id: "title",
-      header: "Title",
+      header: tCommon("titleLabel"),
       accessorKey: "title",
       sticky: true,
       cell: (course) => (
@@ -423,7 +434,7 @@ export function CoursesClient() {
     },
     {
       id: "duration_minutes",
-      header: "Minutes",
+      header: tCommon("minutes"),
       filter: "none",
       filterValue: (course) => course.duration_minutes,
       cell: (course) => course.duration_minutes,
@@ -437,42 +448,32 @@ export function CoursesClient() {
   return (
     <div className="mx-auto w-full min-w-0 max-w-5xl flex-1 px-4 py-8 sm:px-6">
       <PageHeader
-        title="Courses"
+        title={t("title")}
         description={
-          statusLabel
-            ? `Create courses, add article/video/PDF lessons, and manage the course library. · ${statusLabel}`
-            : "Create courses, add article/video/PDF lessons, and manage the course library."
+          statusLabel ? `${t("description")} · ${statusLabel}` : t("description")
         }
         actions={
           <div className="flex flex-wrap gap-2">
             <LinkButton href="/org/training" variant="secondary">
-              Training
+              {tNav("training")}
             </LinkButton>
             {canManageCampaigns ? (
               <LinkButton href="/org/training/campaigns" variant="secondary">
-                Campaigns
+                {tNav("campaigns")}
               </LinkButton>
             ) : null}
           </div>
         }
       />
 
-      {error ? (
-        <Alert className="mt-4" variant="destructive">
-          {error}
-        </Alert>
-      ) : null}
-      {liveError ? (
-        <Alert className="mt-4" variant="destructive">
-          {liveError}
-        </Alert>
-      ) : null}
+      
+      
 
       <Panel className="mt-6 space-y-4 p-5">
         <div>
-          <h2 className="text-lg font-medium">Create content</h2>
+          <h2 className="text-lg font-medium">{t("createContent")}</h2>
           <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-            Build a multi-lesson course, or create a one-lesson article/video/PDF.
+            {t("createContentHint")}
           </p>
         </div>
 
@@ -482,14 +483,14 @@ export function CoursesClient() {
             variant={createMode === "course" ? "default" : "secondary"}
             onClick={() => setCreateMode("course")}
           >
-            New course
+            {t("newCourse")}
           </Button>
           <Button
             type="button"
             variant={createMode === "quick" ? "default" : "secondary"}
             onClick={() => setCreateMode("quick")}
           >
-            New article / video
+            {t("newArticleVideo")}
           </Button>
         </div>
 
@@ -497,16 +498,16 @@ export function CoursesClient() {
           <div className="space-y-3">
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
-                <Label htmlFor="course-title">Title</Label>
+                <Label htmlFor="course-title">{tCommon("titleLabel")}</Label>
                 <Input
                   id="course-title"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Security fundamentals"
+                  placeholder={t("titlePlaceholder")}
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="course-duration">Duration (minutes)</Label>
+                <Label htmlFor="course-duration">{t("durationMinutes")}</Label>
                 <Input
                   id="course-duration"
                   type="number"
@@ -517,7 +518,7 @@ export function CoursesClient() {
               </div>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="course-description">Description</Label>
+              <Label htmlFor="course-description">{tCommon("descriptionLabel")}</Label>
               <Textarea
                 id="course-description"
                 value={description}
@@ -526,25 +527,25 @@ export function CoursesClient() {
               />
             </div>
             <Button type="button" onClick={() => void createCourse()} disabled={busy}>
-              Create course
+              {t("createCourse")}
             </Button>
           </div>
         ) : (
           <div className="space-y-3">
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
-                <Label htmlFor="quick-title">Title</Label>
+                <Label htmlFor="quick-title">{tCommon("titleLabel")}</Label>
                 <Input
                   id="quick-title"
                   value={quickForm.title}
                   onChange={(e) =>
                     setQuickForm((prev) => ({ ...prev, title: e.target.value }))
                   }
-                  placeholder="Password hygiene tip"
+                  placeholder={t("lessonTitlePlaceholder")}
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="quick-type">Type</Label>
+                <Label htmlFor="quick-type">{tCommon("type")}</Label>
                 <Select
                   id="quick-type"
                   value={quickForm.content_type}
@@ -555,14 +556,15 @@ export function CoursesClient() {
                     }))
                   }
                 >
-                  <option value="text">Text / article</option>
-                  <option value="video">Video</option>
-                  <option value="pdf">PDF</option>
+                  <option value="text">{t("textArticle")}</option>
+                  <option value="video">{t("video")}</option>
+                  <option value="audio">{t("audio")}</option>
+                  <option value="document">{t("document")}</option>
                 </Select>
               </div>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="quick-description">Description (optional)</Label>
+              <Label htmlFor="quick-description">{t("descriptionOptional")}</Label>
               <Input
                 id="quick-description"
                 value={quickForm.description}
@@ -573,7 +575,7 @@ export function CoursesClient() {
             </div>
             {quickForm.content_type === "text" ? (
               <div className="space-y-1">
-                <Label htmlFor="quick-body">Body</Label>
+                <Label htmlFor="quick-body">{tCommon("body")}</Label>
                 <Textarea
                   id="quick-body"
                   rows={4}
@@ -585,53 +587,53 @@ export function CoursesClient() {
               </div>
             ) : null}
             {quickForm.content_type === "video" ? (
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <Label htmlFor="quick-url">YouTube / Vimeo URL</Label>
-                  <Input
-                    id="quick-url"
-                    value={quickForm.media_url}
-                    onChange={(e) =>
-                      setQuickForm((prev) => ({ ...prev, media_url: e.target.value }))
-                    }
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="quick-duration">Duration (seconds)</Label>
-                  <Input
-                    id="quick-duration"
-                    type="number"
-                    min={0}
-                    value={quickForm.duration_seconds}
-                    onChange={(e) =>
-                      setQuickForm((prev) => ({
-                        ...prev,
-                        duration_seconds: e.target.value,
-                      }))
-                    }
-                  />
-                </div>
+              <div className="space-y-1">
+                <Label htmlFor="quick-url">{t("youtubeVimeoUrl")}</Label>
+                <Input
+                  id="quick-url"
+                  value={quickForm.media_url}
+                  onChange={(e) =>
+                    setQuickForm((prev) => ({ ...prev, media_url: e.target.value }))
+                  }
+                />
               </div>
             ) : null}
-            {quickForm.content_type === "video" || quickForm.content_type === "pdf" ? (
+            {isTimedMediaLesson(quickForm) ? (
+              <div className="space-y-1">
+                <Label htmlFor="quick-duration">{t("durationSeconds")}</Label>
+                <Input
+                  id="quick-duration"
+                  type="number"
+                  min={0}
+                  value={quickForm.duration_seconds}
+                  onChange={(e) =>
+                    setQuickForm((prev) => ({
+                      ...prev,
+                      duration_seconds: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+            ) : null}
+            {isUploadableContentType(quickForm.content_type) ? (
               <div className="space-y-1">
                 <Label htmlFor="quick-file">
-                  {quickForm.content_type === "pdf" ? "Upload PDF" : "Or upload video file"}
+                  {quickForm.content_type === "document"
+                    ? t("uploadDocument")
+                    : quickForm.content_type === "audio"
+                      ? t("uploadAudio")
+                      : t("uploadVideo")}
                 </Label>
                 <Input
                   id="quick-file"
                   type="file"
-                  accept={
-                    quickForm.content_type === "pdf"
-                      ? "application/pdf"
-                      : "video/mp4,video/webm,video/quicktime"
-                  }
+                  accept={mediaAcceptForContentType(quickForm.content_type)}
                   onChange={(e) => setQuickUpload(e.target.files?.[0] ?? null)}
                 />
               </div>
             ) : null}
             <Button type="button" onClick={() => void createQuickContent()} disabled={busy}>
-              Create content
+              {t("createContent")}
             </Button>
           </div>
         )}
@@ -640,19 +642,19 @@ export function CoursesClient() {
       <div className="mt-6 grid min-w-0 gap-4 lg:grid-cols-[minmax(20rem,28rem)_1fr]">
         <Panel className="min-w-0 p-4">
           <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
-            Course library
+            {t("libraryCaption")}
           </h2>
           <DataTable
             mode="server"
-            caption="Course library"
+            caption={t("libraryCaption")}
             columns={courseColumns}
             rows={courses}
             filterState={tableQuery.state}
             onFilterStateChange={tableQuery.setState}
             getRowId={(row) => row.id}
             onRowClick={(course) => setSelectedId(course.id)}
-            emptyTitle="No courses"
-            emptyDescription="Create a course to add lessons."
+            emptyTitle={t("noCourses")}
+            emptyDescription={t("noCoursesHint")}
             pagination={{
               page: coursesPage,
               perPage: coursesPerPage,
@@ -673,8 +675,11 @@ export function CoursesClient() {
                 <div>
                   <h2 className="text-lg font-medium">{selected.title}</h2>
                   <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-                    {selected.description || "No description"} · {selected.duration_minutes}{" "}
-                    min · {selected.lessons?.length ?? 0} lessons
+                    {selected.description || t("noDescription")} ·{" "}
+                    {t("courseMeta", {
+                      minutes: selected.duration_minutes,
+                      count: selected.lessons?.length ?? 0,
+                    })}
                   </p>
                 </div>
                 <Button
@@ -684,7 +689,7 @@ export function CoursesClient() {
                   disabled={busy}
                   onClick={() => setConfirmDeleteCourse(true)}
                 >
-                  Delete course
+                  {t("deleteCourse")}
                 </Button>
               </div>
 
@@ -698,27 +703,39 @@ export function CoursesClient() {
                       <p className="text-sm font-medium">{lesson.title}</p>
                       <p className="text-xs uppercase tracking-wide text-[var(--muted-foreground)]">
                         {lesson.content_type}
-                        {lesson.media_url ? " · external" : ""}
-                        {lesson.media_disk_path ? " · uploaded" : ""}
+                        {lesson.media_url ? ` · ${t("external")}` : ""}
+                        {lesson.media_disk_path ? ` · ${t("uploaded")}` : ""}
                       </p>
                     </div>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={() => void deleteLesson(lesson.id)}
-                      disabled={busy}
-                    >
-                      Delete
-                    </Button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {lessonHasPreviewableMedia(lesson) ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="min-h-0 px-2 py-1 text-xs"
+                          onClick={() => setPreviewLesson(lesson)}
+                        >
+                          {tCommon("preview")}
+                        </Button>
+                      ) : null}
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => void deleteLesson(lesson.id)}
+                        disabled={busy}
+                      >
+                        {tCommon("delete")}
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
 
               <div className="space-y-3 border-t border-[var(--border)] pt-4">
-                <h3 className="text-sm font-medium">Add lesson</h3>
+                <h3 className="text-sm font-medium">{t("addLesson")}</h3>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1">
-                    <Label htmlFor="lesson-title">Title</Label>
+                    <Label htmlFor="lesson-title">{tCommon("titleLabel")}</Label>
                     <Input
                       id="lesson-title"
                       value={lessonForm.title}
@@ -728,7 +745,7 @@ export function CoursesClient() {
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="lesson-type">Type</Label>
+                    <Label htmlFor="lesson-type">{tCommon("type")}</Label>
                     <Select
                       id="lesson-type"
                       value={lessonForm.content_type}
@@ -739,16 +756,17 @@ export function CoursesClient() {
                         }))
                       }
                     >
-                      <option value="text">Text / article</option>
-                      <option value="video">Video</option>
-                      <option value="pdf">PDF</option>
+                      <option value="text">{t("textArticle")}</option>
+                      <option value="video">{t("video")}</option>
+                      <option value="audio">{t("audio")}</option>
+                      <option value="document">{t("document")}</option>
                     </Select>
                   </div>
                 </div>
 
                 {lessonForm.content_type === "text" ? (
                   <div className="space-y-1">
-                    <Label htmlFor="lesson-body">Body</Label>
+                    <Label htmlFor="lesson-body">{tCommon("body")}</Label>
                     <Textarea
                       id="lesson-body"
                       rows={4}
@@ -761,62 +779,60 @@ export function CoursesClient() {
                 ) : null}
 
                 {lessonForm.content_type === "video" ? (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="space-y-1">
-                      <Label htmlFor="lesson-url">YouTube / Vimeo URL</Label>
-                      <Input
-                        id="lesson-url"
-                        value={lessonForm.media_url}
-                        onChange={(e) =>
-                          setLessonForm((prev) => ({
-                            ...prev,
-                            media_url: e.target.value,
-                          }))
-                        }
-                        placeholder="https://www.youtube.com/watch?v=…"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="lesson-duration">Duration (seconds)</Label>
-                      <Input
-                        id="lesson-duration"
-                        type="number"
-                        min={0}
-                        value={lessonForm.duration_seconds}
-                        onChange={(e) =>
-                          setLessonForm((prev) => ({
-                            ...prev,
-                            duration_seconds: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="lesson-url">{t("youtubeVimeoUrl")}</Label>
+                    <Input
+                      id="lesson-url"
+                      value={lessonForm.media_url}
+                      onChange={(e) =>
+                        setLessonForm((prev) => ({
+                          ...prev,
+                          media_url: e.target.value,
+                        }))
+                      }
+                      placeholder="https://www.youtube.com/watch?v=…"
+                    />
                   </div>
                 ) : null}
 
-                {lessonForm.content_type === "video" ||
-                lessonForm.content_type === "pdf" ? (
+                {isTimedMediaLesson(lessonForm) ? (
+                  <div className="space-y-1">
+                    <Label htmlFor="lesson-duration">{t("durationSeconds")}</Label>
+                    <Input
+                      id="lesson-duration"
+                      type="number"
+                      min={0}
+                      value={lessonForm.duration_seconds}
+                      onChange={(e) =>
+                        setLessonForm((prev) => ({
+                          ...prev,
+                          duration_seconds: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                ) : null}
+
+                {isUploadableContentType(lessonForm.content_type) ? (
                   <div className="space-y-1">
                     <Label htmlFor="lesson-file">
-                      {lessonForm.content_type === "pdf"
-                        ? "Upload PDF"
-                        : "Or upload video file"}
+                      {lessonForm.content_type === "document"
+                        ? t("uploadDocument")
+                        : lessonForm.content_type === "audio"
+                          ? t("uploadAudio")
+                          : t("uploadVideo")}
                     </Label>
                     <Input
                       id="lesson-file"
                       type="file"
-                      accept={
-                        lessonForm.content_type === "pdf"
-                          ? "application/pdf"
-                          : "video/mp4,video/webm,video/quicktime"
-                      }
+                      accept={mediaAcceptForContentType(lessonForm.content_type)}
                       onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
                     />
                   </div>
                 ) : null}
 
                 <Button type="button" onClick={() => void addLesson()} disabled={busy}>
-                  Add lesson
+                  {t("addLesson")}
                 </Button>
               </div>
 
@@ -825,7 +841,6 @@ export function CoursesClient() {
                 quizzes={selected.quizzes ?? (selected.quiz ? [selected.quiz] : [])}
                 busy={busy}
                 setBusy={setBusy}
-                setError={setError}
                 onChanged={async () => {
                   await afterMutation();
                 }}
@@ -833,8 +848,8 @@ export function CoursesClient() {
             </Panel>
           ) : (
             <EmptyState
-              title="Select a course"
-              description="Pick a course on the left or create one above."
+              title={t("selectCourse")}
+              description={t("selectCourseHint")}
             />
           )}
         </div>
@@ -843,15 +858,118 @@ export function CoursesClient() {
       <ConfirmDialog
         open={confirmDeleteCourse}
         onOpenChange={setConfirmDeleteCourse}
-        title="Delete course"
-        description={`Delete course “${selected?.title}”? Lessons will be removed.`}
-        confirmLabel="Delete course"
+        title={t("deleteCourse")}
+        description={t("deleteCourseConfirm", { title: selected?.title ?? "" })}
+        confirmLabel={t("deleteCourse")}
         variant="destructive"
         loading={busy}
         onConfirm={async () => {
           await deleteCourse();
         }}
       />
+
+      <Dialog
+        open={previewLesson != null}
+        onOpenChange={(open) => {
+          if (!open) setPreviewLesson(null);
+        }}
+        title={previewLesson?.title ?? t("lessonPreview")}
+        description={t("lessonPreviewHint")}
+        size="lg"
+        className="max-w-3xl"
+      >
+        {previewLesson ? (
+          <LessonPreviewBody lesson={previewLesson} tenant={tenant} />
+        ) : null}
+      </Dialog>
     </div>
+  );
+}
+
+function LessonPreviewBody({
+  lesson,
+  tenant,
+}: {
+  lesson: Lesson;
+  tenant: string;
+}) {
+  const t = useTranslations("org.courses");
+  const src = lessonMediaSrc(lesson, tenant);
+
+  if (lesson.content_type === "text") {
+    return (
+      <div className="prose prose-sm max-w-none whitespace-pre-wrap text-[var(--foreground)]">
+        {lesson.body?.trim() || t("noArticleBody")}
+      </div>
+    );
+  }
+
+  if (!src) {
+    return (
+      <p className="text-sm text-[var(--muted-foreground)]">
+        No media attached to this lesson.
+      </p>
+    );
+  }
+
+  if (lesson.content_type === "audio") {
+    return <audio key={src} controls className="w-full" src={src} />;
+  }
+
+  if (isDocumentLesson(lesson)) {
+    const kind = documentKind(lesson);
+    if (kind === "office") {
+      return (
+        <div className="space-y-3">
+          <p className="text-sm text-[var(--muted-foreground)]">
+            Word documents open via download; browsers cannot preview them inline.
+          </p>
+          <a
+            href={src}
+            download
+            className="text-sm font-medium text-[var(--foreground)] underline"
+          >
+            Download document
+          </a>
+        </div>
+      );
+    }
+    if (kind === "text") {
+      return (
+        <iframe
+          title={lesson.title}
+          src={src}
+          className="h-[70vh] w-full rounded-[var(--radius)] border border-[var(--border)] bg-[var(--background)]"
+        />
+      );
+    }
+    return (
+      <iframe
+        title={lesson.title}
+        src={src}
+        className="h-[70vh] w-full rounded-[var(--radius)] border border-[var(--border)] bg-[var(--background)]"
+      />
+    );
+  }
+
+  if (lesson.content_type === "video" && lesson.media_disk_path) {
+    return (
+      <video
+        key={src}
+        controls
+        className="max-h-[70vh] w-full rounded-[var(--radius)] bg-black"
+        src={src}
+      />
+    );
+  }
+
+  return (
+    <iframe
+      title={lesson.title}
+      src={src}
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+      allowFullScreen
+      className="aspect-video h-auto w-full rounded-[var(--radius)] border border-[var(--border)] bg-black"
+    />
   );
 }

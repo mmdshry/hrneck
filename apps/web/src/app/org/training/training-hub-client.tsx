@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert } from "@/components/ui/alert";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -31,7 +31,7 @@ import {
 } from "@/lib/pagination";
 import { hasPermission, type SessionUser } from "@/lib/session";
 import { resolveTenant } from "@/lib/tenant";
-import { toastSuccess } from "@/lib/toast";
+import { toastSuccess, toastWarning, toastError } from "@/lib/toast";
 import {
   AudiencePicker,
   type AudienceGroup,
@@ -89,6 +89,9 @@ function filterEnrollments(
 }
 
 export function TrainingHubClient() {
+  const t = useTranslations("org.training");
+  const tCommon = useTranslations("common");
+  const tNav = useTranslations("nav");
   const tenant = resolveTenant();
   const channel = tenant ? orgLiveChannel(tenant, "training") : null;
   const [pickerCourses, setPickerCourses] = useState<Course[]>([]);
@@ -107,7 +110,6 @@ export function TrainingHubClient() {
   const [filterGroupId, setFilterGroupId] = useState<number | "">("");
   const tableQuery = useDataTableQuery();
   const [expandedEnrollmentId, setExpandedEnrollmentId] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [exporting, setExporting] = useState<"csv" | "pdf" | "png" | null>(null);
   const [loading, setLoading] = useState(true);
@@ -167,35 +169,37 @@ export function TrainingHubClient() {
 
   const refreshFromApi = useCallback(
     async (nextEnrollmentsPage: number, nextEnrollmentsPerPage: number) => {
-      setError(null);
+      
       await ensureCsrf();
       const me = await fetchSessionUser();
       if (!me) {
-        setError("Sign in required to manage training.");
+        toastWarning(t("signInRequired"));
         return;
       }
       setSession(me);
-      const t = resolveTenant();
+      const tenantSlug = resolveTenant();
       const canTargets = hasPermission(me, "org.targets.manage");
       const canGroups = hasPermission(me, "org.groups.manage");
       const [pickerCourseRes, enrollmentRes, targetsRes, groupsRes] = await Promise.all([
-        api<{ data: Course[] }>("/api/v1/org/training/courses?per_page=100", { tenant: t }),
+        api<{ data: Course[] }>("/api/v1/org/training/courses?per_page=100", {
+          tenant: tenantSlug,
+        }),
         api(
           `/api/v1/org/training/enrollments?${paginationQuery(
             nextEnrollmentsPage,
             nextEnrollmentsPerPage,
             enrollmentFilters,
           )}`,
-          { tenant: t },
+          { tenant: tenantSlug },
         ),
         canTargets
           ? apiOptional<{ data: AudienceTarget[] }>("/api/v1/org/targets?per_page=500", {
-              tenant: t,
+              tenant: tenantSlug,
             })
           : Promise.resolve(null),
         canGroups
           ? apiOptional<{ data: AudienceGroup[] }>("/api/v1/org/groups?per_page=500", {
-              tenant: t,
+              tenant: tenantSlug,
             })
           : Promise.resolve(null),
       ]);
@@ -228,6 +232,12 @@ export function TrainingHubClient() {
   });
 
   useEffect(() => {
+    if (liveError) {
+      toastError(liveError);
+    }
+  }, [liveError]);
+
+  useEffect(() => {
     setEnrollmentsPage(1);
   }, [enrollmentFilters]);
 
@@ -238,7 +248,7 @@ export function TrainingHubClient() {
       if (filterGroupId !== "") {
         void refreshFromApi(enrollmentsPage, enrollmentsPerPage)
           .catch((err: unknown) => {
-            setError(err instanceof Error ? err.message : "Failed to load training");
+            toastError(err instanceof Error ? err.message : t("failedLoad"));
           })
           .finally(() => setLoading(false));
         return;
@@ -256,7 +266,7 @@ export function TrainingHubClient() {
     }
     void refreshFromApi(enrollmentsPage, enrollmentsPerPage)
       .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : "Failed to load training");
+        toastError(err instanceof Error ? err.message : t("failedLoad"));
       })
       .finally(() => setLoading(false));
   }, [
@@ -290,16 +300,16 @@ export function TrainingHubClient() {
 
   async function assignContent() {
     if (selectedTargetIds.length === 0 && selectedGroupIds.length === 0) {
-      setError("Select at least one target or group.");
+      toastWarning(t("selectTargetOrGroup"));
       return;
     }
     if (selectedCourseIds.length === 0) {
-      setError("Select at least one course to assign.");
+      toastWarning(t("selectCourse"));
       return;
     }
 
     setBusy(true);
-    setError(null);
+    
     try {
       await ensureCsrf();
       const tenant = resolveTenant();
@@ -337,21 +347,21 @@ export function TrainingHubClient() {
         await refreshFromApi(enrollmentsPage, enrollmentsPerPage);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Assign failed");
+      toastError(err instanceof Error ? err.message : t("assignFailed"));
     } finally {
       setBusy(false);
     }
   }
 
   async function exportReport(format: "csv" | "pdf" | "png") {
-    setError(null);
+    
     setExporting(format);
     try {
       if (format === "png") {
         const el = viewingReportRef.current;
-        if (!el) throw new Error("Report panel not ready");
+        if (!el) throw new Error(t("reportPanelNotReady"));
         await captureElementPng(el, "training-viewing-report.png");
-        toastSuccess("Viewing report PNG downloaded.");
+        toastSuccess(t("viewingReportDownloaded"));
         return;
       }
 
@@ -375,7 +385,7 @@ export function TrainingHubClient() {
       );
       toastSuccess(`Viewing report ${format.toUpperCase()} downloaded.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Export failed");
+      toastError(err instanceof Error ? err.message : tCommon("exportFailed"));
     } finally {
       setExporting(null);
     }
@@ -388,64 +398,53 @@ export function TrainingHubClient() {
   return (
     <div className="mx-auto w-full min-w-0 max-w-5xl flex-1 px-4 py-8 sm:px-6">
       <PageHeader
-        title="Training"
+        title={t("title")}
         description={
-          statusLabel
-            ? `Assign one or more courses to learners or groups, and review viewing detail. · ${statusLabel}`
-            : "Assign one or more courses to learners or groups, and review viewing detail."
+          statusLabel ? `${t("description")} · ${statusLabel}` : t("description")
         }
         actions={
           <div className="flex flex-wrap gap-2">
             <LinkButton href="/org/courses" variant="secondary">
-              Courses
+              {tNav("courses")}
             </LinkButton>
             {canManageCampaigns ? (
               <LinkButton href="/org/training/campaigns" variant="secondary">
-                Campaigns
+                {tNav("campaigns")}
               </LinkButton>
             ) : null}
-            <LinkButton href="/learn">Learner portal</LinkButton>
+            <LinkButton href="/learn">{tNav("learnerPortal")}</LinkButton>
           </div>
         }
       />
 
-      {error ? (
-        <Alert className="mt-4" variant="destructive">
-          {error}
-        </Alert>
-      ) : null}
-      {liveError ? (
-        <Alert className="mt-4" variant="destructive">
-          {liveError}
-        </Alert>
-      ) : null}
+      
+      
 
       <Panel className="mt-6 space-y-4 p-5">
         <div>
-          <h2 className="text-lg font-medium">Assign content</h2>
+          <h2 className="text-lg font-medium">{t("assignContent")}</h2>
           <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-            Select one or more existing courses, then send them to learners or groups.
-            Create and edit courses on the Courses page.
+            {t("assignContentHint")}
           </p>
         </div>
 
         <div className="space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <Label>Courses</Label>
+            <Label>{tNav("courses")}</Label>
             {pickerCourses.length > 0 ? (
               <Button type="button" variant="secondary" onClick={toggleAllCourses}>
                 {selectedCourseIds.length === pickerCourses.length
-                  ? "Clear all"
-                  : "Select all"}
+                  ? tCommon("clearAll")
+                  : tCommon("selectAll")}
               </Button>
             ) : null}
           </div>
           {pickerCourses.length === 0 ? (
             <EmptyState
-              title="No courses yet"
-              description="Create courses first, then return here to assign them."
+              title={t("noCoursesYet")}
+              description={t("noCoursesHint")}
               action={
-                <LinkButton href="/org/courses">Go to Courses</LinkButton>
+                <LinkButton href="/org/courses">{t("goToCourses")}</LinkButton>
               }
             />
           ) : (
@@ -466,8 +465,10 @@ export function TrainingHubClient() {
                     <span>
                       <span className="font-medium">{course.title}</span>
                       <span className="mt-0.5 block text-xs text-[var(--muted-foreground)]">
-                        {course.duration_minutes} min · {course.lessons?.length ?? 0}{" "}
-                        lessons
+                        {t("courseMetaShort", {
+                          minutes: course.duration_minutes,
+                          count: course.lessons?.length ?? 0,
+                        })}
                       </span>
                     </span>
                   </label>
@@ -477,7 +478,7 @@ export function TrainingHubClient() {
           )}
           {selectedCourseIds.length > 0 ? (
             <p className="text-xs text-[var(--muted-foreground)]">
-              {selectedCourseIds.length} course(s) selected
+              {t("coursesSelected", { count: selectedCourseIds.length })}
             </p>
           ) : null}
         </div>
@@ -492,7 +493,7 @@ export function TrainingHubClient() {
         />
 
         <Button type="button" onClick={() => void assignContent()} disabled={busy}>
-          Assign now
+          {t("assignNow")}
         </Button>
       </Panel>
 
@@ -500,9 +501,9 @@ export function TrainingHubClient() {
         <Panel className="space-y-4 p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 className="text-lg font-medium">Viewing report</h2>
+              <h2 className="text-lg font-medium">{t("viewingReport")}</h2>
               <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-                Per-learner lesson status, watch time, and open/complete timestamps.
+                {t("viewingReportHint")}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -512,7 +513,7 @@ export function TrainingHubClient() {
                 disabled={exporting !== null}
                 onClick={() => void exportReport("csv")}
               >
-                {exporting === "csv" ? "Exporting…" : "Export CSV"}
+                {exporting === "csv" ? tCommon("exporting") : tCommon("exportCsv")}
               </Button>
               <Button
                 type="button"
@@ -520,7 +521,7 @@ export function TrainingHubClient() {
                 disabled={exporting !== null}
                 onClick={() => void exportReport("pdf")}
               >
-                {exporting === "pdf" ? "Exporting…" : "Export PDF"}
+                {exporting === "pdf" ? tCommon("exporting") : tCommon("exportPdf")}
               </Button>
               <Button
                 type="button"
@@ -528,14 +529,14 @@ export function TrainingHubClient() {
                 disabled={exporting !== null}
                 onClick={() => void exportReport("png")}
               >
-                {exporting === "png" ? "Exporting…" : "Export PNG"}
+                {exporting === "png" ? tCommon("exporting") : tCommon("exportPng")}
               </Button>
             </div>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1">
-              <Label htmlFor="filter-course">Course</Label>
+              <Label htmlFor="filter-course">{tCommon("course")}</Label>
               <Select
                 id="filter-course"
                 value={filterCourseId === "" ? "" : String(filterCourseId)}
@@ -543,7 +544,7 @@ export function TrainingHubClient() {
                   setFilterCourseId(e.target.value ? Number(e.target.value) : "")
                 }
               >
-                <option value="">All courses</option>
+                <option value="">{t("allCourses")}</option>
                 {pickerCourses.map((course) => (
                   <option key={course.id} value={course.id}>
                     {course.title}
@@ -552,7 +553,7 @@ export function TrainingHubClient() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="filter-group">Group</Label>
+              <Label htmlFor="filter-group">{tCommon("group")}</Label>
               <Select
                 id="filter-group"
                 value={filterGroupId === "" ? "" : String(filterGroupId)}
@@ -560,7 +561,7 @@ export function TrainingHubClient() {
                   setFilterGroupId(e.target.value ? Number(e.target.value) : "")
                 }
               >
-                <option value="">All groups</option>
+                <option value="">{t("allGroups")}</option>
                 {groups.map((group) => (
                   <option key={group.id} value={group.id}>
                     {group.name}
@@ -572,13 +573,13 @@ export function TrainingHubClient() {
 
           <DataTable
             mode="server"
-            caption="Training enrollments"
+            caption={t("enrollmentsCaption")}
             filterState={tableQuery.state}
             onFilterStateChange={tableQuery.setState}
             rows={enrollments}
             getRowId={(row) => row.id}
-            emptyTitle="No enrollments yet"
-            emptyDescription="Assign courses or launch a training campaign."
+            emptyTitle={t("noEnrollmentsYet")}
+            emptyDescription={t("noEnrollmentsHint")}
             pagination={{
               page: enrollmentsPage,
               perPage: enrollmentsPerPage,
@@ -593,7 +594,7 @@ export function TrainingHubClient() {
               [
                 {
                   id: "learner",
-                  header: "Learner",
+                  header: tCommon("learner"),
                   sticky: true,
                   filterValue: (row) =>
                     `${row.target?.first_name ?? ""} ${row.target?.email ?? ""}`.trim(),
@@ -610,31 +611,31 @@ export function TrainingHubClient() {
                 },
                 {
                   id: "course",
-                  header: "Course",
+                  header: tCommon("course"),
                   filterValue: (row) => row.course?.title,
                   cell: (row) => row.course?.title ?? "—",
                 },
                 {
                   id: "status",
-                  header: "Status",
+                  header: tCommon("status"),
                   filter: "select",
                   filterOptions: [
-                    { label: "Assigned", value: "assigned" },
-                    { label: "In progress", value: "in_progress" },
-                    { label: "Completed", value: "completed" },
+                    { label: tCommon("assigned"), value: "assigned" },
+                    { label: tCommon("inProgress"), value: "in_progress" },
+                    { label: tCommon("completed"), value: "completed" },
                   ],
                   accessorKey: "status",
                   cell: (row) => <span className="capitalize">{row.status}</span>,
                 },
                 {
                   id: "progress",
-                  header: "Progress",
+                  header: tCommon("progress"),
                   filterValue: (row) => row.progress,
                   cell: (row) => `${row.progress}%`,
                 },
                 {
                   id: "opened",
-                  header: "Opened",
+                  header: tCommon("opened"),
                   filter: "none",
                   enableSorting: true,
                   filterValue: (row) => row.opened_at,
@@ -642,7 +643,7 @@ export function TrainingHubClient() {
                 },
                 {
                   id: "completed",
-                  header: "Completed",
+                  header: tCommon("completed"),
                   filter: "none",
                   enableSorting: true,
                   filterValue: (row) => row.completed_at,
@@ -650,16 +651,16 @@ export function TrainingHubClient() {
                 },
                 {
                   id: "quiz",
-                  header: "Quiz",
+                  header: tCommon("quiz"),
                   filter: "none",
                   cell: (row) =>
                     row.quiz_score != null
-                      ? `${row.quiz_score}%${row.quiz_passed ? " · pass" : ""}`
-                      : "—",
+                      ? `${row.quiz_score}%${row.quiz_passed ? t("quizPassedSuffix") : ""}`
+                      : tCommon("emDash"),
                 },
                 {
                   id: "lessons",
-                  header: "Lessons",
+                  header: tCommon("lessons"),
                   filter: "none",
                   enableSorting: false,
                   cell: (row) => {
@@ -673,7 +674,7 @@ export function TrainingHubClient() {
                           setExpandedEnrollmentId(expanded ? null : row.id)
                         }
                       >
-                        {expanded ? "Hide" : `Detail (${lessons.length})`}
+                        {expanded ? tCommon("hide") : tCommon("details")}
                       </Button>
                     );
                   },
@@ -701,22 +702,22 @@ export function TrainingHubClient() {
                 });
                 return (
                   <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--muted)]/30 p-3">
-                    <h4 className="mb-2 text-sm font-medium">Lesson progress</h4>
+                    <h4 className="mb-2 text-sm font-medium">{t("lessonProgressTitle")}</h4>
                     <DataTable
                       mode="client"
-                      caption="Lesson progress for enrollment"
+                      caption={t("lessonProgressTitle")}
                       rows={lessons}
                       getRowId={(lesson) => lesson.id}
-                      emptyTitle="No lessons on this course."
+                      emptyTitle={t("noLessonsOnCourse")}
                       columns={[
-                        { id: "title", header: "Lesson", accessorKey: "title", cell: (l) => l.title },
+                        { id: "title", header: tCommon("lesson"), accessorKey: "title", cell: (l) => l.title },
                         {
                           id: "content_type",
-                          header: "Type",
+                          header: tCommon("type"),
                           accessorKey: "content_type",
                           cell: (l) => l.content_type.toUpperCase(),
                         },
-                        { id: "status", header: "Status", accessorKey: "status", cell: (l) => l.status },
+                        { id: "status", header: tCommon("status"), accessorKey: "status", cell: (l) => l.status },
                         {
                           id: "progress_pct",
                           header: "%",
@@ -725,19 +726,19 @@ export function TrainingHubClient() {
                         },
                         {
                           id: "watched_seconds",
-                          header: "Watched (s)",
+                          header: tCommon("watchedSeconds"),
                           filterValue: (l) => l.watched_seconds,
                           cell: (l) => l.watched_seconds,
                         },
                         {
                           id: "opened_at",
-                          header: "Opened",
+                          header: tCommon("opened"),
                           filter: "none",
                           cell: (l) => formatTs(l.opened_at),
                         },
                         {
                           id: "completed_at",
-                          header: "Completed",
+                          header: tCommon("completed"),
                           filter: "none",
                           cell: (l) => formatTs(l.completed_at),
                         },

@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert } from "@/components/ui/alert";
+import { toastSuccess, toastError, toastInfo } from "@/lib/toast";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -64,39 +65,9 @@ type TrainingCampaignsPayload = {
   groups: AudienceGroup[];
 };
 
-const STATUS_OPTIONS = [
-  { label: "Draft", value: "draft" },
-  { label: "Scheduled", value: "scheduled" },
-  { label: "Running", value: "running" },
-  { label: "Completed", value: "completed" },
-  { label: "Cancelled", value: "cancelled" },
-  { label: "Archived", value: "archived" },
-];
-
 const CANCELABLE_STATUSES = new Set(["draft", "scheduled", "running"]);
 const ARCHIVE_VIA_DELETE = new Set(["running", "completed"]);
 const ARCHIVE_VIA_PATCH = new Set(["draft", "scheduled", "cancelled"]);
-
-function alertVariantForMessage(message: string): "destructive" | "success" | "default" {
-  const m = message.toLowerCase();
-  if (
-    /\b(fail|failed|error|invalid)\b/.test(m) ||
-    m.includes("load failed") ||
-    m.includes("create failed")
-  ) {
-    return "destructive";
-  }
-  if (
-    m.includes("launched") ||
-    m.includes("reminders queued") ||
-    m.includes("cancelled") ||
-    m.includes("archived")
-  ) {
-    return "success";
-  }
-  if (m.includes("select") || m.includes("no targets")) return "default";
-  return "default";
-}
 
 function matchesCells(
   q: string,
@@ -116,6 +87,16 @@ function matchesCells(
 }
 
 export function TrainingCampaignsClient() {
+  const t = useTranslations("org.campaigns");
+  const tCommon = useTranslations("common");
+  const statusOptions = [
+    { label: tCommon("draft"), value: "draft" },
+    { label: tCommon("scheduled"), value: "scheduled" },
+    { label: tCommon("running"), value: "running" },
+    { label: tCommon("completed"), value: "completed" },
+    { label: tCommon("cancelled"), value: "cancelled" },
+    { label: tCommon("archived"), value: "archived" },
+  ];
   const tenant = resolveTenant();
   const [dash, setDash] = useState<Dash | null>(null);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -130,7 +111,6 @@ export function TrainingCampaignsClient() {
   const [name, setName] = useState("");
   const [selectedTargetIds, setSelectedTargetIds] = useState<number[]>([]);
   const [selectedGroupIds, setSelectedGroupIds] = useState<number[]>([]);
-  const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const tableQuery = useDataTableQuery();
   const filters = useMemo(
@@ -200,22 +180,28 @@ export function TrainingCampaignsClient() {
   const refreshAuxiliary = useCallback(async () => {
     await ensureCsrf();
     const me = await fetchSessionUser();
-    const t = resolveTenant();
+    const tenantSlug = resolveTenant();
     const canCampaigns = me ? hasPermission(me, "org.campaigns.manage") : false;
     const canTargets = me ? hasPermission(me, "org.targets.manage") : false;
     const canGroups = me ? hasPermission(me, "org.groups.manage") : false;
     const [dashRes, coursesRes, targetsRes, groupsRes] = await Promise.all([
       canCampaigns
         ? apiOptional<{ data: Dash }>("/api/v1/org/campaigns/dashboard?type=training", {
-            tenant: t,
+            tenant: tenantSlug,
           })
         : Promise.resolve(null),
-      apiOptional(`/api/v1/org/training/courses?${paginationQuery(1, 100)}`, { tenant: t }),
+      apiOptional(`/api/v1/org/training/courses?${paginationQuery(1, 100)}`, {
+        tenant: tenantSlug,
+      }),
       canTargets
-        ? apiOptional(`/api/v1/org/targets?${paginationQuery(1, 500)}`, { tenant: t })
+        ? apiOptional(`/api/v1/org/targets?${paginationQuery(1, 500)}`, {
+            tenant: tenantSlug,
+          })
         : Promise.resolve(null),
       canGroups
-        ? apiOptional(`/api/v1/org/groups?${paginationQuery(1, 500)}`, { tenant: t })
+        ? apiOptional(`/api/v1/org/groups?${paginationQuery(1, 500)}`, {
+            tenant: tenantSlug,
+          })
         : Promise.resolve(null),
     ]);
     const coursesParsed = coursesRes
@@ -238,13 +224,13 @@ export function TrainingCampaignsClient() {
   const refreshCampaignsFromApi = useCallback(
     async (nextPage: number, nextPerPage: number, nextFilters: Record<string, string>) => {
       await ensureCsrf();
-      const t = resolveTenant();
+      const tenantSlug = resolveTenant();
       const campaignsRes = await api(
         `/api/v1/org/campaigns?${paginationQuery(nextPage, nextPerPage, {
           type: "training",
           ...nextFilters,
         })}`,
-        { tenant: t },
+        { tenant: tenantSlug },
       );
       const parsed = parsePaginatedResponse<Campaign>(campaignsRes, nextPerPage);
       setCampaigns(parsed.data);
@@ -262,7 +248,7 @@ export function TrainingCampaignsClient() {
   useEffect(() => {
     void refreshAuxiliary()
       .catch((err: unknown) => {
-        setMessage(err instanceof Error ? err.message : "Load failed");
+        toastError(err instanceof Error ? err.message : tCommon("loadFailed"));
       })
       .finally(() => setLoading(false));
   }, [refreshAuxiliary]);
@@ -286,7 +272,7 @@ export function TrainingCampaignsClient() {
       return;
     }
     void refreshCampaignsFromApi(page, perPage, filters).catch((err: unknown) => {
-      setMessage(err instanceof Error ? err.message : "Load failed");
+      toastError(err instanceof Error ? err.message : tCommon("loadFailed"));
     });
   }, [
     liveCampaigns,
@@ -309,14 +295,14 @@ export function TrainingCampaignsClient() {
   }
 
   async function createCampaign() {
-    setMessage(null);
+    
     try {
       if (selectedTargetIds.length === 0 && selectedGroupIds.length === 0) {
-        setMessage("Select at least one target or group.");
+        toastInfo(t("selectTargetOrGroup"));
         return;
       }
       await ensureCsrf();
-      const t = resolveTenant();
+      const tenantSlug = resolveTenant();
       const body: Record<string, unknown> = {
         name: name || `Training ${new Date().toISOString()}`,
         type: "training",
@@ -328,20 +314,20 @@ export function TrainingCampaignsClient() {
 
       await api("/api/v1/org/campaigns", {
         method: "POST",
-        tenant: t,
+        tenant: tenantSlug,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       setName("");
-      setMessage("Training campaign launched; reminders queued.");
+      toastSuccess(t("launched"));
       await refreshAfterMutation();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Create failed");
+      toastError(err instanceof Error ? err.message : tCommon("createFailed"));
     }
   }
 
   async function cancelCampaign(campaign: Campaign) {
-    setMessage(null);
+    
     try {
       await ensureCsrf();
       await api(`/api/v1/org/campaigns/${campaign.id}`, {
@@ -357,27 +343,27 @@ export function TrainingCampaignsClient() {
             )
           : prev,
       );
-      setMessage(`Campaign “${campaign.name}” cancelled.`);
+      toastSuccess(`Campaign “${campaign.name}” cancelled.`);
       await refreshAfterMutation();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Cancel failed");
+      toastError(err instanceof Error ? err.message : t("cancelFailed"));
     }
   }
 
   async function archiveCampaign(campaign: Campaign) {
-    setMessage(null);
+    
     try {
       await ensureCsrf();
-      const t = resolveTenant();
+      const tenantSlug = resolveTenant();
       if (ARCHIVE_VIA_DELETE.has(campaign.status)) {
         await api(`/api/v1/org/campaigns/${campaign.id}`, {
           method: "DELETE",
-          tenant: t,
+          tenant: tenantSlug,
         });
       } else {
         await api(`/api/v1/org/campaigns/${campaign.id}`, {
           method: "PATCH",
-          tenant: t,
+          tenant: tenantSlug,
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ status: "archived" }),
         });
@@ -389,32 +375,32 @@ export function TrainingCampaignsClient() {
             )
           : prev,
       );
-      setMessage(`Campaign “${campaign.name}” archived.`);
+      toastSuccess(`Campaign “${campaign.name}” archived.`);
       await refreshAfterMutation();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Archive failed");
+      toastError(err instanceof Error ? err.message : t("archiveFailed"));
     }
   }
 
   const columns: Array<DataTableColumn<Campaign>> = [
     {
       id: "name",
-      header: "Name",
+      header: tCommon("name"),
       accessorKey: "name",
       sticky: true,
       cell: (campaign) => campaign.name,
     },
     {
       id: "status",
-      header: "Status",
+      header: tCommon("status"),
       filter: "select",
-      filterOptions: STATUS_OPTIONS,
+      filterOptions: statusOptions,
       accessorKey: "status",
       cell: (campaign) => campaign.status,
     },
     {
       id: "course",
-      header: "Course",
+      header: tCommon("course"),
       filter: "none",
       filterValue: (campaign) => campaign.course?.title ?? "",
       enableSorting: false,
@@ -422,14 +408,14 @@ export function TrainingCampaignsClient() {
     },
     {
       id: "recipients",
-      header: "Assigned",
+      header: tCommon("assigned"),
       filter: "none",
       enableSorting: false,
       cell: (campaign) => campaign.recipients?.length ?? 0,
     },
     {
       id: "actions",
-      header: "Actions",
+      header: tCommon("actions"),
       filter: "none",
       enableSorting: false,
       enableGlobalFilter: false,
@@ -438,27 +424,27 @@ export function TrainingCampaignsClient() {
         const canArchive =
           ARCHIVE_VIA_DELETE.has(campaign.status) ||
           ARCHIVE_VIA_PATCH.has(campaign.status);
-        if (!canCancel && !canArchive) return "—";
+        if (!canCancel && !canArchive) return tCommon("emDash");
         return (
           <div className="flex flex-wrap items-center gap-2">
             {canCancel ? (
               <Button
                 type="button"
                 variant="outline"
-                className="min-h-0 px-2 py-1 text-xs"
+                size="compact"
                 onClick={() => void cancelCampaign(campaign)}
               >
-                Cancel
+                {tCommon("cancel")}
               </Button>
             ) : null}
             {canArchive ? (
               <Button
                 type="button"
                 variant="outline"
-                className="min-h-0 px-2 py-1 text-xs"
+                size="compact"
                 onClick={() => void archiveCampaign(campaign)}
               >
-                Archive
+                {tCommon("archive")}
               </Button>
             ) : null}
           </div>
@@ -474,18 +460,18 @@ export function TrainingCampaignsClient() {
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">
       <PageHeader
-        title="Training campaigns"
-        description="Assign courses to selected users or groups, track enrollment funnel."
+        title={t("title")}
+        description={t("description")}
         actions={
           <div className="flex flex-wrap gap-2">
             <span className="self-center text-sm text-[var(--muted-foreground)]">
-              {statusLabel ?? "Live"}
+              {statusLabel ?? tCommon("live")}
             </span>
             <LinkButton href="/org/courses" variant="secondary">
-              Course library
+              {t("courseLibrary")}
             </LinkButton>
             <LinkButton href="/learn" variant="secondary">
-              Open /learn
+              {t("openLearn")}
             </LinkButton>
           </div>
         }
@@ -493,12 +479,12 @@ export function TrainingCampaignsClient() {
       {dash ? (
         <dl className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           {[
-            ["Campaigns", dash.campaigns_total],
-            ["Enrollments", dash.enrollments_total ?? "—"],
-            ["In progress", dash.enrollments_in_progress ?? "—"],
-            ["Completed", dash.enrollments_completed ?? "—"],
-            ["Opened %", dash.opened_pct],
-            ["Completed %", dash.completed_pct],
+            [t("campaignsCaption"), dash.campaigns_total],
+            [t("enrollments"), dash.enrollments_total ?? tCommon("emDash")],
+            [tCommon("inProgress"), dash.enrollments_in_progress ?? tCommon("emDash")],
+            [tCommon("completed"), dash.enrollments_completed ?? tCommon("emDash")],
+            [t("openedPct"), dash.opened_pct],
+            [t("completedPct"), dash.completed_pct],
           ].map(([label, value]) => (
             <Panel key={String(label)} className="px-4 py-3">
               <dt className="text-xs uppercase tracking-wide text-[var(--muted-foreground)]">
@@ -510,28 +496,28 @@ export function TrainingCampaignsClient() {
         </dl>
       ) : (
         <p className="mt-8 text-sm text-[var(--muted-foreground)]">
-          {statusLabel ?? "Waiting for live dashboard…"}
+          {statusLabel ?? t("waitingLive")}
         </p>
       )}
 
       <Panel className="mt-8 space-y-4 p-5">
-        <h2 className="text-lg font-medium">Launch campaign</h2>
+        <h2 className="text-lg font-medium">{t("launchCampaign")}</h2>
         <div className="flex flex-wrap items-end gap-2">
           <div className="min-w-[200px] flex-1 space-y-1">
             <Label htmlFor="training-campaign-name" className="text-[var(--muted-foreground)]">
-              Name
+              {tCommon("name")}
             </Label>
             <Input
               id="training-campaign-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Q3 awareness"
+              placeholder={t("namePlaceholder")}
             />
           </div>
           {courses.length > 0 ? (
             <div className="min-w-[200px] flex-1 space-y-1">
               <Label htmlFor="training-course" className="text-[var(--muted-foreground)]">
-                Course
+                {tCommon("course")}
               </Label>
               <Select
                 id="training-course"
@@ -558,38 +544,30 @@ export function TrainingCampaignsClient() {
         />
 
         <Button type="button" onClick={() => void createCampaign()} disabled={courses.length === 0}>
-          Create campaign
+          {t("createCampaign")}
         </Button>
       </Panel>
 
       {courses.length === 0 && status === "live" ? (
         <EmptyState
           className="mt-4"
-          title="No courses available"
-          description="Add training content before launching a campaign."
+          title={t("noCoursesAvailable")}
+          description={t("noCoursesHint")}
         />
       ) : null}
-      {message ? (
-        <Alert className="mt-4" variant={alertVariantForMessage(message)}>
-          {message}
-        </Alert>
-      ) : null}
-      {liveError ? (
-        <Alert className="mt-4" variant="destructive">
-          {liveError}
-        </Alert>
-      ) : null}
+      
+      
       <DataTable
         className="mt-8"
         mode="server"
-        caption="Training campaigns"
+        caption={t("campaignsCaption")}
         columns={columns}
         rows={campaigns}
         filterState={tableQuery.state}
         onFilterStateChange={tableQuery.setState}
         getRowId={(row) => row.id}
-        emptyTitle="No training campaigns yet"
-        emptyDescription="Create a campaign to assign a course to selected employees or groups."
+        emptyTitle={t("noCampaignsYet")}
+        emptyDescription={t("noCampaignsHint")}
         pagination={{
           page,
           perPage,

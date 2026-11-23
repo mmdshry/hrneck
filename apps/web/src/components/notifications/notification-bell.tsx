@@ -36,6 +36,7 @@ export function NotificationBell({
   const [unread, setUnread] = useState(0);
   const [userId, setUserId] = useState<number | null>(null);
   const [tenant, setTenant] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
   const onInbox = pathname === INBOX_PATH || pathname.startsWith(`${INBOX_PATH}/`);
 
   const channel = useMemo(
@@ -66,18 +67,33 @@ export function NotificationBell({
         if (!session) {
           setUnread(0);
           setUserId(null);
+          setTenant(null);
+          setReady(true);
           return;
         }
         setUserId(session.id);
-        const t = resolveTenant() || session.tenant_id;
-        if (!t) return;
+        // Platform staff on /msp may still have a leftover localStorage tenant;
+        // only fetch when they have a real org membership or are acting in a tenant.
+        const t = session.acting_in_tenant
+          ? (session.staff_tenant_id ?? resolveTenant())
+          : session.is_platform_staff
+            ? null
+            : (session.tenant_id ?? resolveTenant());
+        if (!t) {
+          setTenant(null);
+          setUnread(0);
+          setReady(true);
+          return;
+        }
         setTenant(t);
         const res = await api<NotificationsResponse>(
           "/api/v1/org/notifications?per_page=1",
           { tenant: t },
         );
         setUnread(res.meta.unread_count);
+        setReady(true);
       } catch {
+        setReady(true);
         /* keep last good state */
       }
     })();
@@ -131,6 +147,10 @@ export function NotificationBell({
       : unread === 1
         ? "1 unread notification"
         : `${unread} unread notifications`;
+
+  if (ready && !tenant) {
+    return null;
+  }
 
   return (
     <div className={cn("relative", className)}>

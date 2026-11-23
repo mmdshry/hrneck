@@ -14,6 +14,28 @@ test('raster images are converted to webp', function () {
         ->and(substr($result['contents'], 0, 4))->toBe('RIFF');
 });
 
+test('palette png images are converted to webp', function () {
+    $image = imagecreate(16, 16);
+    expect($image)->not->toBeFalse();
+    $bg = imagecolorallocate($image, 8, 58, 109);
+    imagefilledrectangle($image, 0, 0, 15, 15, $bg);
+
+    $path = tempnam(sys_get_temp_dir(), 'palette').'.png';
+    imagepng($image, $path);
+    imagedestroy($image);
+
+    $file = new UploadedFile($path, 'logo.png', 'image/png', null, true);
+    $result = app(ConvertUploadedImageToWebp::class)->handle($file);
+
+    expect($result['extension'])->toBe('webp')
+        ->and($result['mime'])->toBe('image/webp')
+        ->and($result['converted'])->toBeTrue()
+        ->and($result['contents'])->not->toBe('')
+        ->and(substr($result['contents'], 0, 4))->toBe('RIFF');
+
+    @unlink($path);
+});
+
 test('jpeg images are converted to webp', function () {
     $file = UploadedFile::fake()->image('photo.jpg', 24, 24);
     $result = app(ConvertUploadedImageToWebp::class)->handle($file);

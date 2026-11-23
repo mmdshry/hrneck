@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowDown, ArrowUp, ArrowUpDown, Filter, Search, X } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import type {
@@ -80,13 +81,14 @@ function FilterControls<T>({
   onColumnFilter: (id: string, value: string) => void;
   compact?: boolean;
 }) {
+  const t = useTranslations("common");
   const filterable = columns.filter((c) => (c.filter ?? "text") !== "none");
   return (
     <div className={cn("grid gap-3", compact ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-2")}>
       {filterable.map((column) => {
         const variant = column.filter ?? "text";
         const value = state.columnFilters[column.id] ?? "";
-        const label = `Filter ${column.header}`;
+        const label = t("filterColumn", { header: column.header });
         if (variant === "select") {
           return (
             <label key={column.id} className="space-y-1 text-sm">
@@ -97,7 +99,7 @@ function FilterControls<T>({
                 onChange={(e) => onColumnFilter(column.id, e.target.value)}
                 className="min-h-9"
               >
-                <option value="">All</option>
+                <option value="">{t("all")}</option>
                 {(column.filterOptions ?? []).map((opt) => (
                   <option key={opt.value} value={opt.value}>
                     {opt.label}
@@ -114,7 +116,10 @@ function FilterControls<T>({
               aria-label={label}
               value={value}
               onChange={(e) => onColumnFilter(column.id, e.target.value)}
-              placeholder={column.filterPlaceholder ?? `Filter ${column.header.toLowerCase()}…`}
+              placeholder={
+                column.filterPlaceholder ??
+                t("filterColumnPlaceholder", { header: column.header.toLowerCase() })
+              }
               className="min-h-9"
             />
           </label>
@@ -132,8 +137,8 @@ export function DataTable<T extends object>({
   onFilterStateChange,
   getRowId,
   caption,
-  emptyTitle = "No rows yet.",
-  emptyFilteredTitle = "No results for filters",
+  emptyTitle,
+  emptyFilteredTitle,
   emptyDescription,
   toolbarExtra,
   pagination,
@@ -160,8 +165,12 @@ export function DataTable<T extends object>({
   className?: string;
   stickyFirstColumn?: boolean;
 }) {
+  const t = useTranslations("common");
   const [internalState, setInternalState] = useState<DataTableFilterState>(emptyFilterState);
   const [filtersOpen, setFiltersOpen] = useState(false);
+
+  const resolvedEmptyTitle = emptyTitle ?? t("noRows");
+  const resolvedEmptyFilteredTitle = emptyFilteredTitle ?? t("noResults");
 
   const state = filterState ?? internalState;
   const setState = (next: DataTableFilterState) => {
@@ -227,10 +236,16 @@ export function DataTable<T extends object>({
   function renderFilterCell(column: DataTableColumn<T>) {
     const variant = column.filter ?? "text";
     if (variant === "none") {
-      return <div className="h-9" aria-hidden />;
+      return (
+        <div className="flex min-h-9 items-center">
+          <span className="sr-only">
+            {t("filterColumn", { header: column.header })}
+          </span>
+        </div>
+      );
     }
     const value = state.columnFilters[column.id] ?? "";
-    const label = `Filter ${column.header}`;
+    const label = t("filterColumn", { header: column.header });
     if (variant === "select") {
       return (
         <Select
@@ -239,7 +254,7 @@ export function DataTable<T extends object>({
           onChange={(e) => setColumnFilter(column.id, e.target.value)}
           className="min-h-9 min-w-[6rem] text-xs"
         >
-          <option value="">All</option>
+          <option value="">{t("all")}</option>
           {(column.filterOptions ?? []).map((opt) => (
             <option key={opt.value} value={opt.value}>
               {opt.label}
@@ -253,7 +268,10 @@ export function DataTable<T extends object>({
         aria-label={label}
         value={value}
         onChange={(e) => setColumnFilter(column.id, e.target.value)}
-        placeholder={column.filterPlaceholder ?? "Filter…"}
+        placeholder={
+          column.filterPlaceholder ??
+          t("filterColumnPlaceholder", { header: column.header })
+        }
         className="min-h-9 min-w-[6rem] text-xs"
       />
     );
@@ -281,10 +299,10 @@ export function DataTable<T extends object>({
               aria-hidden
             />
             <Input
-              aria-label="Search table"
+              aria-label={t("searchTable")}
               value={state.q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search…"
+              placeholder={t("searchPlaceholder")}
               className="min-h-11 pl-9"
             />
           </div>
@@ -296,12 +314,13 @@ export function DataTable<T extends object>({
             onClick={() => setFiltersOpen(true)}
           >
             <Filter className="size-4" aria-hidden />
-            Filters{activeCount > 0 ? ` (${activeCount})` : ""}
+            {t("filters")}
+            {activeCount > 0 ? ` (${activeCount})` : ""}
           </Button>
           {hasFilters ? (
             <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>
               <X className="size-4" aria-hidden />
-              Clear
+              {t("clear")}
             </Button>
           ) : null}
         </div>
@@ -312,7 +331,7 @@ export function DataTable<T extends object>({
         <div className="flex flex-wrap gap-2" aria-live="polite">
           {state.q.trim() ? (
             <span className="inline-flex items-center gap-1 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--muted)]/40 px-2 py-1 text-xs text-[var(--foreground)]">
-              Search: {state.q.trim()}
+              {t("search")}: {state.q.trim()}
             </span>
           ) : null}
           {Object.entries(state.columnFilters).map(([id, value]) => {
@@ -332,10 +351,10 @@ export function DataTable<T extends object>({
 
       {showEmpty ? (
         <EmptyState
-          title={hasFilters ? emptyFilteredTitle : emptyTitle}
+          title={hasFilters ? resolvedEmptyFilteredTitle : resolvedEmptyTitle}
           description={
             emptyDescription ??
-            (hasFilters ? "Try clearing search or column filters." : undefined)
+            (hasFilters ? t("tryClearingFilters") : undefined)
           }
         />
       ) : (
@@ -360,7 +379,7 @@ export function DataTable<T extends object>({
                       {sortable ? (
                         <button
                           type="button"
-                          className="inline-flex items-center gap-1 uppercase hover:text-[var(--foreground)]"
+                          className="inline-flex min-h-11 items-center gap-1 uppercase hover:text-[var(--foreground)]"
                           onClick={() => toggleSort(column.id)}
                         >
                           {column.header}
@@ -454,16 +473,16 @@ export function DataTable<T extends object>({
       <Dialog
         open={filtersOpen}
         onOpenChange={setFiltersOpen}
-        title="Column filters"
-        description="Filter this table by column."
+        title={t("columnFilters")}
+        description={t("columnFiltersDescription")}
         size="md"
         footer={
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" onClick={clearFilters}>
-              Clear
+              {t("clear")}
             </Button>
             <Button type="button" onClick={() => setFiltersOpen(false)}>
-              Done
+              {t("done")}
             </Button>
           </div>
         }

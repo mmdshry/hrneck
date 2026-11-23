@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Models\TenantMembership;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
@@ -31,6 +32,27 @@ class UserFactory extends Factory
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
         ];
+    }
+
+    public function configure(): static
+    {
+        return $this->afterCreating(function (User $user): void {
+            if ($user->tenant_id === null) {
+                return;
+            }
+
+            TenantMembership::query()->firstOrCreate(
+                [
+                    'user_id' => $user->id,
+                    'tenant_id' => $user->tenant_id,
+                ],
+                [
+                    'department_id' => $user->department_id,
+                    'department' => $user->department,
+                    'disabled_at' => null,
+                ],
+            );
+        });
     }
 
     /**

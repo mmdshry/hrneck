@@ -1,7 +1,8 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert } from "@/components/ui/alert";
+import { toastSuccess, toastError } from "@/lib/toast";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
@@ -44,21 +45,6 @@ type GroupsPayload = {
   data: Group[];
 };
 
-function alertVariantForMessage(message: string): "destructive" | "success" | "default" {
-  const m = message.toLowerCase();
-  if (
-    /\b(fail|failed|error|invalid|unauthorized|rejected|denied)\b/.test(m) ||
-    m.includes("load failed") ||
-    m.includes("group failed")
-  ) {
-    return "destructive";
-  }
-  if (/\b(created|saved|updated|deleted)\b/.test(m) || m.includes("group created")) {
-    return "success";
-  }
-  return "default";
-}
-
 function toggleId(ids: number[], id: number): number[] {
   return ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id];
 }
@@ -93,6 +79,8 @@ function matchesCells(
 }
 
 export function GroupsClient() {
+  const t = useTranslations("org.groups");
+  const tCommon = useTranslations("common");
   const tenant = resolveTenant();
   const channel = tenant ? orgLiveChannel(tenant, "groups") : null;
   const [groups, setGroups] = useState<Group[]>([]);
@@ -101,7 +89,6 @@ export function GroupsClient() {
   const [groupsPage, setGroupsPage] = useState(1);
   const [groupsPerPage, setGroupsPerPage] = useState<PageSize>(DEFAULT_PAGE_SIZE);
   const [targets, setTargets] = useState<Target[]>([]);
-  const [message, setMessage] = useState<string | null>(null);
   const [pendingDeleteGroup, setPendingDeleteGroup] = useState<Group | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<Group | null>(null);
@@ -155,9 +142,9 @@ export function GroupsClient() {
       if (!me) {
         return;
       }
-      const t = resolveTenant();
+      const tenantSlug = resolveTenant();
       const g = await api(`/api/v1/org/groups?${paginationQuery(nextPage, nextPerPage, nextFilters)}`, {
-        tenant: t,
+        tenant: tenantSlug,
       });
       const groupsParsed = parsePaginatedResponse<Group>(g, nextPerPage);
       setGroups(groupsParsed.data);
@@ -168,8 +155,10 @@ export function GroupsClient() {
   );
 
   const loadTargetsForPicker = useCallback(async () => {
-    const t = resolveTenant();
-    const res = await api(`/api/v1/org/targets?${paginationQuery(1, 500)}`, { tenant: t });
+    const tenantSlug = resolveTenant();
+    const res = await api(`/api/v1/org/targets?${paginationQuery(1, 500)}`, {
+      tenant: tenantSlug,
+    });
     const parsed = parsePaginatedResponse<Target>(res, 500);
     setTargets(parsed.data);
   }, []);
@@ -187,7 +176,7 @@ export function GroupsClient() {
         if (!me) return;
         await loadTargetsForPicker();
       } catch (err: unknown) {
-        setMessage(err instanceof Error ? err.message : "Load failed");
+        toastError(err instanceof Error ? err.message : tCommon("loadFailed"));
       }
     })();
   }, [loadTargetsForPicker]);
@@ -213,7 +202,7 @@ export function GroupsClient() {
     }
     void refreshGroupsFromApi(groupsPage, groupsPerPage, filters)
       .catch((err: unknown) => {
-        setMessage(err instanceof Error ? err.message : "Load failed");
+        toastError(err instanceof Error ? err.message : tCommon("loadFailed"));
       })
       .finally(() => setLoading(false));
   }, [
@@ -262,11 +251,11 @@ export function GroupsClient() {
 
   async function saveGroup(event: FormEvent) {
     event.preventDefault();
-    setMessage(null);
+    
     setSaving(true);
     try {
       await ensureCsrf();
-      const t = resolveTenant();
+      const tenantSlug = resolveTenant();
       const payload = {
         name: groupName.trim(),
         target_ids: selectedTargetIds,
@@ -274,19 +263,19 @@ export function GroupsClient() {
       if (editingGroup) {
         await api(`/api/v1/org/groups/${editingGroup.id}`, {
           method: "PATCH",
-          tenant: t,
+          tenant: tenantSlug,
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-        setMessage("Group updated.");
+        toastSuccess(t("groupUpdated"));
       } else {
         await api("/api/v1/org/groups", {
           method: "POST",
-          tenant: t,
+          tenant: tenantSlug,
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-        setMessage("Group created.");
+        toastSuccess(t("groupCreated"));
         setGroupsPage(1);
       }
       setModalOpen(false);
@@ -296,24 +285,24 @@ export function GroupsClient() {
       setMemberQuery("");
       await afterMutation(editingGroup ? groupsPage : 1);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Group failed");
+      toastError(err instanceof Error ? err.message : t("groupFailed"));
     } finally {
       setSaving(false);
     }
   }
 
   async function deleteGroup(group: Group) {
-    setMessage(null);
+    
     try {
       await ensureCsrf();
       await api(`/api/v1/org/groups/${group.id}`, {
         method: "DELETE",
         tenant: resolveTenant(),
       });
-      setMessage("Group deleted.");
+      toastSuccess(t("groupDeleted"));
       await afterMutation();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Delete failed");
+      toastError(err instanceof Error ? err.message : tCommon("deleteFailed"));
       throw err;
     }
   }
@@ -321,21 +310,21 @@ export function GroupsClient() {
   const columns: Array<DataTableColumn<Group>> = [
     {
       id: "name",
-      header: "Name",
+      header: tCommon("name"),
       accessorKey: "name",
       sticky: true,
       cell: (group) => group.name,
     },
     {
       id: "targets_count",
-      header: "Members",
+      header: tCommon("members"),
       filter: "none",
       filterValue: (group) => group.targets_count ?? group.target_ids?.length ?? 0,
       cell: (group) => group.targets_count ?? group.target_ids?.length ?? 0,
     },
     {
       id: "actions",
-      header: "Actions",
+      header: tCommon("actions"),
       filter: "none",
       enableSorting: false,
       enableGlobalFilter: false,
@@ -344,7 +333,7 @@ export function GroupsClient() {
           <Button
             type="button"
             variant="outline"
-            className="min-h-0 px-2 py-1 text-xs"
+            size="compact"
             onClick={() => openEditModal(group)}
           >
             Edit
@@ -352,7 +341,7 @@ export function GroupsClient() {
           <Button
             type="button"
             variant="outline"
-            className="min-h-0 px-2 py-1 text-xs"
+            size="compact"
             onClick={() => setPendingDeleteGroup(group)}
           >
             Delete
@@ -369,39 +358,28 @@ export function GroupsClient() {
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">
       <PageHeader
-        title="Groups"
-        description={
-          statusLabel ??
-          "Organize employees into audience groups for campaigns and assignments."
-        }
+        title={t("title")}
+        description={statusLabel ?? t("description")}
         actions={
           <Button type="button" onClick={openCreateModal}>
-            Create group
+            {t("createGroup")}
           </Button>
         }
       />
-      {message ? (
-        <Alert className="mt-4" variant={alertVariantForMessage(message)}>
-          {message}
-        </Alert>
-      ) : null}
-      {liveError ? (
-        <Alert className="mt-4" variant="destructive">
-          {liveError}
-        </Alert>
-      ) : null}
+      
+      
 
       <section className="mt-10">
         <DataTable
           mode="server"
-          caption="Groups"
+          caption={t("groupsCaption")}
           columns={columns}
           rows={groups}
           filterState={tableQuery.state}
           onFilterStateChange={tableQuery.setState}
           getRowId={(row) => row.id}
-          emptyTitle="No groups yet"
-          emptyDescription="Create a group and select members from your employees."
+          emptyTitle={t("noGroupsYet")}
+          emptyDescription={t("noGroupsHint")}
           pagination={{
             page: groupsPage,
             perPage: groupsPerPage,
@@ -421,8 +399,8 @@ export function GroupsClient() {
           if (!open) closeModal();
           else setModalOpen(true);
         }}
-        title={editingGroup ? "Edit group" : "Create group"}
-        description="Choose a name and select the employees who belong to this group."
+        title={editingGroup ? t("editGroup") : t("createGroup")}
+        description={t("formHint")}
         size="lg"
         className="max-w-2xl"
         dismissible={!saving}
@@ -432,7 +410,7 @@ export function GroupsClient() {
               Cancel
             </Button>
             <Button type="submit" form="group-form" disabled={saving || !groupName.trim()}>
-              {saving ? "Saving…" : editingGroup ? "Save changes" : "Create group"}
+              {saving ? tCommon("saving") : editingGroup ? tCommon("saveChanges") : t("createGroup")}
             </Button>
           </>
         }
@@ -471,23 +449,23 @@ export function GroupsClient() {
                 }}
               >
                 {filteredTargets.length > 0 &&
-                filteredTargets.every((t) => selectedTargetIds.includes(t.id))
-                  ? "Clear"
-                  : "Select all"}
+                filteredTargets.every((row) => selectedTargetIds.includes(row.id))
+                  ? tCommon("clear")
+                  : tCommon("selectAll")}
               </button>
             </div>
             <Input
               value={memberQuery}
               onChange={(e) => setMemberQuery(e.target.value)}
-              placeholder="Search employees…"
-              aria-label="Search employees"
+              placeholder={tCommon("searchEmployeesPlaceholder")}
+              aria-label={tCommon("searchEmployees")}
             />
             <div className="max-h-64 space-y-1 overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] p-2">
               {filteredTargets.length === 0 ? (
                 <p className="px-1 py-2 text-sm text-[var(--muted-foreground)]">
                   {targets.length === 0
-                    ? "No employees available. Import people on the Employees page first."
-                    : "No employees match your search."}
+                    ? t("noEmployeesAvailable")
+                    : t("noEmployeesMatch")}
                 </p>
               ) : (
                 filteredTargets.map((target) => (
@@ -519,9 +497,9 @@ export function GroupsClient() {
         onOpenChange={(open) => {
           if (!open) setPendingDeleteGroup(null);
         }}
-        title="Delete group"
+        title={t("deleteGroup")}
         description={`Delete group ${pendingDeleteGroup?.name}?`}
-        confirmLabel="Delete"
+        confirmLabel={tCommon("delete")}
         variant="destructive"
         onConfirm={async () => {
           if (!pendingDeleteGroup) return;

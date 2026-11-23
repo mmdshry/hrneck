@@ -1,3 +1,4 @@
+import { getTranslations } from "next-intl/server";
 import dynamic from "next/dynamic";
 import { MinimalLoader } from "@/components/ui/minimal-loader";
 
@@ -10,11 +11,13 @@ const CoursesClient = dynamic(
   },
 );
 
-export const metadata = {
-  title: "Courses",
-  description: "Create courses, lessons, and training media.",
-};
-
+export async function generateMetadata() {
+  const t = await getTranslations("org.courses");
+  return {
+    title: t("title"),
+    description: t("description"),
+  };
+}
 export default function CoursesPage() {
   return <CoursesClient />;
 }

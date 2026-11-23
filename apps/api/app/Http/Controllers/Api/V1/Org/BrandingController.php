@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1\Org;
 
 use App\Domains\Audit\Actions\LogOrgActivity;
+use App\Domains\Notifications\Support\OrgBrandingCache;
 use App\Domains\Realtime\Support\LiveTopics;
 use App\Domains\Realtime\Support\PublishLive;
 use App\Http\Controllers\Controller;
@@ -12,22 +13,15 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class BrandingController extends Controller
 {
     public function show(): JsonResponse
     {
-        $row = DB::table('organization_settings')->first();
-        $hasLogo = $row && filled($row->logo_path ?? null);
-
         return response()->json([
-            'data' => [
-                'display_name' => $row->display_name ?? null,
-                'primary_color' => $row->primary_color ?? null,
-                'logo_path' => $hasLogo ? $row->logo_path : null,
-                'logo_url' => $hasLogo ? '/api/v1/org/branding/logo' : null,
-            ],
+            'data' => OrgBrandingCache::payload(),
         ]);
     }
 
@@ -38,15 +32,20 @@ class BrandingController extends Controller
                 'required',
                 'file',
                 'max:2048',
-                'mimetypes:image/png,image/jpeg,image/webp,image/svg+xml',
+                'mimetypes:image/png,image/jpeg,image/webp,image/jpg',
             ],
         ]);
 
         $file = $data['file'];
         $converted = $toWebp->handle($file);
+        if ($converted['mime'] === 'image/svg+xml' || $converted['extension'] === 'svg') {
+            throw ValidationException::withMessages([
+                'file' => ['SVG logos are not allowed. Upload a PNG, JPEG, or WebP image.'],
+            ]);
+        }
         $tenant = (string) (tenant('id') ?: 'central');
         $ext = $converted['extension'];
-        if (! in_array($ext, ['webp', 'svg'], true)) {
+        if ($ext !== 'webp') {
             $ext = 'webp';
         }
 
@@ -76,6 +75,7 @@ class BrandingController extends Controller
             'logo_path' => $path,
         ]);
 
+        OrgBrandingCache::forget();
         PublishLive::org([LiveTopics::BRANDING]);
 
         return $this->show();
@@ -92,7 +92,6 @@ class BrandingController extends Controller
         $mime = match (strtolower(pathinfo($row->logo_path, PATHINFO_EXTENSION))) {
             'jpg', 'jpeg' => 'image/jpeg',
             'webp' => 'image/webp',
-            'svg' => 'image/svg+xml',
             default => 'image/png',
         };
 

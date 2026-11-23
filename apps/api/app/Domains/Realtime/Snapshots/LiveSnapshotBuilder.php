@@ -3,8 +3,10 @@
 namespace App\Domains\Realtime\Snapshots;
 
 use App\Domains\AnalyticsReporting\Actions\BuildCampaignReport;
+use App\Domains\AnalyticsReporting\Actions\BuildExportCalendar;
 use App\Domains\AnalyticsReporting\Actions\BuildOrgDetailedReport;
 use App\Domains\AnalyticsReporting\Models\ReportArchive;
+use App\Domains\TargetsGroups\Support\ResolveActiveTarget;
 use App\Domains\Campaigns\Models\Campaign;
 use App\Domains\Checklists\Models\ChecklistInstance;
 use App\Domains\Checklists\Models\ChecklistTemplate;
@@ -14,6 +16,7 @@ use App\Domains\MailDelivery\Models\SendingProfile;
 use App\Domains\Notifications\Models\OrgAnnouncement;
 use App\Domains\Notifications\Models\UserNotification;
 use App\Domains\Notifications\Support\NotificationPayload;
+use App\Domains\Notifications\Support\OrgBrandingCache;
 use App\Domains\Realtime\Support\LiveTopics;
 use App\Domains\TargetsGroups\Models\Department;
 use App\Domains\TargetsGroups\Models\Group;
@@ -74,7 +77,22 @@ class LiveSnapshotBuilder
             ],
             LiveTopics::REPORTS_EXPORT => [
                 'calendar' => $this->exportCalendar(),
-                'logs' => ReportArchive::query()->latest('generated_at')->limit(100)->get()->toArray(),
+                'logs' => ReportArchive::query()
+                    ->latest('generated_at')
+                    ->limit(100)
+                    ->get()
+                    ->map(static fn (ReportArchive $archive): array => [
+                        'id' => $archive->id,
+                        'name' => $archive->name,
+                        'scope' => $archive->scope,
+                        'period_type' => $archive->period_type,
+                        'period_key' => $archive->period_key,
+                        'format' => $archive->format,
+                        'timezone' => $archive->timezone,
+                        'status' => $archive->status,
+                        'generated_at' => $archive->generated_at,
+                    ])
+                    ->all(),
             ],
             LiveTopics::REPORTS_DETAILED => [
                 'overview' => $this->detailedReport->overview(),
@@ -93,7 +111,12 @@ class LiveSnapshotBuilder
             LiveTopics::USERS => $this->users(),
             LiveTopics::ROLES => $this->roles(),
             LiveTopics::TARGETS => [
-                'data' => Target::query()->latest()->limit(self::LIST_CAP)->get()->toArray(),
+                'data' => Target::query()
+                    ->with(['groups', 'manager:id,email,first_name,last_name'])
+                    ->latest()
+                    ->limit(self::LIST_CAP)
+                    ->get()
+                    ->toArray(),
             ],
             LiveTopics::DEPARTMENTS => [
                 'data' => Department::query()->withCount('targets')->orderBy('name')->limit(self::LIST_CAP)->get()->toArray(),
@@ -266,13 +289,18 @@ class LiveSnapshotBuilder
      */
     private function trainingCampaigns(): array
     {
-        $campaigns = Campaign::query()->where('type', 'training')->with(['course', 'recipients'])->latest()->get();
-        $courses = Course::query()->latest()->get(['id', 'title']);
+        $campaigns = Campaign::query()
+            ->where('type', 'training')
+            ->with(['course', 'recipients'])
+            ->latest()
+            ->limit(self::LIST_CAP)
+            ->get();
+        $courses = Course::query()->latest()->limit(self::LIST_CAP)->get(['id', 'title']);
         $targets = Target::query()->latest()->limit(self::LIST_CAP)->get(['id', 'email', 'first_name', 'last_name']);
-        $groups = Group::query()->withCount('targets')->latest()->get();
+        $groups = Group::query()->withCount('targets')->latest()->limit(self::LIST_CAP)->get();
 
         return [
-            'dash' => $this->campaignDashboard('training'),
+            'dash' => $this->campaignDashboardFromCampaigns($campaigns),
             'campaigns' => $campaigns->toArray(),
             'courses' => $courses->toArray(),
             'targets' => $targets->toArray(),
@@ -309,10 +337,12 @@ class LiveSnapshotBuilder
     {
         $tenantId = (string) tenant('id');
         $users = User::query()
-            ->where('tenant_id', $tenantId)
+            ->inTenant($tenantId)
+            ->with('roles')
             ->orderBy('name')
             ->limit(self::LIST_CAP)
             ->get();
+        app(ResolveActiveTarget::class)->attachLinkedTargets($users);
 
         $roles = $this->manageOrgRole->list($tenantId)
             ->map(fn (Role $role): array => [
@@ -356,17 +386,8 @@ class LiveSnapshotBuilder
      */
     private function branding(): array
     {
-        $row = DB::table('organization_settings')->first();
-        $hasLogo = $row && filled($row->logo_path ?? null);
-
         return [
-            'data' => [
-                'display_name' => $row->display_name ?? null,
-                'primary_color' => $row->primary_color ?? null,
-                'logo_path' => $hasLogo ? $row->logo_path : null,
-                'logo_url' => $hasLogo ? '/api/v1/org/branding/logo' : null,
-                'timezone' => $row->timezone ?? 'UTC',
-            ],
+            'data' => OrgBrandingCache::payload(includeTimezone: true),
         ];
     }
 
@@ -422,15 +443,28 @@ class LiveSnapshotBuilder
      */
     private function campaignDashboard(string $type): array
     {
-        $campaigns = Campaign::query()->where('type', $type)->with('recipients')->get();
+        $campaigns = Campaign::query()
+            ->where('type', $type)
+            ->with('recipients')
+            ->limit(self::LIST_CAP)
+            ->get();
+
+        return $this->campaignDashboardFromCampaigns($campaigns);
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, Campaign>  $campaigns
+     * @return array<string, int|float>
+     */
+    private function campaignDashboardFromCampaigns($campaigns): array
+    {
         $recipients = $campaigns->flatMap->recipients;
-        $total = max(1, $recipients->count());
 
         $courseIds = $campaigns->pluck('course_id')->filter()->unique()->values();
         $enrollments = $courseIds->isEmpty()
             ? collect()
             : Enrollment::query()->whereIn('course_id', $courseIds)->get();
-        $enrollmentTotal = max(1, $enrollments->count());
+        $enrollmentTotal = $enrollments->count();
         $openedFromEnrollment = $enrollments->whereNotNull('opened_at')->count();
         $completedFromEnrollment = $enrollments->where('status', 'completed')->count();
         $openedRecipients = $recipients->filter(
@@ -440,7 +474,8 @@ class LiveSnapshotBuilder
 
         $openedCount = max($openedFromEnrollment, $openedRecipients);
         $completedCount = max($completedFromEnrollment, $completedRecipients);
-        $metricTotal = max($enrollmentTotal, $total);
+        $metricTotal = max($enrollmentTotal, $recipients->count());
+        $noAction = $metricTotal === 0 ? 0 : max(0, $metricTotal - $openedCount);
 
         return [
             'campaigns_total' => $campaigns->count(),
@@ -450,9 +485,9 @@ class LiveSnapshotBuilder
             'enrollments_total' => $enrollments->count(),
             'enrollments_completed' => $completedFromEnrollment,
             'enrollments_in_progress' => $enrollments->where('status', 'in_progress')->count(),
-            'no_action_pct' => round((($metricTotal - $openedCount) / $metricTotal) * 100, 1),
-            'opened_pct' => round(($openedCount / $metricTotal) * 100, 1),
-            'completed_pct' => round(($completedCount / $metricTotal) * 100, 1),
+            'no_action_pct' => $metricTotal === 0 ? 0 : round(($noAction / $metricTotal) * 100, 1),
+            'opened_pct' => $metricTotal === 0 ? 0 : round(($openedCount / $metricTotal) * 100, 1),
+            'completed_pct' => $metricTotal === 0 ? 0 : round(($completedCount / $metricTotal) * 100, 1),
         ];
     }
 
@@ -461,34 +496,7 @@ class LiveSnapshotBuilder
      */
     private function exportCalendar(?int $year = null): array
     {
-        $year ??= (int) now()->year;
-        $months = [];
-        for ($m = 1; $m <= 12; $m++) {
-            $key = sprintf('%04d-%02d', $year, $m);
-            $ready = ReportArchive::query()
-                ->where('period_type', 'monthly')
-                ->where('period_key', $key)
-                ->where('status', 'ready')
-                ->exists();
-            $months[] = [
-                'key' => $key,
-                'label' => date('F', mktime(0, 0, 0, $m, 1)),
-                'available' => $ready || $m < now()->month || $year < now()->year,
-            ];
-        }
-
-        $quarters = [];
-        foreach ([1, 2, 3, 4] as $q) {
-            $key = sprintf('%04d-Q%d', $year, $q);
-            $quarters[] = [
-                'key' => $key,
-                'label' => 'Q'.$q,
-                'available' => ReportArchive::query()->where('period_key', $key)->exists()
-                    || $q <= (int) ceil(now()->month / 3) || $year < now()->year,
-            ];
-        }
-
-        return ['year' => $year, 'months' => $months, 'quarters' => $quarters];
+        return app(BuildExportCalendar::class)->handle($year);
     }
 
     /**
@@ -510,12 +518,6 @@ class LiveSnapshotBuilder
                     'from' => config('mail.from.address'),
                     'support' => config('brand.support_address'),
                 ],
-            ],
-            [
-                'id' => 'entra_directory_sync',
-                'name' => 'Microsoft Entra Directory Sync',
-                'status' => 'coming_soon',
-                'details' => ['message' => 'Add when credentials are available'],
             ],
             [
                 'id' => 'graphus',

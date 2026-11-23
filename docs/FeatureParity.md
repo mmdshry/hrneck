@@ -35,13 +35,10 @@ Track implementation status for HRNECK.
 | Next `/msp` | Platform staff |
 | Next `/org` | Organization users (`tenant_id` match) **or** platform staff after MSP enter |
 
-## Targets & directory
+## Targets & groups
 
 - [x] Targets / groups CRUD API + Groups UI (PATCH/DELETE + soft archive via `status=inactive`)
 - [x] CSV import UI
-- [x] Directory sync mock/fixture
-- [x] Entra / Google driver interface (mock; real credentials later)
-- [x] Sync before campaign via explicit API
 - [x] Risk score on targets
 
 ## Training

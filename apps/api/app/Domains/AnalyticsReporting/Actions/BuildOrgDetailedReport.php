@@ -92,7 +92,7 @@ class BuildOrgDetailedReport
                 ],
             ],
             'counts' => [
-                'users' => User::query()->where('tenant_id', (string) tenant('id'))->count(),
+                'users' => User::query()->inTenant((string) tenant('id'))->count(),
                 'targets' => $targetsQuery->count(),
                 'groups' => Group::query()->count(),
                 'campaigns' => $campaign['campaigns'],
@@ -330,14 +330,19 @@ class BuildOrgDetailedReport
             $targetsBase->where('department_id', $departmentId);
         }
 
-        $byDepartment = (clone $targetsBase)
+        $departmentRows = (clone $targetsBase)
             ->selectRaw("coalesce(nullif(trim(department), ''), 'Unassigned') as department_label, count(*) as targets")
             ->groupBy('department_label')
             ->orderByDesc('targets')
-            ->get()
-            ->map(function ($item) {
+            ->get();
+        $funnelsByDepartment = $this->recipientFunnelsByDepartment(
+            $departmentRows->map(fn ($item) => (string) $item->department_label)->all(),
+        );
+
+        $byDepartment = $departmentRows
+            ->map(function ($item) use ($funnelsByDepartment) {
                 $dept = (string) $item->department_label;
-                $recipientStats = $this->recipientFunnelForDepartment($dept === 'Unassigned' ? null : $dept);
+                $recipientStats = $funnelsByDepartment[$dept] ?? $this->emptyRecipientFunnel();
 
                 return [
                     'department' => $dept,
@@ -371,7 +376,7 @@ class BuildOrgDetailedReport
         setPermissionsTeamId($tenantId);
         try {
             $byRole = User::query()
-                ->where('tenant_id', $tenantId)
+                ->inTenant($tenantId)
                 ->with('roles')
                 ->get()
                 ->flatMap(fn (User $user) => $user->getRoleNames())
@@ -410,36 +415,82 @@ class BuildOrgDetailedReport
      *   no_action_pct: float
      * }
      */
+    private function emptyRecipientFunnel(): array
+    {
+        return [
+            'sent' => 0,
+            'opened' => 0,
+            'completed' => 0,
+            'no_action' => 0,
+            'opened_pct' => 0.0,
+            'completed_pct' => 0.0,
+            'no_action_pct' => 0.0,
+        ];
+    }
+
+    /**
+     * @param  list<string>  $departmentLabels
+     * @return array<string, array{
+     *   sent: int,
+     *   opened: int,
+     *   completed: int,
+     *   no_action: int,
+     *   opened_pct: float,
+     *   completed_pct: float,
+     *   no_action_pct: float
+     * }>
+     */
+    private function recipientFunnelsByDepartment(array $departmentLabels): array
+    {
+        $result = [];
+        foreach ($departmentLabels as $label) {
+            $result[$label] = $this->emptyRecipientFunnel();
+        }
+
+        if ($departmentLabels === []) {
+            return $result;
+        }
+
+        $rows = CampaignRecipient::query()
+            ->join('targets', 'targets.id', '=', 'campaign_recipients.target_id')
+            ->select([
+                'campaign_recipients.sent_at',
+                'campaign_recipients.opened_at',
+                'campaign_recipients.status',
+                DB::raw("coalesce(nullif(trim(targets.department), ''), 'Unassigned') as department_label"),
+            ])
+            ->get();
+
+        $grouped = $rows->groupBy(fn ($row) => (string) $row->department_label);
+        foreach ($grouped as $label => $recipients) {
+            $total = max(1, $recipients->count());
+            $sent = $recipients->whereNotNull('sent_at')->count();
+            $opened = $recipients->filter(
+                fn ($r) => $r->opened_at !== null || $r->status === 'completed' || $r->status === 'opened'
+            )->count();
+            $completed = $recipients->where('status', 'completed')->count();
+            $noAction = max(0, $recipients->count() - $opened);
+
+            $result[(string) $label] = [
+                'sent' => $sent,
+                'opened' => $opened,
+                'completed' => $completed,
+                'no_action' => $noAction,
+                'opened_pct' => round(($opened / $total) * 100, 1),
+                'completed_pct' => round(($completed / $total) * 100, 1),
+                'no_action_pct' => round(($noAction / $total) * 100, 1),
+            ];
+        }
+
+        return $result;
+    }
+
     private function recipientFunnelForDepartment(?string $department): array
     {
-        $query = CampaignRecipient::query()->whereHas('target', function (Builder $q) use ($department): void {
-            if ($department === null) {
-                $q->where(function (Builder $inner): void {
-                    $inner->whereNull('department')->orWhere('department', '');
-                });
-            } else {
-                $q->where('department', $department);
-            }
-        });
+        $label = $department === null || $department === '' ? 'Unassigned' : $department;
+        $funnels = $this->recipientFunnelsByDepartment([$label]);
 
-        $recipients = $query->get(['sent_at', 'opened_at', 'status']);
-        $total = max(1, $recipients->count());
-        $sent = $recipients->whereNotNull('sent_at')->count();
-        $opened = $recipients->filter(
-            fn ($r) => $r->opened_at !== null || $r->status === 'completed' || $r->status === 'opened'
-        )->count();
-        $completed = $recipients->where('status', 'completed')->count();
-        $noAction = max(0, $recipients->count() - $opened);
-
-        return [
-            'sent' => $sent,
-            'opened' => $opened,
-            'completed' => $completed,
-            'no_action' => $noAction,
-            'opened_pct' => round(($opened / $total) * 100, 1),
-            'completed_pct' => round(($completed / $total) * 100, 1),
-            'no_action_pct' => round(($noAction / $total) * 100, 1),
-        ];
+        return $funnels[$label] ?? $this->emptyRecipientFunnel();
     }
 
     /**
@@ -449,7 +500,8 @@ class BuildOrgDetailedReport
     private function usersQuery(array $filters): Builder
     {
         $query = User::query()
-            ->where('tenant_id', (string) tenant('id'))
+            ->inTenant((string) tenant('id'))
+            ->with('roles')
             ->orderBy('name');
 
         if (! empty($filters['q'])) {
@@ -802,7 +854,11 @@ class BuildOrgDetailedReport
         $previousTeam = getPermissionsTeamId();
         setPermissionsTeamId($tenantId);
         try {
-            $roles = $user->getRoleNames()->values()->all();
+            if ($user->relationLoaded('roles')) {
+                $roles = $user->roles->pluck('name')->values()->all();
+            } else {
+                $roles = $user->getRoleNames()->values()->all();
+            }
         } finally {
             setPermissionsTeamId($previousTeam);
         }

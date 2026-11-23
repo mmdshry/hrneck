@@ -1,10 +1,11 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert } from "@/components/ui/alert";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LinkButton } from "@/components/ui/link-button";
@@ -28,6 +29,7 @@ import {
 } from "@/lib/pagination";
 import { hasPermission, type SessionUser } from "@/lib/session";
 import { resolveTenant } from "@/lib/tenant";
+import { toastError, toastSuccess } from "@/lib/toast";
 import type { SdDesk } from "../ticketing-types";
 
 type Reader = {
@@ -82,6 +84,8 @@ const emptyForm = {
 };
 
 export function EmailClient() {
+  const t = useTranslations("org.ticketing");
+  const tCommon = useTranslations("common");
   const tenant = resolveTenant();
   const channel = tenant ? orgLiveChannel(tenant, "email-readers") : null;
   const [session, setSession] = useState<SessionUser | null>(null);
@@ -91,7 +95,6 @@ export function EmailClient() {
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState<PageSize>(DEFAULT_PAGE_SIZE);
   const [desks, setDesks] = useState<SdDesk[]>([]);
-  const [message, setMessage] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Reader | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -175,6 +178,18 @@ export function EmailClient() {
   });
 
   useEffect(() => {
+    if (liveError) {
+      toastError(liveError);
+    }
+  }, [liveError]);
+
+  useEffect(() => {
+    if (session && !hasPermission(session, "org.ticketing.admin")) {
+      toastError(t("needAdminPermission"));
+    }
+  }, [session, t]);
+
+  useEffect(() => {
     void loadDesksOnce().catch(() => {
       /* readers bootstrap may still succeed */
     });
@@ -200,7 +215,9 @@ export function EmailClient() {
       return;
     }
     void refreshFromApi(page, perPage, filters)
-      .catch((err: unknown) => setMessage(err instanceof Error ? err.message : "Load failed"))
+      .catch((err: unknown) =>
+        toastError(err instanceof Error ? err.message : tCommon("loadFailed")),
+      )
       .finally(() => setLoading(false));
   }, [
     liveReaders,
@@ -211,6 +228,7 @@ export function EmailClient() {
     applyLiveSlice,
     refreshFromApi,
     tableQuery.debounced,
+    tCommon,
   ]);
 
   const statusLabel = liveStatusLabel(status);
@@ -232,7 +250,6 @@ export function EmailClient() {
       password: "",
       is_active: reader.is_active,
     });
-    setMessage(null);
   }
 
   function resetForm() {
@@ -268,7 +285,7 @@ export function EmailClient() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-        setMessage("Email reader updated.");
+        toastSuccess(t("readerUpdated"));
       } else {
         await api("/api/v1/org/ticketing/email-readers", {
           method: "POST",
@@ -285,13 +302,13 @@ export function EmailClient() {
             is_active: form.is_active,
           }),
         });
-        setMessage("Email reader created.");
+        toastSuccess(t("readerCreated"));
         setPage(1);
       }
       resetForm();
       await afterMutation();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Save failed");
+      toastError(err instanceof Error ? err.message : tCommon("saveFailed"));
     }
   }
 
@@ -302,7 +319,7 @@ export function EmailClient() {
       tenant: resolveTenant(),
     });
     if (editingId === reader.id) resetForm();
-    setMessage("Email reader deleted.");
+    toastSuccess(t("readerDeleted"));
     await afterMutation();
   }
 
@@ -322,60 +339,75 @@ export function EmailClient() {
           }),
         },
       );
-      setMessage(`Ingested as ${res.data.number}`);
+      toastSuccess(t("ingestedAs", { number: res.data.number }));
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Ingest failed");
+      toastError(err instanceof Error ? err.message : t("ingestFailed"));
     }
   }
 
   const columns: Array<DataTableColumn<Reader>> = [
     {
       id: "name",
-      header: "Name",
+      header: tCommon("name"),
       accessorKey: "name",
       sticky: true,
       cell: (reader) => reader.name,
     },
     {
       id: "username",
-      header: "Username",
+      header: tCommon("username"),
       accessorKey: "username",
       cell: (reader) => reader.username,
     },
     {
       id: "host",
-      header: "Host",
+      header: tCommon("host"),
       accessorKey: "host",
       cell: (reader) => reader.host,
     },
     {
       id: "active",
-      header: "Active",
+      header: tCommon("active"),
       filter: "select",
       filterOptions: [
-        { label: "Active", value: "1" },
-        { label: "Inactive", value: "0" },
+        { label: tCommon("active"), value: "1" },
+        { label: tCommon("inactive"), value: "0" },
       ],
       filterValue: (reader) => (reader.is_active ? "1" : "0"),
       enableSorting: false,
-      cell: (reader) => (reader.is_active ? "Active" : "Inactive"),
+      cell: (reader) => (reader.is_active ? tCommon("active") : tCommon("inactive")),
     },
     {
       id: "actions",
-      header: "Actions",
+      header: tCommon("actions"),
       filter: "none",
       enableSorting: false,
       enableGlobalFilter: false,
       cell: (reader) => (
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" onClick={() => startEdit(reader)}>
-            Edit
+          <Button
+            type="button"
+            variant="outline"
+            size="compact"
+            onClick={() => startEdit(reader)}
+          >
+            {tCommon("edit")}
           </Button>
-          <Button type="button" variant="outline" onClick={() => void ingestTest(reader.id)}>
-            Ingest test mail
+          <Button
+            type="button"
+            variant="outline"
+            size="compact"
+            onClick={() => void ingestTest(reader.id)}
+          >
+            {t("ingestTestMail")}
           </Button>
-          <Button type="button" variant="outline" onClick={() => setPendingDelete(reader)}>
-            Delete
+          <Button
+            type="button"
+            variant="outline"
+            size="compact"
+            onClick={() => setPendingDelete(reader)}
+          >
+            {tCommon("delete")}
           </Button>
         </div>
       ),
@@ -389,8 +421,8 @@ export function EmailClient() {
   if (session && !hasPermission(session, "org.ticketing.admin")) {
     return (
       <div className="mx-auto w-full max-w-5xl flex-1 space-y-4 px-4 py-8 sm:px-6">
-        <PageHeader title="Email readers" description="Inbound mail." />
-        <Alert>You need org.ticketing.admin.</Alert>
+        <PageHeader title={t("emailReaders")} description={t("emailDescription")} />
+        <EmptyState title={t("needAdminPermission")} />
       </div>
     );
   }
@@ -398,20 +430,22 @@ export function EmailClient() {
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 space-y-6 px-4 py-8 sm:px-6">
       <PageHeader
-        title="Email readers"
+        title={t("emailReaders")}
         description={
           statusLabel
-            ? `Convert inbound mailbox messages into tickets. · ${statusLabel}`
-            : "Convert inbound mailbox messages into tickets."
+            ? `${t("emailDescription")} · ${statusLabel}`
+            : t("emailDescription")
         }
-        actions={<LinkButton href="/org/ticketing" variant="outline">Queue</LinkButton>}
+        actions={
+          <LinkButton href="/org/ticketing" variant="outline">
+            {t("queue")}
+          </LinkButton>
+        }
       />
-      {message ? <Alert>{message}</Alert> : null}
-      {liveError ? <Alert variant="destructive">{liveError}</Alert> : null}
-      <Panel title={editingId !== null ? "Edit reader" : "Add reader"}>
+      <Panel title={editingId !== null ? t("editReader") : t("addReader")}>
         <form className="grid gap-3 md:grid-cols-2" onSubmit={onSubmit}>
           <div className="space-y-1">
-            <Label htmlFor="email-reader-name">Name</Label>
+            <Label htmlFor="email-reader-name">{tCommon("name")}</Label>
             <Input
               id="email-reader-name"
               value={form.name}
@@ -420,7 +454,7 @@ export function EmailClient() {
             />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="email-reader-desk">Desk</Label>
+            <Label htmlFor="email-reader-desk">{tCommon("desk")}</Label>
             <Select
               id="email-reader-desk"
               value={form.desk_id}
@@ -435,7 +469,7 @@ export function EmailClient() {
             </Select>
           </div>
           <div className="space-y-1">
-            <Label htmlFor="email-reader-host">Host</Label>
+            <Label htmlFor="email-reader-host">{tCommon("host")}</Label>
             <Input
               id="email-reader-host"
               value={form.host}
@@ -444,7 +478,7 @@ export function EmailClient() {
             />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="email-reader-port">Port</Label>
+            <Label htmlFor="email-reader-port">{tCommon("port")}</Label>
             <Input
               id="email-reader-port"
               value={form.port}
@@ -453,7 +487,7 @@ export function EmailClient() {
             />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="email-reader-username">Username</Label>
+            <Label htmlFor="email-reader-username">{tCommon("username")}</Label>
             <Input
               id="email-reader-username"
               value={form.username}
@@ -463,7 +497,7 @@ export function EmailClient() {
           </div>
           <div className="space-y-1">
             <Label htmlFor="email-reader-password">
-              Password{editingId !== null ? " (leave blank to keep)" : ""}
+              {editingId !== null ? t("passwordKeepHint") : t("password")}
             </Label>
             <Input
               id="email-reader-password"
@@ -475,37 +509,39 @@ export function EmailClient() {
           </div>
           {editingId !== null ? (
             <div className="space-y-1">
-              <Label htmlFor="email-reader-active">Active</Label>
+              <Label htmlFor="email-reader-active">{tCommon("active")}</Label>
               <Select
                 id="email-reader-active"
                 value={form.is_active ? "1" : "0"}
                 onChange={(e) => setForm({ ...form, is_active: e.target.value === "1" })}
               >
-                <option value="1">Active</option>
-                <option value="0">Inactive</option>
+                <option value="1">{tCommon("active")}</option>
+                <option value="0">{tCommon("inactive")}</option>
               </Select>
             </div>
           ) : null}
           <div className="flex flex-wrap gap-2 md:col-span-2">
-            <Button type="submit">{editingId !== null ? "Save changes" : "Save reader"}</Button>
+            <Button type="submit">
+              {editingId !== null ? tCommon("saveChanges") : t("saveReader")}
+            </Button>
             {editingId !== null ? (
               <Button type="button" variant="outline" onClick={resetForm}>
-                Cancel
+                {tCommon("cancel")}
               </Button>
             ) : null}
           </div>
         </form>
       </Panel>
-      <Panel title="Configured">
+      <Panel title={t("configured")}>
         <DataTable
           mode="server"
-          caption="Email readers"
+          caption={t("emailReadersCaption")}
           columns={columns}
           rows={readers}
           filterState={tableQuery.state}
           onFilterStateChange={tableQuery.setState}
           getRowId={(row) => row.id}
-          emptyTitle="No readers yet."
+          emptyTitle={t("noReadersYet")}
           pagination={{
             page,
             perPage,
@@ -523,9 +559,9 @@ export function EmailClient() {
         onOpenChange={(open) => {
           if (!open) setPendingDelete(null);
         }}
-        title="Delete email reader"
-        description={`Delete email reader ${pendingDelete?.name ?? ""}?`}
-        confirmLabel="Delete"
+        title={t("deleteEmailReader")}
+        description={t("deleteEmailReaderConfirm", { name: pendingDelete?.name ?? "" })}
+        confirmLabel={tCommon("delete")}
         variant="destructive"
         onConfirm={async () => {
           if (!pendingDelete) return;

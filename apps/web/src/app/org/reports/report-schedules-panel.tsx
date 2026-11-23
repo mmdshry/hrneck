@@ -1,7 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
@@ -22,14 +22,15 @@ type ReportSchedule = {
 };
 
 export function ReportSchedulesPanel() {
+  const t = useTranslations("org.reports");
+  const tCommon = useTranslations("common");
   const [schedules, setSchedules] = useState<ReportSchedule[]>([]);
-  const [name, setName] = useState("Monthly CSV");
+  const [name, setName] = useState(t("monthlyCsv"));
   const [cadence, setCadence] = useState<ReportSchedule["cadence"]>("monthly");
   const [format, setFormat] = useState<ReportSchedule["format"]>("csv");
   const [recipientEmail, setRecipientEmail] = useState("");
   const [oneOffEmail, setOneOffEmail] = useState("");
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ReportSchedule | null>(null);
   const [editing, setEditing] = useState<ReportSchedule | null>(null);
 
@@ -44,14 +45,13 @@ export function ReportSchedulesPanel() {
   useEffect(() => {
     void refresh()
       .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : "Failed to load schedules");
+        toastError(err instanceof Error ? err.message : t("failedSchedules"));
       })
       .finally(() => setLoading(false));
-  }, [refresh]);
+  }, [refresh, t]);
 
   async function onCreate(event: FormEvent) {
     event.preventDefault();
-    setError(null);
     try {
       await ensureCsrf();
       await api("/api/v1/org/reports/schedules", {
@@ -67,18 +67,15 @@ export function ReportSchedulesPanel() {
       });
       setRecipientEmail("");
       await refresh();
-      toastSuccess("Schedule created.");
+      toastSuccess(t("scheduleCreated"));
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Create failed";
-      setError(message);
-      toastError(message);
+      toastError(err instanceof Error ? err.message : tCommon("createFailed"));
     }
   }
 
   async function onSaveEdit(event: FormEvent) {
     event.preventDefault();
     if (!editing) return;
-    setError(null);
     try {
       await ensureCsrf();
       await api(`/api/v1/org/reports/schedules/${editing.id}`, {
@@ -94,11 +91,9 @@ export function ReportSchedulesPanel() {
       });
       setEditing(null);
       await refresh();
-      toastSuccess("Schedule updated.");
+      toastSuccess(t("scheduleUpdated"));
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Update failed";
-      setError(message);
-      toastError(message);
+      toastError(err instanceof Error ? err.message : tCommon("updateFailed"));
     }
   }
 
@@ -112,15 +107,14 @@ export function ReportSchedulesPanel() {
       });
       setPendingDelete(null);
       await refresh();
-      toastSuccess("Schedule deleted.");
+      toastSuccess(t("scheduleDeleted"));
     } catch (err) {
-      toastError(err instanceof Error ? err.message : "Delete failed");
+      toastError(err instanceof Error ? err.message : tCommon("deleteFailed"));
     }
   }
 
   async function onSendNow(event: FormEvent) {
     event.preventDefault();
-    setError(null);
     try {
       await ensureCsrf();
       await api("/api/v1/org/reports/email", {
@@ -129,27 +123,21 @@ export function ReportSchedulesPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: oneOffEmail }),
       });
-      toastSuccess("Report email queued.");
+      toastSuccess(t("reportEmailQueued"));
       setOneOffEmail("");
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Send failed";
-      setError(message);
-      toastError(message);
+      toastError(err instanceof Error ? err.message : t("sendFailed"));
     }
   }
 
   return (
     <Panel className="mt-8 space-y-6 p-4">
       <div>
-        <h2 className="text-lg font-medium">Scheduled email reports</h2>
+        <h2 className="text-lg font-medium">{t("scheduledEmailReports")}</h2>
         <p className="mt-1 text-sm text-[var(--muted-foreground)]">
           Configure monthly, weekly, or quarterly cadences and send a one-off CSV report.
         </p>
       </div>
-
-      {error ? (
-        <Alert variant="destructive">{error}</Alert>
-      ) : null}
 
       <form onSubmit={onCreate} className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1 sm:col-span-2">
@@ -162,7 +150,7 @@ export function ReportSchedulesPanel() {
           />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="schedule-cadence">Cadence</Label>
+          <Label htmlFor="schedule-cadence">{t("cadence")}</Label>
           <Select
             id="schedule-cadence"
             value={cadence}
@@ -185,7 +173,7 @@ export function ReportSchedulesPanel() {
           </Select>
         </div>
         <div className="space-y-1 sm:col-span-2">
-          <Label htmlFor="schedule-email">Recipient email</Label>
+          <Label htmlFor="schedule-email">{t("recipientEmail")}</Label>
           <Input
             id="schedule-email"
             type="email"
@@ -195,13 +183,13 @@ export function ReportSchedulesPanel() {
           />
         </div>
         <div className="sm:col-span-2">
-          <Button type="submit">Add schedule</Button>
+          <Button type="submit">{t("addSchedule")}</Button>
         </div>
       </form>
 
       <form onSubmit={onSendNow} className="flex flex-wrap items-end gap-2 border-t border-[var(--border)] pt-4">
         <div className="min-w-[16rem] flex-1 space-y-1">
-          <Label htmlFor="one-off-email">Send report now</Label>
+          <Label htmlFor="one-off-email">{t("sendReportNow")}</Label>
           <Input
             id="one-off-email"
             type="email"
@@ -217,11 +205,11 @@ export function ReportSchedulesPanel() {
       </form>
 
       <div className="space-y-3 border-t border-[var(--border)] pt-4">
-        <h3 className="text-sm font-medium">Existing schedules</h3>
+        <h3 className="text-sm font-medium">{t("existingSchedules")}</h3>
         {loading ? (
           <p className="text-sm text-[var(--muted-foreground)]">Loading…</p>
         ) : schedules.length === 0 ? (
-          <p className="text-sm text-[var(--muted-foreground)]">No schedules yet.</p>
+          <p className="text-sm text-[var(--muted-foreground)]">{t("noSchedulesYet")}</p>
         ) : (
           <ul className="space-y-3">
             {schedules.map((row) => (
@@ -260,7 +248,7 @@ export function ReportSchedulesPanel() {
           className="grid gap-3 rounded-[var(--radius)] border border-[var(--border)] p-3 sm:grid-cols-2"
         >
           <div className="space-y-1 sm:col-span-2">
-            <Label htmlFor="edit-schedule-name">Edit name</Label>
+            <Label htmlFor="edit-schedule-name">{t("editName")}</Label>
             <Input
               id="edit-schedule-name"
               value={editing.name}
@@ -269,7 +257,7 @@ export function ReportSchedulesPanel() {
             />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="edit-schedule-cadence">Cadence</Label>
+            <Label htmlFor="edit-schedule-cadence">{t("cadence")}</Label>
             <Select
               id="edit-schedule-cadence"
               value={editing.cadence}
@@ -302,7 +290,7 @@ export function ReportSchedulesPanel() {
             </Select>
           </div>
           <div className="space-y-1 sm:col-span-2">
-            <Label htmlFor="edit-schedule-email">Recipient email</Label>
+            <Label htmlFor="edit-schedule-email">{t("recipientEmail")}</Label>
             <Input
               id="edit-schedule-email"
               type="email"
@@ -325,13 +313,13 @@ export function ReportSchedulesPanel() {
         onOpenChange={(open) => {
           if (!open) setPendingDelete(null);
         }}
-        title="Delete schedule?"
+        title={t("deleteSchedule")}
         description={
           pendingDelete
             ? `Remove “${pendingDelete.name}” (${pendingDelete.recipient_email})?`
             : ""
         }
-        confirmLabel="Delete"
+        confirmLabel={tCommon("delete")}
         variant="destructive"
         onConfirm={onDelete}
       />

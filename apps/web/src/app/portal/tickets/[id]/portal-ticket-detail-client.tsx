@@ -1,7 +1,8 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { Alert } from "@/components/ui/alert";
+import { toastError } from "@/lib/toast";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { LinkButton } from "@/components/ui/link-button";
@@ -24,28 +25,31 @@ type Ticket = {
 
 type PortalNote = NonNullable<Ticket["notes"]>[number];
 
-const noteColumns: Array<DataTableColumn<PortalNote>> = [
-  {
-    id: "body",
-    header: "Note",
-    accessorKey: "body",
-    sticky: true,
-    className: "max-w-md whitespace-pre-wrap",
-    cell: (note) => note.body,
-  },
-  {
-    id: "created_at",
-    header: "Created",
-    filterValue: (note) => note.created_at ?? "",
-    cell: (note) => note.created_at || "—",
-  },
-];
-
 export function PortalTicketDetailClient({ ticketId }: { ticketId: number }) {
+  const t = useTranslations("portal");
+  const tCommon = useTranslations("common");
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [note, setNote] = useState("");
-  const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const dash = tCommon("emDash");
+
+  const noteColumns: Array<DataTableColumn<PortalNote>> = [
+    {
+      id: "body",
+      header: t("note"),
+      accessorKey: "body",
+      sticky: true,
+      className: "max-w-md whitespace-pre-wrap",
+      cell: (row) => row.body,
+    },
+    {
+      id: "created_at",
+      header: t("created"),
+      filterValue: (row) => row.created_at ?? "",
+      cell: (row) => row.created_at || dash,
+    },
+  ];
 
   async function refresh() {
     await ensureCsrf();
@@ -58,8 +62,9 @@ export function PortalTicketDetailClient({ ticketId }: { ticketId: number }) {
   useEffect(() => {
     setLoading(true);
     void refresh()
-      .catch((err: unknown) => setMessage(err instanceof Error ? err.message : "Load failed"))
+      .catch((err: unknown) => toastError(err instanceof Error ? err.message : t("loadFailed")))
       .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload when ticket id changes
   }, [ticketId]);
 
   async function addNote(event: FormEvent) {
@@ -75,7 +80,7 @@ export function PortalTicketDetailClient({ ticketId }: { ticketId: number }) {
       setNote("");
       await refresh();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Note failed");
+      toastError(err instanceof Error ? err.message : t("noteFailed"));
     }
   }
 
@@ -86,8 +91,8 @@ export function PortalTicketDetailClient({ ticketId }: { ticketId: number }) {
   if (!ticket) {
     return (
       <div className="space-y-4">
-        <PageHeader title="Ticket" description="Could not load this ticket." />
-        {message ? <Alert>{message}</Alert> : null}
+        <PageHeader title={t("ticket")} description={t("couldNotLoadTicket")} />
+        
       </div>
     );
   }
@@ -97,29 +102,33 @@ export function PortalTicketDetailClient({ ticketId }: { ticketId: number }) {
       <PageHeader
         title={ticket.number}
         description={ticket.summary}
-        actions={<LinkButton href="/portal/tickets" variant="outline">Back</LinkButton>}
+        actions={
+          <LinkButton href="/portal/tickets" variant="outline">
+            {tCommon("back")}
+          </LinkButton>
+        }
       />
-      {message ? <Alert>{message}</Alert> : null}
-      <Panel title="Details">
+      
+      <Panel title={t("details")}>
         <p className="mb-2 text-sm text-[var(--muted-foreground)]">
           {ticket.stage?.name} / {ticket.status?.name}
         </p>
         <p className="whitespace-pre-wrap text-sm">{ticket.description}</p>
       </Panel>
-      <Panel title="Conversation">
+      <Panel title={t("conversation")}>
         <div className="mb-4">
           <DataTable
             mode="client"
-            caption="Ticket notes"
+            caption={t("ticketNotes")}
             columns={noteColumns}
             rows={ticket.notes ?? []}
             getRowId={(row) => row.id}
-            emptyTitle="No notes yet."
+            emptyTitle={t("noNotesYet")}
           />
         </div>
         <form className="space-y-2" onSubmit={addNote}>
           <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} required />
-          <Button type="submit">Add note</Button>
+          <Button type="submit">{t("addNote")}</Button>
         </form>
       </Panel>
     </div>

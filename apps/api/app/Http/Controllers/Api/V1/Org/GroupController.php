@@ -11,15 +11,14 @@ use App\Support\ApiPagination;
 use App\Support\ListQuery;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class GroupController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $query = Group::query()
-            ->with(['targets:id'])
-            ->withCount('targets');
+        $query = Group::query()->withCount('targets');
 
         if (! $request->boolean('include_inactive') && ! $request->filled('status')) {
             $query->where('status', 'active');
@@ -40,15 +39,23 @@ class GroupController extends Controller
         ], 'id', 'desc');
 
         $rows = $query->paginate(ApiPagination::perPage($request, max: 500));
-
-        return response()->json([
-            'data' => collect($rows->items())->map(static function (Group $group): array {
-                $payload = $group->makeHidden('targets')->toArray();
-                $payload['target_ids'] = $group->targets
-                    ->pluck('id')
+        $groupIds = collect($rows->items())->pluck('id')->map(static fn ($id) => (int) $id)->all();
+        $targetIdsByGroup = $groupIds === []
+            ? collect()
+            : DB::table('group_target')
+                ->whereIn('group_id', $groupIds)
+                ->get(['group_id', 'target_id'])
+                ->groupBy('group_id')
+                ->map(static fn ($rows) => $rows
+                    ->pluck('target_id')
                     ->map(static fn ($id) => (int) $id)
                     ->values()
-                    ->all();
+                    ->all());
+
+        return response()->json([
+            'data' => collect($rows->items())->map(static function (Group $group) use ($targetIdsByGroup): array {
+                $payload = $group->toArray();
+                $payload['target_ids'] = $targetIdsByGroup->get((int) $group->id, []);
 
                 return $payload;
             })->values(),

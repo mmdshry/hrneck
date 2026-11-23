@@ -1,20 +1,22 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useBranding } from "@/components/branding-provider";
-import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
+import { TimezoneSelect } from "@/components/ui/timezone-select";
 import { api, ensureCsrf, fetchSessionUser } from "@/lib/api";
 import { applyPrimaryColor, isValidHexColor } from "@/lib/branding";
 import { hasPermission, type SessionUser } from "@/lib/session";
 import { resolveTenant } from "@/lib/tenant";
-import { notifyResult, toastError, toastSuccess } from "@/lib/toast";
+import { toastError, toastSuccess } from "@/lib/toast";
 
 type Guidance = {
   domain: string;
@@ -22,36 +24,6 @@ type Guidance = {
 };
 
 type DnsRecord = Guidance["records"][number];
-
-const dnsColumns: Array<DataTableColumn<DnsRecord>> = [
-  {
-    id: "type",
-    header: "Type",
-    accessorKey: "type",
-    sticky: true,
-    cell: (record) => record.type,
-  },
-  {
-    id: "host",
-    header: "Host",
-    accessorKey: "host",
-    cell: (record) => record.host,
-  },
-  {
-    id: "value",
-    header: "Value",
-    accessorKey: "value",
-    className: "max-w-md break-all",
-    cell: (record) => record.value,
-  },
-  {
-    id: "purpose",
-    header: "Purpose",
-    accessorKey: "purpose",
-    className: "max-w-sm",
-    cell: (record) => record.purpose,
-  },
-];
 
 type OrgSettings = {
   display_name?: string | null;
@@ -64,16 +36,48 @@ type OrgSettings = {
   } | null;
 };
 
-const ACCOUNT_LINKS = [{ href: "/org/settings/mfa", label: "Account / MFA" }];
+const ACCOUNT_LINK_HREFS = ["/org/settings/mfa"] as const;
 
-const ADMIN_LINKS = [
-  { href: "/org/settings/sending-profiles", label: "Sending profiles" },
-  { href: "/org/settings/integrations", label: "Integrations" },
-  { href: "/org/settings/mfa", label: "Account / MFA" },
-];
+const ADMIN_LINK_HREFS = [
+  "/org/settings/sending-profiles",
+  "/org/settings/integrations",
+  "/org/settings/mfa",
+] as const;
 
 export function SettingsClient() {
+  const t = useTranslations("org.settings");
+  const tCommon = useTranslations("common");
   const { logoUrl, refresh: refreshBranding } = useBranding();
+
+  const dnsColumns: Array<DataTableColumn<DnsRecord>> = [
+    {
+      id: "type",
+      header: tCommon("type"),
+      accessorKey: "type",
+      sticky: true,
+      cell: (record) => record.type,
+    },
+    {
+      id: "host",
+      header: tCommon("host"),
+      accessorKey: "host",
+      cell: (record) => record.host,
+    },
+    {
+      id: "value",
+      header: tCommon("value"),
+      accessorKey: "value",
+      className: "max-w-md break-all",
+      cell: (record) => record.value,
+    },
+    {
+      id: "purpose",
+      header: tCommon("purpose"),
+      accessorKey: "purpose",
+      className: "max-w-sm",
+      cell: (record) => record.purpose,
+    },
+  ];
   const [session, setSession] = useState<SessionUser | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [primaryColor, setPrimaryColor] = useState("#083a6d");
@@ -110,12 +114,12 @@ export function SettingsClient() {
         }
         setGuidance(domains.data.guidance);
       } catch (err) {
-        toastError(err instanceof Error ? err.message : "Load failed");
+        toastError(err instanceof Error ? err.message : tCommon("loadFailed"));
       } finally {
         setLoaded(true);
       }
     })();
-  }, []);
+  }, [tCommon]);
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -149,9 +153,9 @@ export function SettingsClient() {
       );
       setGuidance(domains.data.guidance);
       await refreshBranding();
-      toastSuccess("White-label and sending domain saved.");
+      toastSuccess(t("whiteLabelSaved"));
     } catch (err) {
-      notifyResult(err instanceof Error ? err.message : "Save failed");
+      toastError(err instanceof Error ? err.message : tCommon("saveFailed"));
     }
   }
 
@@ -170,9 +174,9 @@ export function SettingsClient() {
           payload: { source: "org.settings" },
         }),
       });
-      toastSuccess("Test webhook queued.");
+      toastSuccess(t("testWebhookQueued"));
     } catch (err) {
-      toastError(err instanceof Error ? err.message : "Webhook test failed");
+      toastError(err instanceof Error ? err.message : t("webhookTestFailed"));
     } finally {
       setTestingWebhook(false);
     }
@@ -192,9 +196,9 @@ export function SettingsClient() {
         body,
       });
       await refreshBranding();
-      toastSuccess("Company logo uploaded.");
+      toastSuccess(t("logoUploaded"));
     } catch (err) {
-      toastError(err instanceof Error ? err.message : "Logo upload failed");
+      toastError(err instanceof Error ? err.message : t("logoUploadFailed"));
     } finally {
       setUploading(false);
     }
@@ -206,24 +210,35 @@ export function SettingsClient() {
 
   const canManageSettings = hasPermission(session, "org.settings.manage");
 
+  const accountLinks = ACCOUNT_LINK_HREFS.map((href) => ({
+    href,
+    label: t("accountMfa"),
+  }));
+  const adminLinks = ADMIN_LINK_HREFS.map((href) => ({
+    href,
+    label:
+      href.includes("sending-profiles")
+        ? t("sendingProfiles")
+        : href.includes("integrations")
+          ? t("integrations")
+          : t("accountMfa"),
+  }));
+
   if (session && !canManageSettings) {
     return (
       <div className="mx-auto w-full max-w-3xl flex-1 space-y-4 px-4 py-8 sm:px-6">
         <PageHeader
-          title="Organization settings"
-          description="Account security is available to every signed-in org user. Organization-wide branding requires org.settings.manage."
+          title={t("title")}
+          description={t("limitedAccessDescription")}
         />
-        <nav className="flex flex-wrap gap-2" aria-label="Account settings">
-          {ACCOUNT_LINKS.map((link) => (
+        <nav className="flex flex-wrap gap-2" aria-label={t("accountSettingsAria")}>
+          {accountLinks.map((link) => (
             <LinkButton key={link.href} href={link.href} variant="secondary" size="sm">
               {link.label}
             </LinkButton>
           ))}
         </nav>
-        <Alert>
-          You need org.settings.manage to change organization branding and domains. Your
-          Account / MFA page remains available.
-        </Alert>
+        <EmptyState title={t("needManagePermission")} />
       </div>
     );
   }
@@ -233,11 +248,11 @@ export function SettingsClient() {
   return (
     <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-8 sm:px-6">
       <PageHeader
-        title="Organization settings"
-        description="White-label branding, domains, and related setup pages."
+        title={t("title")}
+        description={t("description")}
       />
-      <nav className="mt-6 flex flex-wrap gap-2" aria-label="Settings links">
-        {ADMIN_LINKS.map((link) => (
+      <nav className="mt-6 flex flex-wrap gap-2" aria-label={t("settingsLinksAria")}>
+        {adminLinks.map((link) => (
           <LinkButton key={link.href} href={link.href} variant="secondary" size="sm">
             {link.label}
           </LinkButton>
@@ -246,7 +261,7 @@ export function SettingsClient() {
       <form onSubmit={onSubmit} className="mt-8 space-y-4">
         <div className="space-y-1">
           <Label htmlFor="settings-display-name" className="text-[var(--muted-foreground)]">
-            Display name
+            {t("displayName")}
           </Label>
           <Input
             id="settings-display-name"
@@ -256,16 +271,13 @@ export function SettingsClient() {
         </div>
         <div className="space-y-1">
           <Label htmlFor="settings-primary-color" className="text-[var(--muted-foreground)]">
-            Primary color
+            {t("primaryColor")}
           </Label>
-          <p className="text-sm text-[var(--muted-foreground)]">
-            Tints buttons, links, the active navigation item, and the focus ring.
-            The HRneck mark stays navy and orange.
-          </p>
+          <p className="text-sm text-[var(--muted-foreground)]">{t("primaryColorHint")}</p>
           <div className="flex flex-wrap items-center gap-3">
             <input
               type="color"
-              aria-label="Pick primary color"
+              aria-label={t("pickPrimaryColor")}
               value={previewColor}
               onChange={(e) => {
                 setPrimaryColor(e.target.value);
@@ -288,29 +300,29 @@ export function SettingsClient() {
               className="inline-flex h-9 items-center rounded-md px-3 text-sm text-white"
               style={{ backgroundColor: previewColor }}
             >
-              Preview
+              {t("preview")}
             </span>
           </div>
         </div>
         <div className="space-y-2">
           <Label htmlFor="settings-logo" className="text-[var(--muted-foreground)]">
-            Company logo
+            {t("companyLogo")}
           </Label>
           <div className="flex flex-wrap items-center gap-4">
             {logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={logoUrl}
-                alt="Current company logo"
+                alt={t("currentLogoAlt")}
                 className="h-12 w-12 rounded-lg border border-[var(--border)] object-contain"
               />
             ) : (
-              <span className="text-sm text-[var(--muted-foreground)]">No logo uploaded</span>
+              <span className="text-sm text-[var(--muted-foreground)]">{t("noLogoUploaded")}</span>
             )}
             <Input
               id="settings-logo"
               type="file"
-              accept="image/png,image/jpeg,image/webp,image/svg+xml"
+              accept="image/png,image/jpeg,image/webp"
               disabled={uploading}
               onChange={(e) => void onLogoChange(e.target.files?.[0] ?? null)}
             />
@@ -318,18 +330,18 @@ export function SettingsClient() {
         </div>
         <div className="space-y-1">
           <Label htmlFor="settings-timezone" className="text-[var(--muted-foreground)]">
-            Timezone
+            {t("timezone")}
           </Label>
-          <Input
+          <TimezoneSelect
             id="settings-timezone"
             value={timezone}
             onChange={(e) => setTimezone(e.target.value)}
-            placeholder="UTC"
+            required
           />
         </div>
         <div className="space-y-1">
           <Label htmlFor="settings-webhook-url" className="text-[var(--muted-foreground)]">
-            Webhook URL
+            {t("webhookUrl")}
           </Label>
           <div className="flex flex-wrap gap-2">
             <Input
@@ -346,13 +358,13 @@ export function SettingsClient() {
               disabled={testingWebhook}
               onClick={() => void onTestWebhook()}
             >
-              {testingWebhook ? "Sending…" : "Send test"}
+              {testingWebhook ? tCommon("sending") : t("sendTest")}
             </Button>
           </div>
         </div>
         <div className="space-y-1">
           <Label htmlFor="settings-sending-domain" className="text-[var(--muted-foreground)]">
-            Sending domain
+            {t("sendingDomain")}
           </Label>
           <Input
             id="settings-sending-domain"
@@ -360,20 +372,22 @@ export function SettingsClient() {
             onChange={(e) => setSendingDomain(e.target.value)}
           />
         </div>
-        <Button type="submit">Save settings</Button>
+        <Button type="submit">{t("saveSettings")}</Button>
       </form>
       {guidance ? (
-        <section className="mt-10" aria-label="DNS guidance">
-          <h2 className="text-xl font-medium text-[var(--foreground)]">DNS for {guidance.domain}</h2>
+        <section className="mt-10" aria-label={t("dnsGuidanceAria")}>
+          <h2 className="text-xl font-medium text-[var(--foreground)]">
+            {t("dnsFor", { domain: guidance.domain })}
+          </h2>
           <DataTable
             className="mt-4"
             mode="client"
-            caption={`DNS records for ${guidance.domain}`}
+            caption={t("dnsCaption", { domain: guidance.domain })}
             columns={dnsColumns}
             rows={guidance.records}
             getRowId={(record) => `${record.type}-${record.host}-${record.value}`}
-            emptyTitle="No DNS records"
-            emptyDescription="Guidance will appear when records are available from the API."
+            emptyTitle={t("noDnsRecords")}
+            emptyDescription={t("dnsGuidanceEmpty")}
           />
         </section>
       ) : null}

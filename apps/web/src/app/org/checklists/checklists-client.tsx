@@ -1,9 +1,10 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert } from "@/components/ui/alert";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LinkButton } from "@/components/ui/link-button";
@@ -28,6 +29,7 @@ import {
 } from "@/lib/pagination";
 import { hasPermission, type SessionUser } from "@/lib/session";
 import { resolveTenant } from "@/lib/tenant";
+import { toastError, toastSuccess, toastInfo } from "@/lib/toast";
 import type { ChecklistTemplate } from "./checklist-types";
 
 type LiveTemplate = ChecklistTemplate & {
@@ -38,18 +40,6 @@ type ChecklistsPayload = {
   data: LiveTemplate[];
 };
 
-const CATEGORY_OPTIONS = [
-  { label: "Onboarding", value: "onboarding" },
-  { label: "Offboarding", value: "offboarding" },
-  { label: "HR ops", value: "hr_ops" },
-  { label: "Custom", value: "custom" },
-];
-
-const STATUS_OPTIONS = [
-  { label: "Draft", value: "draft" },
-  { label: "Published", value: "published" },
-  { label: "Archived", value: "archived" },
-];
 
 function normalizeTemplate(row: LiveTemplate): ChecklistTemplate {
   return {
@@ -89,6 +79,19 @@ function templateCells(template: ChecklistTemplate): Record<string, string> {
 }
 
 export function ChecklistsClient() {
+  const t = useTranslations("org.checklists");
+  const tCommon = useTranslations("common");
+  const CATEGORY_OPTIONS = [
+    { label: t("onboarding"), value: "onboarding" },
+    { label: t("offboarding"), value: "offboarding" },
+    { label: t("hrOps"), value: "hr_ops" },
+    { label: t("custom"), value: "custom" },
+  ];
+  const STATUS_OPTIONS = [
+    { label: tCommon("draft"), value: "draft" },
+    { label: tCommon("published"), value: "published" },
+    { label: tCommon("archived"), value: "archived" },
+  ];
   const tenant = resolveTenant();
   const channel = tenant ? orgLiveChannel(tenant, "checklists") : null;
   const [session, setSession] = useState<SessionUser | null>(null);
@@ -101,7 +104,6 @@ export function ChecklistsClient() {
   const [systemMeta, setSystemMeta] = useState<PaginationMeta>(emptyMeta());
   const [systemPage, setSystemPage] = useState(1);
   const [systemPerPage, setSystemPerPage] = useState<PageSize>(DEFAULT_PAGE_SIZE);
-  const [message, setMessage] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [category, setCategory] = useState("custom");
   const [description, setDescription] = useState("");
@@ -251,7 +253,7 @@ export function ChecklistsClient() {
       systemFilters,
     )
       .catch((err: unknown) => {
-        setMessage(err instanceof Error ? err.message : "Load failed");
+        toastError(err instanceof Error ? err.message : tCommon("loadFailed"));
       })
       .finally(() => setLoading(false));
   }, [
@@ -274,7 +276,7 @@ export function ChecklistsClient() {
 
   async function onCreate(event: FormEvent) {
     event.preventDefault();
-    setMessage(null);
+    
     try {
       await ensureCsrf();
       const created = await api<{ data: ChecklistTemplate }>("/api/v1/org/checklists/templates", {
@@ -291,15 +293,15 @@ export function ChecklistsClient() {
       });
       setName("");
       setDescription("");
-      setMessage("Template created.");
+      toastSuccess(t("templateCreated"));
       window.location.href = `/org/checklists/${created.data.id}`;
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Create failed");
+      toastError(err instanceof Error ? err.message : tCommon("createFailed"));
     }
   }
 
   async function copySystem(id: number) {
-    setMessage(null);
+    
     try {
       await ensureCsrf();
       const copied = await api<{ data: ChecklistTemplate }>(
@@ -311,24 +313,24 @@ export function ChecklistsClient() {
           body: JSON.stringify({}),
         },
       );
-      setMessage("Template copied. Opening builder…");
+      toastInfo(t("templateCopied"));
       window.location.href = `/org/checklists/${copied.data.id}`;
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Copy failed");
+      toastError(err instanceof Error ? err.message : tCommon("copyFailed"));
     }
   }
 
   const sharedColumns: Array<DataTableColumn<ChecklistTemplate>> = [
     {
       id: "name",
-      header: "Name",
+      header: tCommon("name"),
       accessorKey: "name",
       sticky: true,
       cell: (template) => template.name,
     },
     {
       id: "category",
-      header: "Category",
+      header: tCommon("category"),
       filter: "select",
       filterOptions: CATEGORY_OPTIONS,
       accessorKey: "category",
@@ -336,7 +338,7 @@ export function ChecklistsClient() {
     },
     {
       id: "status",
-      header: "Status",
+      header: tCommon("status"),
       filter: "select",
       filterOptions: STATUS_OPTIONS,
       accessorKey: "status",
@@ -344,10 +346,10 @@ export function ChecklistsClient() {
     },
     {
       id: "description",
-      header: "Description",
+      header: tCommon("descriptionLabel"),
       accessorKey: "description",
       className: "max-w-xs truncate",
-      cell: (template) => template.description || "—",
+      cell: (template) => template.description || tCommon("emDash"),
     },
   ];
 
@@ -355,20 +357,20 @@ export function ChecklistsClient() {
     ...sharedColumns,
     {
       id: "version",
-      header: "Version",
+      header: tCommon("version"),
       filter: "none",
       enableSorting: false,
       cell: (template) => `v${template.current_version}`,
     },
     {
       id: "actions",
-      header: "Actions",
+      header: tCommon("actions"),
       filter: "none",
       enableSorting: false,
       enableGlobalFilter: false,
       cell: (template) => (
-        <LinkButton href={`/org/checklists/${template.id}`} variant="secondary" size="sm">
-          Edit
+        <LinkButton href={`/org/checklists/${template.id}`} variant="outline" size="compact">
+          {tCommon("edit")}
         </LinkButton>
       ),
     },
@@ -378,13 +380,18 @@ export function ChecklistsClient() {
     ...sharedColumns,
     {
       id: "actions",
-      header: "Actions",
+      header: tCommon("actions"),
       filter: "none",
       enableSorting: false,
       enableGlobalFilter: false,
       cell: (template) => (
-        <Button type="button" size="sm" onClick={() => void copySystem(template.id)}>
-          Use template
+        <Button
+          type="button"
+          variant="outline"
+          size="compact"
+          onClick={() => void copySystem(template.id)}
+        >
+          {t("useTemplate")}
         </Button>
       ),
     },
@@ -397,8 +404,8 @@ export function ChecklistsClient() {
   if (session && !hasPermission(session, "org.checklists.manage")) {
     return (
       <div className="mx-auto w-full max-w-5xl flex-1 space-y-4 px-4 py-8 sm:px-6">
-        <PageHeader title="Checklists" description="Internal HR checklists." />
-        <Alert>You need org.checklists.manage to manage checklists.</Alert>
+        <PageHeader title={t("title")} description={t("description")} />
+        <EmptyState title={t("needManagePermission")} />
       </div>
     );
   }
@@ -406,45 +413,43 @@ export function ChecklistsClient() {
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 space-y-6 px-4 py-8 sm:px-6">
       <PageHeader
-        title="Checklists"
+        title={t("title")}
         description={
-          statusLabel
-            ? `Design flexible HR checklists and fill them for employees. Employees never see these. · ${statusLabel}`
-            : "Design flexible HR checklists and fill them for employees. Employees never see these."
+          statusLabel ? `${t("description")} · ${statusLabel}` : t("description")
         }
         actions={
           <div className="flex flex-wrap gap-2">
             <LinkButton href="/org/checklists/packs" variant="secondary">
-              Packs
+              {t("packs")}
             </LinkButton>
             <LinkButton href="/org/checklists/instances" variant="secondary">
-              Open instances
+              {t("openInstances")}
             </LinkButton>
           </div>
         }
       />
 
-      {message ? <Alert>{message}</Alert> : null}
-      {liveError ? <Alert variant="destructive">{liveError}</Alert> : null}
+      
+      
 
       <Panel className="p-4">
-        <h2 className="mb-3 text-sm font-semibold">New template</h2>
+        <h2 className="mb-3 text-sm font-semibold">{t("newTemplate")}</h2>
         <form onSubmit={onCreate} className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5 sm:col-span-2">
-            <Label htmlFor="cl-name">Name</Label>
+            <Label htmlFor="cl-name">{tCommon("name")}</Label>
             <Input id="cl-name" value={name} onChange={(e) => setName(e.target.value)} required />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="cl-cat">Category</Label>
+            <Label htmlFor="cl-cat">{tCommon("category")}</Label>
             <Select id="cl-cat" value={category} onChange={(e) => setCategory(e.target.value)}>
-              <option value="onboarding">Onboarding</option>
-              <option value="offboarding">Offboarding</option>
-              <option value="hr_ops">HR ops</option>
-              <option value="custom">Custom</option>
+              <option value="onboarding">{t("onboarding")}</option>
+              <option value="offboarding">{t("offboarding")}</option>
+              <option value="hr_ops">{t("hrOps")}</option>
+              <option value="custom">{t("custom")}</option>
             </Select>
           </div>
           <div className="space-y-1.5 sm:col-span-2">
-            <Label htmlFor="cl-desc">Description</Label>
+            <Label htmlFor="cl-desc">{tCommon("descriptionLabel")}</Label>
             <Textarea
               id="cl-desc"
               value={description}
@@ -453,22 +458,22 @@ export function ChecklistsClient() {
             />
           </div>
           <div>
-            <Button type="submit">Create & design</Button>
+            <Button type="submit">{t("createAndDesign")}</Button>
           </div>
         </form>
       </Panel>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold">Your templates</h2>
+        <h2 className="text-sm font-semibold">{t("yourTemplates")}</h2>
         <DataTable
           mode="server"
-          caption="Custom checklist templates"
+          caption={t("customTemplatesCaption")}
           columns={customColumns}
           rows={custom}
           filterState={customQuery.state}
           onFilterStateChange={customQuery.setState}
           getRowId={(row) => row.id}
-          emptyTitle="No custom templates yet."
+          emptyTitle={t("noCustomTemplates")}
           pagination={{
             page: customPage,
             perPage: customPerPage,
@@ -483,19 +488,19 @@ export function ChecklistsClient() {
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold">HR system templates</h2>
+        <h2 className="text-sm font-semibold">{t("hrSystemTemplates")}</h2>
         <p className="text-sm text-[var(--muted-foreground)]">
-          Read-only starters. Copy one to customize and assign to employees.
+          {t("systemTemplatesHint")}
         </p>
         <DataTable
           mode="server"
-          caption="System checklist templates"
+          caption={t("systemTemplatesCaption")}
           columns={systemColumns}
           rows={system}
           filterState={systemQuery.state}
           onFilterStateChange={systemQuery.setState}
           getRowId={(row) => row.id}
-          emptyTitle="No system templates."
+          emptyTitle={t("noSystemTemplates")}
           pagination={{
             page: systemPage,
             perPage: systemPerPage,

@@ -49,6 +49,10 @@ export function Dialog({
   const descriptionId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
+  // Keep latest callback without re-running open-focus when parents pass an
+  // inline onOpenChange (e.g. typing in a controlled input re-renders).
+  const onOpenChangeRef = useRef(onOpenChange);
+  onOpenChangeRef.current = onOpenChange;
 
   useEffect(() => {
     if (!open) {
@@ -74,7 +78,7 @@ export function Dialog({
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         event.preventDefault();
-        onOpenChange(false);
+        onOpenChangeRef.current(false);
         return;
       }
 
@@ -113,7 +117,7 @@ export function Dialog({
       window.removeEventListener("keydown", onKeyDown);
       previouslyFocused.current?.focus();
     };
-  }, [open, onOpenChange]);
+  }, [open]);
 
   if (!open || typeof document === "undefined") {
     return null;
@@ -167,7 +171,7 @@ export function Dialog({
             type="button"
             variant="ghost"
             size="icon"
-            className="h-9 w-9 shrink-0"
+            className="shrink-0"
             aria-label="Close"
             onClick={() => onOpenChange(false)}
           >

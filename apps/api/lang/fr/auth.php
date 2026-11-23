@@ -1,0 +1,19 @@
+<?php
+
+return [
+    'failed' => 'Les identifiants fournis sont incorrects.',
+    'password' => 'Le mot de passe fourni est incorrect.',
+    'throttle' => 'Trop de tentatives de connexion. Veuillez réessayer dans :seconds secondes.',
+    'disabled' => 'Ce compte a été désactivé.',
+    'must_set_password' => 'Veuillez utiliser le lien d’invitation de votre e-mail pour définir un mot de passe avant de vous connecter.',
+    'email_unverified' => 'L’adresse e-mail de ce compte n’est pas vérifiée.',
+    'mfa_challenge_invalid' => 'Défi d’authentification invalide ou expiré. Connectez-vous à nouveau.',
+    'mfa_code_invalid' => 'Code d’authentification invalide.',
+    'mfa_setup_code_invalid' => 'Code invalide.',
+    'mfa_not_enabled' => 'L’authentification multifacteur n’est pas activée.',
+    'forgot_password_sent' => 'Si cet e-mail est enregistré, un lien de réinitialisation a été envoyé.',
+    'password_reset_disabled' => 'Ce compte est désactivé et ne peut pas réinitialiser son mot de passe.',
+    'password_reset' => 'Le mot de passe a été réinitialisé.',
+    'password_updated' => 'Mot de passe mis à jour.',
+    'logged_out' => 'Déconnecté',
+];

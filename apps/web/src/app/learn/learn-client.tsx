@@ -1,13 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toastError, toastInfo, toastWarning } from "@/lib/toast";
+import { useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
+import { LanguageSwitcher } from "@/components/language-switcher";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Avatar } from "@/components/ui/avatar";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
 import { Panel } from "@/components/ui/panel";
@@ -20,15 +23,24 @@ import {
   fetchSessionUser,
 } from "@/lib/api";
 import { learnLiveChannel } from "@/lib/live-topics";
+import type { SessionUser } from "@/lib/session";
 import { resolveTenant } from "@/lib/tenant";
+import {
+  documentKind,
+  isDocumentLesson,
+  lessonMediaSrc,
+  lessonVideoEmbed,
+  type LessonContentType,
+} from "@/app/org/training/training-shared";
 
 type Lesson = {
   id: number;
   title: string;
-  content_type?: "text" | "video" | "pdf";
+  content_type?: LessonContentType;
   body?: string | null;
   media_url?: string | null;
   media_disk_path?: string | null;
+  media_mime?: string | null;
   duration_seconds?: number | null;
 };
 
@@ -79,59 +91,22 @@ type EnrollmentRow = {
   progress: number;
 };
 
-function youtubeEmbed(url: string): string | null {
-  try {
-    const parsed = new URL(url);
-    if (parsed.hostname.includes("youtu.be")) {
-      const id = parsed.pathname.replace("/", "");
-      return id ? `https://www.youtube.com/embed/${id}` : null;
-    }
-    if (parsed.hostname.includes("youtube.com")) {
-      const id = parsed.searchParams.get("v");
-      return id ? `https://www.youtube.com/embed/${id}` : null;
-    }
-  } catch {
-    return null;
-  }
-  return null;
-}
-
-function vimeoEmbed(url: string): string | null {
-  try {
-    const parsed = new URL(url);
-    if (!parsed.hostname.includes("vimeo.com")) return null;
-    const id = parsed.pathname.split("/").filter(Boolean).pop();
-    return id ? `https://player.vimeo.com/video/${id}` : null;
-  } catch {
-    return null;
-  }
-}
-
-function mediaSrc(lesson: Lesson, tenant: string): string | null {
-  if (lesson.media_disk_path) {
-    return `/api/v1/org/training/media/${lesson.id}?tenant=${encodeURIComponent(tenant)}`;
-  }
-  if (lesson.media_url) {
-    return (
-      youtubeEmbed(lesson.media_url) ||
-      vimeoEmbed(lesson.media_url) ||
-      lesson.media_url
-    );
-  }
-  return null;
-}
-
 type LearnPayload = {
   data: Enrollment[];
 };
 
 export function LearnClient() {
+  const t = useTranslations("learn");
+  const tCommon = useTranslations("common");
   const searchParams = useSearchParams();
   const courseParam = searchParams.get("course");
   const enrollmentParam = searchParams.get("enrollment");
   const targetParam = searchParams.get("target");
+  const tenantParam = searchParams.get("tenant");
+  const tenant = resolveTenant(tenantParam);
 
   const [userId, setUserId] = useState<number | null>(null);
+  const [session, setSession] = useState<SessionUser | null>(null);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [liveEnrollments, setLiveEnrollments] = useState<Enrollment[] | null>(null);
   const [activeEnrollmentId, setActiveEnrollmentId] = useState<number | null>(
@@ -146,12 +121,9 @@ export function LearnClient() {
   const [remainingByQuiz, setRemainingByQuiz] = useState<
     Record<number, number>
   >({});
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [submittingQuizId, setSubmittingQuizId] = useState<number | null>(null);
   const lastHeartbeat = useRef<Record<number, number>>({});
-  const tenant = resolveTenant();
   const channel =
     tenant && userId != null ? learnLiveChannel(tenant, userId) : null;
 
@@ -185,10 +157,8 @@ export function LearnClient() {
     (rows: Enrollment[]) => {
       setEnrollments(rows);
       if (rows.length === 0) {
-        setError(NO_ASSIGNED_TRAINING_MESSAGE);
         return;
       }
-      setError(null);
       if (enrollmentParam) {
         setActiveEnrollmentId(Number(enrollmentParam));
       } else if (courseParam) {
@@ -208,17 +178,17 @@ export function LearnClient() {
   }, []);
 
   const loadAssignments = useCallback(async () => {
-    setMessage(null);
-    setError(null);
     try {
       await ensureCsrf();
       const me = await fetchSessionUser();
       if (!me) {
-        setError("Sign in required to view assigned training.");
+        toastWarning(t("signInRequired"));
         setUserId(null);
+        setSession(null);
         return;
       }
       setUserId(me.id);
+      setSession(me);
       const params = new URLSearchParams();
       if (courseParam) params.set("course_id", courseParam);
       if (targetParam) params.set("target_id", targetParam);
@@ -230,13 +200,15 @@ export function LearnClient() {
       applyEnrollmentList(res.data);
       setAnswersByQuiz({});
     } catch (err) {
-      if (err instanceof ApiError && err.status === 403) {
-        setError(NO_ASSIGNED_TRAINING_MESSAGE);
+      if (err instanceof ApiError && err.status === 403 && err.message === NO_ASSIGNED_TRAINING_MESSAGE) {
+        applyEnrollmentList([]);
+      } else if (err instanceof ApiError && err.status === 403) {
+        toastError(err.message);
       } else {
-        setError(err instanceof Error ? err.message : "Failed to load");
+        toastError(err instanceof Error ? err.message : "Failed to load");
       }
     }
-  }, [applyEnrollmentList, courseParam, targetParam, tenant]);
+  }, [applyEnrollmentList, courseParam, t, targetParam, tenant]);
 
   const { status, error: liveError } = useLiveTopic<LearnPayload>({
     channel,
@@ -244,13 +216,21 @@ export function LearnClient() {
   });
 
   useEffect(() => {
+    if (liveError) {
+      toastError(liveError);
+    }
+  }, [liveError]);
+
+  useEffect(() => {
+    void loadAssignments().finally(() => setLoading(false));
+  }, [loadAssignments]);
+
+  useEffect(() => {
     if (liveEnrollments !== null) {
       applyEnrollmentList(liveEnrollments);
       setLoading(false);
-      return;
     }
-    void loadAssignments().finally(() => setLoading(false));
-  }, [liveEnrollments, applyEnrollmentList, loadAssignments]);
+  }, [liveEnrollments, applyEnrollmentList]);
 
   const statusLabel = liveStatusLabel(status);
 
@@ -286,16 +266,16 @@ export function LearnClient() {
         ),
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Progress update failed");
+      toastError(err instanceof Error ? err.message : "Progress update failed");
     }
   }
 
   async function markComplete(lesson: Lesson) {
     await reportLessonProgress(lesson, { completed: true, progress_pct: 100 });
-    setMessage(`Marked “${lesson.title}” complete.`);
+    toastInfo(`Marked “${lesson.title}” complete.`);
   }
 
-  function onVideoTime(lesson: Lesson, currentTime: number, duration: number) {
+  function onTimedMediaTime(lesson: Lesson, currentTime: number, duration: number) {
     const now = Date.now();
     const last = lastHeartbeat.current[lesson.id] ?? 0;
     if (now - last < 10000 && currentTime < duration - 1) return;
@@ -351,13 +331,13 @@ export function LearnClient() {
       const answer = answers[index];
       if (question.type === "essay") {
         if (typeof answer !== "string" || !answer.trim()) {
-          setError(`Write an answer for essay question ${index + 1}.`);
+          toastWarning(`Write an answer for essay question ${index + 1}.`);
           return;
         }
         continue;
       }
       if (typeof answer !== "number" || answer < 0) {
-        setError(`Select an answer for question ${index + 1}.`);
+        toastWarning(`Select an answer for question ${index + 1}.`);
         return;
       }
     }
@@ -365,13 +345,11 @@ export function LearnClient() {
       quiz.time_limit_seconds &&
       (remainingByQuiz[quiz.id] ?? quiz.time_limit_seconds) <= 0
     ) {
-      setError("Time limit exceeded for this quiz.");
+      toastWarning("Time limit exceeded for this quiz.");
       return;
     }
 
     setSubmittingQuizId(quiz.id);
-    setMessage(null);
-    setError(null);
     try {
       await ensureCsrf();
       const res = await api<{
@@ -388,7 +366,7 @@ export function LearnClient() {
           started_at: startedAtByQuiz[quiz.id] ?? new Date().toISOString(),
         }),
       });
-      setMessage(
+      toastInfo(
         `${quiz.title}: score ${res.data.score}% · ${res.data.passed ? "passed" : "retry"}`,
       );
       if (res.data.enrollment) {
@@ -401,7 +379,7 @@ export function LearnClient() {
         );
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Quiz failed");
+      toastError(err instanceof Error ? err.message : "Quiz failed");
     } finally {
       setSubmittingQuizId(null);
     }
@@ -420,7 +398,7 @@ export function LearnClient() {
     setAnswersByQuiz({});
     setStartedAtByQuiz({});
     setRemainingByQuiz({});
-    setMessage(null);
+    
   }
 
   const enrollmentColumns: Array<DataTableColumn<EnrollmentRow>> = [
@@ -451,37 +429,48 @@ export function LearnClient() {
     },
     {
       id: "status",
-      header: "Status",
+      header: tCommon("status"),
       accessorKey: "status",
       cell: (row) => row.status,
     },
     {
       id: "progress",
-      header: "Progress",
+      header: tCommon("progress"),
       accessorKey: "progress",
       filterValue: (row) => row.progress,
       cell: (row) => `${row.progress}%`,
     },
   ];
 
-  if (loading && enrollments.length === 0 && !error) {
+  if (loading && enrollments.length === 0) {
     return <PageSkeleton className="max-w-3xl" />;
   }
+
+  const defaultDescription = t("defaultDescription");
 
   return (
     <div className="mx-auto w-full max-w-3xl flex-1 px-6 py-10">
       <PageHeader
-        title={course?.title ?? "Learner portal"}
+        title={course?.title ?? t("learnerPortal")}
         description={
           statusLabel
-            ? `${course?.description ?? "Open assigned awareness training and complete the quiz."} · ${statusLabel}`
-            : (course?.description ??
-              "Open assigned awareness training and complete the quiz.")
+            ? `${course?.description ?? defaultDescription} · ${statusLabel}`
+            : (course?.description ?? defaultDescription)
         }
         actions={
           <>
             <NotificationBell />
+            <LanguageSwitcher />
             <ThemeToggle />
+            {session ? (
+              <Avatar
+                src={session.avatar_url}
+                name={session.name}
+                email={session.email}
+                size="sm"
+                alt={session.name || session.email}
+              />
+            ) : null}
           </>
         }
       />
@@ -490,29 +479,31 @@ export function LearnClient() {
         <DataTable
           className="mt-4"
           mode="client"
-          caption="Assigned courses"
+          caption={t("assignedCourses")}
           columns={enrollmentColumns}
           rows={enrollmentRows}
           getRowId={(row) => row.id}
           onRowClick={(row) => selectEnrollment(row.id)}
-          emptyTitle="No assigned courses"
-          emptyFilteredTitle="No matching courses"
+          emptyTitle={t("noAssignedCourses")}
+          emptyFilteredTitle={t("noAssignedCourses")}
         />
       ) : null}
 
       {active ? (
         <p className="mt-3 text-sm text-[var(--muted-foreground)]">
-          Progress {active.progress}% · status {active.status}
+          {tCommon("progress")} {active.progress}% · {tCommon("status")}{" "}
+          {active.status}
         </p>
       ) : null}
 
       {course?.lessons && course.lessons.length > 0 ? (
         course.lessons.map((lesson) => {
           const type = lesson.content_type ?? "text";
-          const src = mediaSrc(lesson, tenant);
-          const embed = lesson.media_url
-            ? youtubeEmbed(lesson.media_url) || vimeoEmbed(lesson.media_url)
-            : null;
+          const src = lessonMediaSrc(lesson, tenant);
+          const embed =
+            !lesson.media_disk_path && lesson.media_url
+              ? lessonVideoEmbed(lesson.media_url)
+              : null;
           const done = lessonDone(lesson.id);
 
           return (
@@ -556,25 +547,75 @@ export function LearnClient() {
                   }}
                   onTimeUpdate={(e) => {
                     const el = e.currentTarget;
-                    onVideoTime(lesson, el.currentTime, el.duration || lesson.duration_seconds || 0);
+                    onTimedMediaTime(
+                      lesson,
+                      el.currentTime,
+                      el.duration || lesson.duration_seconds || 0,
+                    );
                   }}
                 />
               ) : null}
 
-              {type === "pdf" && src ? (
-                <iframe
-                  title={lesson.title}
+              {type === "audio" && src ? (
+                <audio
+                  className="w-full"
+                  controls
                   src={src}
-                  className="h-[28rem] w-full rounded-[var(--radius)] border border-[var(--border)]"
-                  onLoad={() => {
+                  onPlay={() => {
                     void reportLessonProgress(lesson, { opened: true, progress_pct: 1 });
                   }}
+                  onTimeUpdate={(e) => {
+                    const el = e.currentTarget;
+                    onTimedMediaTime(
+                      lesson,
+                      el.currentTime,
+                      el.duration || lesson.duration_seconds || 0,
+                    );
+                  }}
                 />
               ) : null}
 
-              {(type === "text" || type === "pdf" || (type === "video" && embed)) && !done ? (
+              {isDocumentLesson(lesson) && src ? (
+                documentKind(lesson) === "office" ? (
+                  <div className="space-y-3">
+                    <p className="text-sm text-[var(--muted-foreground)]">
+                      {t("downloadDocumentHint")}
+                    </p>
+                    <a
+                      href={src}
+                      download
+                      className="inline-flex text-sm font-medium underline"
+                      onClick={() => {
+                        void reportLessonProgress(lesson, {
+                          opened: true,
+                          progress_pct: 1,
+                        });
+                      }}
+                    >
+                      {t("downloadDocument")}
+                    </a>
+                  </div>
+                ) : (
+                  <iframe
+                    title={lesson.title}
+                    src={src}
+                    className="h-[28rem] w-full rounded-[var(--radius)] border border-[var(--border)]"
+                    onLoad={() => {
+                      void reportLessonProgress(lesson, {
+                        opened: true,
+                        progress_pct: 1,
+                      });
+                    }}
+                  />
+                )
+              ) : null}
+
+              {(type === "text" ||
+                isDocumentLesson(lesson) ||
+                (type === "video" && embed)) &&
+              !done ? (
                 <Button type="button" variant="secondary" onClick={() => void markComplete(lesson)}>
-                  Mark as complete
+                  {t("markComplete")}
                 </Button>
               ) : null}
             </Panel>
@@ -583,8 +624,8 @@ export function LearnClient() {
       ) : (
         <EmptyState
           className="mt-6"
-          title="No lessons yet"
-          description="Load assignments after a training campaign enrolls you."
+          title={t("noLessons")}
+          description={t("noLessonsDescription")}
         />
       )}
 
@@ -598,7 +639,7 @@ export function LearnClient() {
               <div>
                 <h2 className="text-lg font-medium">{quiz.title}</h2>
                 <p className="text-xs text-[var(--muted-foreground)]">
-                  Pass {quiz.pass_score}%
+                  {t("passScore", { score: quiz.pass_score })}
                   {quiz.is_required === false ? " · optional" : " · required"}
                   {quiz.time_limit_seconds
                     ? ` · ${quiz.time_limit_seconds}s limit`
@@ -608,7 +649,9 @@ export function LearnClient() {
               {quiz.time_limit_seconds ? (
                 <div className="text-sm text-[var(--muted-foreground)]">
                   {started
-                    ? `Time left: ${remaining ?? quiz.time_limit_seconds}s`
+                    ? t("timeLeft", {
+                        seconds: remaining ?? quiz.time_limit_seconds,
+                      })
                     : "Timer starts when you answer"}
                 </div>
               ) : null}
@@ -679,27 +722,13 @@ export function LearnClient() {
               onClick={() => void submitQuiz(quiz)}
               disabled={submittingQuizId === quiz.id}
             >
-              {submittingQuizId === quiz.id ? "Submitting…" : "Submit quiz"}
+              {submittingQuizId === quiz.id
+                ? tCommon("submitting")
+                : t("submitQuiz")}
             </Button>
           </Panel>
         );
       })}
-
-      {liveError ? (
-        <Alert className="mt-4" variant="destructive">
-          {liveError}
-        </Alert>
-      ) : null}
-      {error ? (
-        <Alert className="mt-4" variant="destructive">
-          {error}
-        </Alert>
-      ) : null}
-      {message ? (
-        <Alert className="mt-4" variant="success">
-          {message}
-        </Alert>
-      ) : null}
-    </div>
+</div>
   );
 }

@@ -8,6 +8,8 @@ use App\Domains\Realtime\Support\PublishLive;
 use App\Domains\TargetsGroups\Models\Department;
 use App\Domains\TargetsGroups\Models\Target;
 use App\Http\Controllers\Controller;
+use App\Models\TenantMembership;
+use App\Models\User;
 use App\Support\ApiPagination;
 use App\Support\ListQuery;
 use Illuminate\Http\JsonResponse;
@@ -88,6 +90,18 @@ class DepartmentController extends Controller
 
         if (array_key_exists('name', $data) && $before['name'] !== $department->name) {
             Target::query()
+                ->where('department_id', $department->id)
+                ->update(['department' => $department->name]);
+
+            // users + memberships are central; departments live in the tenant DB.
+            $tenantId = (string) tenant('id');
+            User::query()
+                ->inTenant($tenantId)
+                ->where('department_id', $department->id)
+                ->update(['department' => $department->name]);
+
+            TenantMembership::query()
+                ->where('tenant_id', $tenantId)
                 ->where('department_id', $department->id)
                 ->update(['department' => $department->name]);
         }

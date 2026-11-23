@@ -46,7 +46,16 @@ class DemoSeeder extends Seeder
 
         // Reset built-in demo orgs (includes mmdshry local company).
         $demoTenantIds = ['itneck', 'test', 'company', 'mmdshry'];
-        User::query()->whereIn('tenant_id', $demoTenantIds)->delete();
+        $demoUserIds = User::query()
+            ->where(function ($q) use ($demoTenantIds): void {
+                $q->whereIn('tenant_id', $demoTenantIds)
+                    ->orWhereHas('memberships', fn ($m) => $m->whereIn('tenant_id', $demoTenantIds));
+            })
+            ->pluck('id');
+        if ($demoUserIds->isNotEmpty()) {
+            DB::table('tenant_memberships')->whereIn('user_id', $demoUserIds)->delete();
+            User::query()->whereIn('id', $demoUserIds)->delete();
+        }
         User::query()->whereIn('email', [
             'unshields@gmail.com',
             'test@mmdshry.com',

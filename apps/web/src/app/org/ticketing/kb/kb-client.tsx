@@ -1,10 +1,11 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert } from "@/components/ui/alert";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LinkButton } from "@/components/ui/link-button";
@@ -28,6 +29,7 @@ import {
 } from "@/lib/pagination";
 import { hasPermission, type SessionUser } from "@/lib/session";
 import { resolveTenant } from "@/lib/tenant";
+import { toastError, toastSuccess } from "@/lib/toast";
 import type { SdKbArticle } from "../ticketing-types";
 
 type KbPayload = {
@@ -61,6 +63,8 @@ function articleCells(article: SdKbArticle): Record<string, string> {
 }
 
 export function KbClient() {
+  const t = useTranslations("org.ticketing");
+  const tCommon = useTranslations("common");
   const tenant = resolveTenant();
   const channel = tenant ? orgLiveChannel(tenant, "kb") : null;
   const [session, setSession] = useState<SessionUser | null>(null);
@@ -69,7 +73,6 @@ export function KbClient() {
   const [meta, setMeta] = useState<PaginationMeta>(emptyMeta());
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState<PageSize>(DEFAULT_PAGE_SIZE);
-  const [message, setMessage] = useState<string | null>(null);
   const [summary, setSummary] = useState("");
   const [description, setDescription] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -114,9 +117,9 @@ export function KbClient() {
       if (!me) {
         return;
       }
-      const t = resolveTenant();
+      const tenantId = resolveTenant();
       const params = paginationQuery(nextPage, nextPerPage, nextFilters);
-      const list = await api(`/api/v1/org/ticketing/kb?${params}`, { tenant: t });
+      const list = await api(`/api/v1/org/ticketing/kb?${params}`, { tenant: tenantId });
       const parsed = parsePaginatedResponse<SdKbArticle>(list, nextPerPage);
       setArticles(parsed.data);
       setMeta(parsed.meta);
@@ -131,10 +134,22 @@ export function KbClient() {
   });
 
   useEffect(() => {
+    if (liveError) {
+      toastError(liveError);
+    }
+  }, [liveError]);
+
+  useEffect(() => {
     void fetchSessionUser()
       .then(setSession)
       .catch(() => setSession(null));
   }, []);
+
+  useEffect(() => {
+    if (session && !hasPermission(session, "org.ticketing.kb")) {
+      toastError(t("needKbPermission"));
+    }
+  }, [session, t]);
 
   useEffect(() => {
     if (filtersKeyRef.current !== filtersKey) {
@@ -157,7 +172,7 @@ export function KbClient() {
     }
     void refreshFromApi(page, perPage, filters)
       .catch((err: unknown) =>
-        setMessage(err instanceof Error ? err.message : "Load failed"),
+        toastError(err instanceof Error ? err.message : tCommon("loadFailed")),
       )
       .finally(() => setLoading(false));
   }, [
@@ -169,9 +184,11 @@ export function KbClient() {
     applyLiveSlice,
     refreshFromApi,
     tableQuery.debounced,
+    tCommon,
   ]);
 
   const statusLabel = liveStatusLabel(status);
+  const dash = tCommon("emDash");
 
   async function afterMutation() {
     if (liveArticles === null) {
@@ -183,7 +200,6 @@ export function KbClient() {
     setEditingId(article.id);
     setSummary(article.summary);
     setDescription(article.description ?? "");
-    setMessage(null);
   }
 
   function resetForm() {
@@ -203,7 +219,7 @@ export function KbClient() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ summary, description }),
         });
-        setMessage("Article updated.");
+        toastSuccess(t("articleUpdated"));
       } else {
         await api("/api/v1/org/ticketing/kb", {
           method: "POST",
@@ -211,13 +227,13 @@ export function KbClient() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ summary, description, is_published: true }),
         });
-        setMessage("Article published.");
+        toastSuccess(t("articlePublished"));
         setPage(1);
       }
       resetForm();
       await afterMutation();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Save failed");
+      toastError(err instanceof Error ? err.message : tCommon("saveFailed"));
     }
   }
 
@@ -230,10 +246,10 @@ export function KbClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ is_published: !article.is_published }),
       });
-      setMessage(article.is_published ? "Article unpublished." : "Article published.");
+      toastSuccess(article.is_published ? t("articleUnpublished") : t("articlePublished"));
       await afterMutation();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Publish toggle failed");
+      toastError(err instanceof Error ? err.message : t("publishToggleFailed"));
     }
   }
 
@@ -244,59 +260,74 @@ export function KbClient() {
       tenant: resolveTenant(),
     });
     if (editingId === article.id) resetForm();
-    setMessage("Article deleted.");
+    toastSuccess(t("articleDeleted"));
     await afterMutation();
   }
 
   const columns: Array<DataTableColumn<SdKbArticle>> = [
     {
       id: "number",
-      header: "Number",
+      header: tCommon("number"),
       accessorKey: "number",
       sticky: true,
-      cell: (article) => article.number || "—",
+      cell: (article) => article.number || dash,
     },
     {
       id: "summary",
-      header: "Summary",
+      header: tCommon("summary"),
       accessorKey: "summary",
       cell: (article) => article.summary,
     },
     {
       id: "description",
-      header: "Body",
+      header: tCommon("body"),
       accessorKey: "description",
       className: "max-w-md whitespace-pre-wrap",
-      cell: (article) => article.description || "—",
+      cell: (article) => article.description || dash,
     },
     {
       id: "published",
-      header: "Published",
+      header: tCommon("published"),
       filter: "select",
       filterOptions: [
-        { label: "Published", value: "1" },
-        { label: "Draft", value: "0" },
+        { label: tCommon("published"), value: "1" },
+        { label: tCommon("draft"), value: "0" },
       ],
       filterValue: (article) => (article.is_published ? "1" : "0"),
       enableSorting: false,
-      cell: (article) => (article.is_published ? "Published" : "Draft"),
+      cell: (article) => (article.is_published ? tCommon("published") : tCommon("draft")),
     },
     {
       id: "actions",
-      header: "Actions",
+      header: tCommon("actions"),
       filter: "none",
       enableSorting: false,
       enableGlobalFilter: false,
       cell: (article) => (
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" onClick={() => startEdit(article)}>
-            Edit
+          <Button
+            type="button"
+            variant="outline"
+            size="compact"
+            onClick={() => startEdit(article)}
+          >
+            {tCommon("edit")}
           </Button>
-          <Button type="button" variant="outline" onClick={() => void togglePublish(article)}>
-            {article.is_published ? "Unpublish" : "Publish"}
+          <Button
+            type="button"
+            variant="outline"
+            size="compact"
+            onClick={() => void togglePublish(article)}
+          >
+            {article.is_published ? t("unpublish") : t("publish")}
           </Button>
-          <Button type="button" variant="outline" onClick={() => setPendingDelete(article)}>
-            Delete
+          <Button
+            type="button"
+            variant="outline"
+            size="compact"
+            onClick={() => setPendingDelete(article)}
+          >
+            {tCommon("delete")}
           </Button>
         </div>
       ),
@@ -310,8 +341,8 @@ export function KbClient() {
   if (session && !hasPermission(session, "org.ticketing.kb")) {
     return (
       <div className="mx-auto w-full max-w-5xl flex-1 space-y-4 px-4 py-8 sm:px-6">
-        <PageHeader title="Knowledge Base" description="Articles." />
-        <Alert>You need org.ticketing.kb.</Alert>
+        <PageHeader title={t("knowledgeBase")} description={t("kbDescription")} />
+        <EmptyState title={t("needKbPermission")} />
       </div>
     );
   }
@@ -319,20 +350,22 @@ export function KbClient() {
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 space-y-6 px-4 py-8 sm:px-6">
       <PageHeader
-        title="Knowledge Base"
+        title={t("knowledgeBase")}
         description={
           statusLabel
-            ? `Known errors, workarounds, and resolutions. · ${statusLabel}`
-            : "Known errors, workarounds, and resolutions."
+            ? `${t("kbDescription")} · ${statusLabel}`
+            : t("kbDescription")
         }
-        actions={<LinkButton href="/org/ticketing" variant="outline">Tickets</LinkButton>}
+        actions={
+          <LinkButton href="/org/ticketing" variant="outline">
+            {t("title")}
+          </LinkButton>
+        }
       />
-      {message ? <Alert>{message}</Alert> : null}
-      {liveError ? <Alert variant="destructive">{liveError}</Alert> : null}
-      <Panel title={editingId !== null ? "Edit article" : "New article"}>
+      <Panel title={editingId !== null ? t("editArticle") : t("newArticle")}>
         <form className="space-y-3" onSubmit={onSubmit}>
           <div className="space-y-1">
-            <Label htmlFor="kb-summary">Summary</Label>
+            <Label htmlFor="kb-summary">{tCommon("summary")}</Label>
             <Input
               id="kb-summary"
               value={summary}
@@ -341,7 +374,7 @@ export function KbClient() {
             />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="kb-body">Body</Label>
+            <Label htmlFor="kb-body">{tCommon("body")}</Label>
             <Textarea
               id="kb-body"
               value={description}
@@ -350,25 +383,27 @@ export function KbClient() {
             />
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button type="submit">{editingId !== null ? "Save changes" : "Publish"}</Button>
+            <Button type="submit">
+              {editingId !== null ? tCommon("saveChanges") : t("publish")}
+            </Button>
             {editingId !== null ? (
               <Button type="button" variant="outline" onClick={resetForm}>
-                Cancel
+                {tCommon("cancel")}
               </Button>
             ) : null}
           </div>
         </form>
       </Panel>
-      <Panel title="Articles">
+      <Panel title={t("articles")}>
         <DataTable
           mode="server"
-          caption="Knowledge base articles"
+          caption={t("articlesCaption")}
           columns={columns}
           rows={articles}
           filterState={tableQuery.state}
           onFilterStateChange={tableQuery.setState}
           getRowId={(row) => row.id}
-          emptyTitle="No articles yet."
+          emptyTitle={t("noArticlesYet")}
           pagination={{
             page,
             perPage,
@@ -386,9 +421,11 @@ export function KbClient() {
         onOpenChange={(open) => {
           if (!open) setPendingDelete(null);
         }}
-        title="Delete article"
-        description={`Delete KB article ${pendingDelete?.number ?? pendingDelete?.summary ?? ""}?`}
-        confirmLabel="Delete"
+        title={t("deleteArticle")}
+        description={t("deleteArticleConfirm", {
+          name: pendingDelete?.number ?? pendingDelete?.summary ?? "",
+        })}
+        confirmLabel={tCommon("delete")}
         variant="destructive"
         onConfirm={async () => {
           if (!pendingDelete) return;

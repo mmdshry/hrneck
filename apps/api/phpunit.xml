@@ -29,10 +29,12 @@
         <env name="DB_CONNECTION" value="mysql"/>
         <env name="DB_HOST" value="127.0.0.1"/>
         <env name="DB_PORT" value="3306"/>
-        <env name="DB_DATABASE" value="hrneck_central"/>
+        <!-- Dedicated schemas so Feature RefreshDatabase never wipes local app data. -->
+        <env name="DB_DATABASE" value="hrneck_central_testing"/>
         <env name="DB_USERNAME" value="root"/>
         <env name="DB_PASSWORD" value=""/>
         <env name="DB_URL" value=""/>
+        <env name="TENANCY_DATABASE_PREFIX" value="hrneck_tenant_testing_"/>
         <env name="TENANCY_BASE_DOMAIN" value="hrneck.test"/>
         <env name="BRAND_DOMAIN" value="hrneck.test"/>
         <env name="BRAND_SHORT" value="HRNECK"/>

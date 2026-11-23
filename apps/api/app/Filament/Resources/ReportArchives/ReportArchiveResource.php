@@ -7,6 +7,7 @@ use App\Domains\AnalyticsReporting\Models\ReportArchive;
 use App\Filament\Concerns\RequiresFilamentTenant;
 use App\Filament\Resources\ReportArchives\Pages\ManageReportArchives;
 use App\Support\FilamentTenant;
+use App\Support\TimezoneOptions;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Forms\Components\Select;
@@ -67,7 +68,11 @@ class ReportArchiveResource extends Resource
                             'custom' => 'custom',
                         ])->default('quarterly')->required(),
                         TextInput::make('period_key')->required()->placeholder('2026-Q3'),
-                        TextInput::make('timezone')->default('UTC'),
+                        Select::make('timezone')
+                            ->options(TimezoneOptions::all())
+                            ->searchable()
+                            ->required()
+                            ->default('UTC'),
                         Toggle::make('include_training')->default(true),
                     ])
                     ->action(function (array $data): void {
@@ -93,7 +98,7 @@ class ReportArchiveResource extends Resource
                             'status' => 'ready',
                             'generated_at' => now(),
                         ]);
-                        Notification::make()->title('PDF generated')->success()->send();
+                        Notification::make()->title(__('filament.pdf_generated'))->success()->send();
                     }),
             ])
             ->recordActions([

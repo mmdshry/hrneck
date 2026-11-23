@@ -1,3 +1,4 @@
+import { getLocale, getTranslations } from "next-intl/server";
 import { ExampleCallout } from "@/components/guides/example-callout";
 import { FlowDiagram } from "@/components/guides/flow-diagram";
 import { GuideNav } from "@/components/guides/guide-nav";
@@ -23,10 +24,18 @@ import {
 } from "@/lib/guides/registry";
 import type { GuideModule } from "@/lib/guides/types";
 
-export function GuideArticle({ guide }: { guide: GuideModule }) {
-  const { previous, next } = getAdjacentGuides(guide.slug);
+export async function GuideArticle({
+  guide,
+  locale: localeProp,
+}: {
+  guide: GuideModule;
+  locale?: string;
+}) {
+  const locale = localeProp ?? (await getLocale());
+  const t = await getTranslations("guides");
+  const { previous, next } = getAdjacentGuides(guide.slug, locale);
   const relatedGuides = guide.related
-    .map((slug) => getGuide(slug))
+    .map((slug) => getGuide(slug, locale))
     .filter((item): item is GuideModule => Boolean(item));
   const Icon = guideIcon(guide.slug);
   const OpenIcon = guidesOpenInAppIcon;
@@ -46,14 +55,14 @@ export function GuideArticle({ guide }: { guide: GuideModule }) {
           guide.openInAppHref ? (
             <LinkButton href={guide.openInAppHref} variant="default">
               <OpenIcon className="h-4 w-4" aria-hidden />
-              Open in app
+              {t("openInApp")}
             </LinkButton>
           ) : null
         }
       />
 
       <section className="space-y-3">
-        <SectionHeading icon={guidesOverviewIcon}>Overview</SectionHeading>
+        <SectionHeading icon={guidesOverviewIcon}>{t("overview")}</SectionHeading>
         <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">
           {guide.overview}
         </p>
@@ -67,7 +76,7 @@ export function GuideArticle({ guide }: { guide: GuideModule }) {
       </div>
 
       <section className="space-y-4">
-        <SectionHeading icon={guidesStepsIcon}>Step-by-step</SectionHeading>
+        <SectionHeading icon={guidesStepsIcon}>{t("stepByStep")}</SectionHeading>
         <StepList steps={guide.steps} />
       </section>
 
@@ -85,7 +94,7 @@ export function GuideArticle({ guide }: { guide: GuideModule }) {
 
       {relatedGuides.length > 0 ? (
         <section className="space-y-3">
-          <SectionHeading icon={guidesRelatedIcon}>Related guides</SectionHeading>
+          <SectionHeading icon={guidesRelatedIcon}>{t("related")}</SectionHeading>
           <ul className="flex flex-wrap gap-2">
             {relatedGuides.map((related) => {
               const RelatedIcon = guideIcon(related.slug);

@@ -2,10 +2,11 @@
 
 namespace App\Filament\Resources\Targets\Pages;
 
-use App\Domains\DirectorySync\Actions\RunDirectorySync;
+use App\Domains\TargetsGroups\Actions\RecalculateTargetRisk;
 use App\Domains\TargetsGroups\Models\Target;
 use App\Filament\Resources\Pages\ManageTenantRecords;
 use App\Filament\Resources\Targets\TargetResource;
+use App\Support\AppLocale;
 use App\Support\FilamentTenant;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
@@ -20,18 +21,24 @@ class ManageTargets extends ManageTenantRecords
     protected function getHeaderActions(): array
     {
         return [
-            CreateAction::make()->visible(fn (): bool => FilamentTenant::has()),
-            Action::make('directorySync')
-                ->label('Run directory sync')
-                ->icon('heroicon-o-arrow-path')
+            CreateAction::make()
                 ->visible(fn (): bool => FilamentTenant::has())
-                ->action(function (): void {
-                    $result = app(RunDirectorySync::class)->handle();
-                    Notification::make()
-                        ->title('Directory sync complete')
-                        ->body('Users: '.($result['users'] ?? 0).' / Groups: '.($result['groups'] ?? 0))
-                        ->success()
-                        ->send();
+                ->mutateFormDataUsing(function (array $data): array {
+                    unset($data['risk_score'], $data['risk_tier'], $data['risk_source'], $data['risk_updated_at']);
+
+                    if (array_key_exists('preferred_language', $data)) {
+                        $raw = $data['preferred_language'];
+                        if ($raw === null || (is_string($raw) && trim($raw) === '')) {
+                            $data['preferred_language'] = null;
+                        } else {
+                            $data['preferred_language'] = AppLocale::normalize(is_string($raw) ? $raw : null);
+                        }
+                    }
+
+                    return $data;
+                })
+                ->after(function (Target $record): void {
+                    app(RecalculateTargetRisk::class)->handle($record, force: true);
                 }),
             Action::make('importCsv')
                 ->label('Import CSV')
@@ -69,13 +76,15 @@ class ManageTargets extends ManageTenantRecords
                         $count++;
                     }
                     fclose($handle);
-                    Notification::make()->title("Imported {$count} rows")->success()->send();
+                    Notification::make()->title(__('filament.imported_rows', ['count' => $count]))->success()->send();
                 }),
         ];
     }
 
     public function getHeading(): string
     {
-        return FilamentTenant::has() ? 'Targets' : 'Targets — select an organization';
+        return FilamentTenant::has()
+            ? __('filament.employees')
+            : __('filament.employees_select_organization');
     }
 }

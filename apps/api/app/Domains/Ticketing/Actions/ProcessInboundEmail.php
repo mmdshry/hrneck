@@ -71,7 +71,7 @@ class ProcessInboundEmail
             $userQuery = User::query()->whereRaw('LOWER(email) = ?', [$from]);
             $tenantId = tenant('id');
             if (is_string($tenantId) && $tenantId !== '') {
-                $userQuery->where('tenant_id', $tenantId);
+                $userQuery->inTenant($tenantId);
             }
             $user = $userQuery->first();
         }

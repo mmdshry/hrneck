@@ -9,6 +9,7 @@ use App\Models\Tenant;
 use App\Models\User;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -16,6 +17,7 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\IconColumn;
+use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
@@ -59,6 +61,14 @@ class UserResource extends Resource
                 ])
                 ->visible(fn (callable $get): bool => blank($get('tenant_id')))
                 ->dehydrated(fn (callable $get): bool => blank($get('tenant_id'))),
+            FileUpload::make('avatar_path')
+                ->label('Photo')
+                ->image()
+                ->disk((string) config('filesystems.training_disk', 'local'))
+                ->directory(fn (callable $get): string => 'tenants/'.(string) ($get('tenant_id') ?: 'central').'/avatars')
+                ->visibility('private')
+                ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp'])
+                ->maxSize(2048),
             Toggle::make('mfa_enabled')->label('MFA enabled')->disabled()->dehydrated(false),
         ]);
     }
@@ -68,6 +78,11 @@ class UserResource extends Resource
         return $table
             ->modifyQueryUsing(fn (Builder $query): Builder => $query->with('roles'))
             ->columns([
+                ImageColumn::make('avatar_path')
+                    ->label('Photo')
+                    ->disk((string) config('filesystems.training_disk', 'local'))
+                    ->circular()
+                    ->defaultImageUrl(null),
                 TextColumn::make('name')->searchable()->sortable(),
                 TextColumn::make('email')->searchable()->sortable(),
                 TextColumn::make('tenant_id')->label('Org')->placeholder('Platform')->badge(),

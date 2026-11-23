@@ -1,7 +1,8 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert } from "@/components/ui/alert";
+import { toastSuccess, toastError } from "@/lib/toast";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
@@ -43,20 +44,6 @@ const ACTIVE_OPTIONS = [
   { label: "Inactive", value: "0" },
 ];
 
-function alertVariantForMessage(message: string): "destructive" | "success" | "default" {
-  const m = message.toLowerCase();
-  if (
-    /\b(fail|failed|error|invalid|unauthorized|rejected|denied|cannot)\b/.test(m) ||
-    m.includes("load failed")
-  ) {
-    return "destructive";
-  }
-  if (/\b(created|saved|updated|deleted)\b/.test(m)) {
-    return "success";
-  }
-  return "default";
-}
-
 function departmentCells(department: Department): Record<string, string> {
   return {
     name: department.name,
@@ -83,6 +70,8 @@ function matchesCells(
 }
 
 export function DepartmentsClient() {
+  const t = useTranslations("org.departments");
+  const tCommon = useTranslations("common");
   const tenant = resolveTenant();
   const channel = tenant ? orgLiveChannel(tenant, "departments") : null;
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -90,7 +79,6 @@ export function DepartmentsClient() {
   const [departmentsMeta, setDepartmentsMeta] = useState<PaginationMeta>(emptyMeta());
   const [departmentsPage, setDepartmentsPage] = useState(1);
   const [departmentsPerPage, setDepartmentsPerPage] = useState<PageSize>(DEFAULT_PAGE_SIZE);
-  const [message, setMessage] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Department | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Department | null>(null);
@@ -136,10 +124,10 @@ export function DepartmentsClient() {
       if (!me) {
         return;
       }
-      const t = resolveTenant();
+      const tenantSlug = resolveTenant();
       const res = await api(
         `/api/v1/org/departments?${paginationQuery(nextPage, nextPerPage, nextFilters)}`,
-        { tenant: t },
+        { tenant: tenantSlug },
       );
       const parsed = parsePaginatedResponse<Department>(res, nextPerPage);
       setDepartments(parsed.data);
@@ -175,7 +163,7 @@ export function DepartmentsClient() {
     }
     void refreshFromApi(departmentsPage, departmentsPerPage, filters)
       .catch((err: unknown) => {
-        setMessage(err instanceof Error ? err.message : "Load failed");
+        toastError(err instanceof Error ? err.message : tCommon("loadFailed"));
       })
       .finally(() => setLoading(false));
   }, [
@@ -221,11 +209,11 @@ export function DepartmentsClient() {
 
   async function saveDepartment(event: FormEvent) {
     event.preventDefault();
-    setMessage(null);
+    
     setSaving(true);
     try {
       await ensureCsrf();
-      const t = resolveTenant();
+      const tenantSlug = resolveTenant();
       const payload = {
         name: name.trim(),
         is_active: isActive,
@@ -233,19 +221,19 @@ export function DepartmentsClient() {
       if (editing) {
         await api(`/api/v1/org/departments/${editing.id}`, {
           method: "PATCH",
-          tenant: t,
+          tenant: tenantSlug,
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-        setMessage("Department updated.");
+        toastSuccess(t("departmentUpdated"));
       } else {
         await api("/api/v1/org/departments", {
           method: "POST",
-          tenant: t,
+          tenant: tenantSlug,
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-        setMessage("Department created.");
+        toastSuccess(t("departmentCreated"));
         setDepartmentsPage(1);
       }
       setModalOpen(false);
@@ -254,24 +242,24 @@ export function DepartmentsClient() {
       setIsActive(true);
       await afterMutation(editing ? departmentsPage : 1);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Department failed");
+      toastError(err instanceof Error ? err.message : t("departmentFailed"));
     } finally {
       setSaving(false);
     }
   }
 
   async function deleteDepartment(department: Department) {
-    setMessage(null);
+    
     try {
       await ensureCsrf();
       await api(`/api/v1/org/departments/${department.id}`, {
         method: "DELETE",
         tenant: resolveTenant(),
       });
-      setMessage("Department deleted.");
+      toastSuccess(t("departmentDeleted"));
       await afterMutation();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Delete failed");
+      toastError(err instanceof Error ? err.message : tCommon("deleteFailed"));
       throw err;
     }
   }
@@ -279,29 +267,29 @@ export function DepartmentsClient() {
   const columns: Array<DataTableColumn<Department>> = [
     {
       id: "name",
-      header: "Name",
+      header: tCommon("name"),
       accessorKey: "name",
       sticky: true,
       cell: (department) => department.name,
     },
     {
       id: "is_active",
-      header: "Status",
+      header: tCommon("status"),
       filter: "select",
       filterOptions: ACTIVE_OPTIONS,
       filterValue: (department) => (department.is_active === false ? "0" : "1"),
-      cell: (department) => (department.is_active === false ? "Inactive" : "Active"),
+      cell: (department) => (department.is_active === false ? tCommon("inactive") : tCommon("active")),
     },
     {
       id: "targets_count",
-      header: "Employees",
+      header: tCommon("employees"),
       filter: "none",
       filterValue: (department) => department.targets_count ?? 0,
       cell: (department) => department.targets_count ?? 0,
     },
     {
       id: "actions",
-      header: "Actions",
+      header: tCommon("actions"),
       filter: "none",
       enableSorting: false,
       enableGlobalFilter: false,
@@ -310,7 +298,7 @@ export function DepartmentsClient() {
           <Button
             type="button"
             variant="outline"
-            className="min-h-0 px-2 py-1 text-xs"
+            size="compact"
             onClick={() => openEditModal(department)}
           >
             Edit
@@ -318,7 +306,7 @@ export function DepartmentsClient() {
           <Button
             type="button"
             variant="outline"
-            className="min-h-0 px-2 py-1 text-xs"
+            size="compact"
             onClick={() => setPendingDelete(department)}
           >
             Delete
@@ -335,38 +323,28 @@ export function DepartmentsClient() {
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">
       <PageHeader
-        title="Departments"
-        description={
-          statusLabel ?? "Manage departments and select them when adding employees."
-        }
+        title={t("title")}
+        description={statusLabel ?? t("description")}
         actions={
           <Button type="button" onClick={openCreateModal}>
-            Add department
+            {t("addDepartment")}
           </Button>
         }
       />
-      {message ? (
-        <Alert className="mt-4" variant={alertVariantForMessage(message)}>
-          {message}
-        </Alert>
-      ) : null}
-      {liveError ? (
-        <Alert className="mt-4" variant="destructive">
-          {liveError}
-        </Alert>
-      ) : null}
+      
+      
 
       <section className="mt-10">
         <DataTable
           mode="server"
-          caption="Departments"
+          caption={t("departmentsCaption")}
           columns={columns}
           rows={departments}
           filterState={tableQuery.state}
           onFilterStateChange={tableQuery.setState}
           getRowId={(row) => row.id}
-          emptyTitle="No departments yet"
-          emptyDescription="Create a department, then assign it on the Employees page."
+          emptyTitle={t("noDepartmentsYet")}
+          emptyDescription={t("noDepartmentsHint")}
           pagination={{
             page: departmentsPage,
             perPage: departmentsPerPage,
@@ -386,8 +364,8 @@ export function DepartmentsClient() {
           if (!open) closeModal();
           else setModalOpen(true);
         }}
-        title={editing ? "Edit department" : "Add department"}
-        description="Departments appear as selectable options on employee forms."
+        title={editing ? t("editDepartment") : t("addDepartment")}
+        description={t("formHint")}
         dismissible={!saving}
         footer={
           <>
@@ -395,7 +373,7 @@ export function DepartmentsClient() {
               Cancel
             </Button>
             <Button type="submit" form="department-form" disabled={saving || !name.trim()}>
-              {saving ? "Saving…" : editing ? "Save changes" : "Add department"}
+              {saving ? tCommon("saving") : editing ? tCommon("saveChanges") : t("addDepartment")}
             </Button>
           </>
         }
@@ -430,9 +408,9 @@ export function DepartmentsClient() {
         onOpenChange={(open) => {
           if (!open) setPendingDelete(null);
         }}
-        title="Delete department"
+        title={t("deleteDepartment")}
         description={`Delete department ${pendingDelete?.name}? Employees must be unassigned first.`}
-        confirmLabel="Delete"
+        confirmLabel={tCommon("delete")}
         variant="destructive"
         onConfirm={async () => {
           if (!pendingDelete) return;

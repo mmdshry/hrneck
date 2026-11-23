@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +9,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { api, ensureCsrf } from "@/lib/api";
 import { resolveTenant } from "@/lib/tenant";
-import { toastSuccess } from "@/lib/toast";
+import { toastError, toastSuccess, toastWarning } from "@/lib/toast";
 import {
   draftToQuizPayload,
   emptyQuizDraft,
@@ -23,7 +24,6 @@ type Props = {
   quizzes: CourseQuiz[];
   busy: boolean;
   setBusy: (value: boolean) => void;
-  setError: (value: string | null) => void;
   onChanged: () => Promise<void>;
 };
 
@@ -32,9 +32,10 @@ export function CourseQuizEditor({
   quizzes,
   busy,
   setBusy,
-  setError,
   onChanged,
 }: Props) {
+  const t = useTranslations("org.courses");
+  const tCommon = useTranslations("common");
   const [editingId, setEditingId] = useState<number | "new" | null>(null);
   const [draft, setDraft] = useState<QuizDraft>(emptyQuizDraft());
 
@@ -56,29 +57,28 @@ export function CourseQuizEditor({
   async function saveQuiz() {
     const payload = draftToQuizPayload(draft);
     if (!payload.title) {
-      setError("Quiz title is required.");
+      toastWarning(t("quizTitleRequired"));
       return;
     }
     if (payload.questions.length === 0) {
-      setError("Add at least one question.");
+      toastWarning(t("addAtLeastOneQuestion"));
       return;
     }
     for (const [index, question] of payload.questions.entries()) {
       if (!question.prompt) {
-        setError(`Question ${index + 1} needs a prompt.`);
+        toastWarning(`Question ${index + 1} needs a prompt.`);
         return;
       }
       if (
         question.type === "mcq" &&
         (!question.options || question.options.length < 2)
       ) {
-        setError(`Question ${index + 1} needs at least two options (one per line).`);
+        toastWarning(`Question ${index + 1} needs at least two options (one per line).`);
         return;
       }
     }
 
     setBusy(true);
-    setError(null);
     try {
       await ensureCsrf();
       const tenant = resolveTenant();
@@ -89,7 +89,7 @@ export function CourseQuizEditor({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-        toastSuccess("Quiz created.");
+        toastSuccess(t("quizCreated"));
       } else if (typeof editingId === "number") {
         await api(`/api/v1/org/training/courses/${courseId}/quizzes/${editingId}`, {
           method: "PUT",
@@ -97,12 +97,12 @@ export function CourseQuizEditor({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-        toastSuccess("Quiz saved.");
+        toastSuccess(t("quizSaved"));
       }
       cancelEdit();
       await onChanged();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save quiz");
+      toastError(err instanceof Error ? err.message : t("quizSaveFailed"));
     } finally {
       setBusy(false);
     }
@@ -110,20 +110,19 @@ export function CourseQuizEditor({
 
   async function deleteQuiz(quizId: number) {
     setBusy(true);
-    setError(null);
     try {
       await ensureCsrf();
       await api(`/api/v1/org/training/courses/${courseId}/quizzes/${quizId}`, {
         method: "DELETE",
         tenant: resolveTenant(),
       });
-      toastSuccess("Quiz deleted.");
+      toastSuccess(t("quizDeleted"));
       if (editingId === quizId) {
         cancelEdit();
       }
       await onChanged();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete quiz");
+      toastError(err instanceof Error ? err.message : t("quizDeleteFailed"));
     } finally {
       setBusy(false);
     }
@@ -192,7 +191,7 @@ export function CourseQuizEditor({
       {editingId !== null ? (
         <div className="space-y-3 rounded-[var(--radius)] border border-[var(--border)] p-4">
           <h4 className="text-sm font-medium">
-            {editingId === "new" ? "New quiz" : "Edit quiz"}
+            {editingId === "new" ? t("newQuiz") : t("editQuiz")}
           </h4>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1 sm:col-span-2">
@@ -231,7 +230,7 @@ export function CourseQuizEditor({
                     time_limit_seconds: e.target.value,
                   }))
                 }
-                placeholder="No limit"
+                placeholder={tCommon("noLimit")}
               />
             </div>
             <label className="flex items-center gap-2 text-sm sm:col-span-2">
@@ -381,7 +380,7 @@ export function CourseQuizEditor({
 
           <div className="flex flex-wrap gap-2">
             <Button type="button" disabled={busy} onClick={() => void saveQuiz()}>
-              {busy ? "Saving…" : "Save quiz"}
+              {busy ? tCommon("saving") : t("saveQuiz")}
             </Button>
             <Button
               type="button"

@@ -7,7 +7,10 @@ export function TableScroll({
   ...props
 }: HTMLAttributes<HTMLDivElement> & { children: ReactNode }) {
   return (
-    <div className={cn("min-w-0 overflow-x-auto", className)} {...props}>
+    <div
+      className={cn("max-w-full min-w-0 overflow-x-auto overscroll-x-contain", className)}
+      {...props}
+    >
       {children}
     </div>
   );

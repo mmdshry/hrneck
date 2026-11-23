@@ -66,8 +66,11 @@ return [
         /**
          * Tenant database names are created like this:
          * prefix + tenant_id + suffix.
+         *
+         * Tests override via TENANCY_DATABASE_PREFIX so RefreshDatabase /
+         * tenants:migrate-fresh never wipe local/dev tenant schemas.
          */
-        'prefix' => 'hrneck_tenant_',
+        'prefix' => env('TENANCY_DATABASE_PREFIX', 'hrneck_tenant_'),
         'suffix' => '',
 
         /**

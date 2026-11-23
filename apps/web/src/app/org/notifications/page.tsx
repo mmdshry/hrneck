@@ -1,13 +1,15 @@
-import type { Metadata } from "next";
+import { getTranslations } from "next-intl/server";
 import { NotificationsClient } from "./notifications-client";
 
 export const instant = false;
 
-export const metadata: Metadata = {
-  title: "Notifications",
-  description: "Organization inbox for assignments, tickets, and announcements.",
-};
-
+export async function generateMetadata() {
+  const t = await getTranslations("org.notifications");
+  return {
+    title: t("title"),
+    description: t("description"),
+  };
+}
 export default function NotificationsPage() {
   return <NotificationsClient />;
 }

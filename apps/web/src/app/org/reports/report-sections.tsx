@@ -1,7 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import { useDataTableQuery } from "@/hooks/use-data-table-query";
@@ -15,6 +15,7 @@ import {
   paginationQuery,
 } from "@/lib/pagination";
 import { resolveTenant } from "@/lib/tenant";
+import { toastError } from "@/lib/toast";
 import { downloadReportCsv } from "./download-report-csv";
 import { ReportTable, type ReportColumn } from "./report-table";
 import type {
@@ -55,6 +56,8 @@ function useReportSection<T>(
   filters: Record<string, string | number | undefined>,
   enabled = true,
 ) {
+  const t = useTranslations("org.reports");
+  const tCommon = useTranslations("common");
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState<PageSize>(DEFAULT_PAGE_SIZE);
   const [state, setState] = useState<ListState<T>>({
@@ -62,8 +65,6 @@ function useReportSection<T>(
     meta: emptyMeta(DEFAULT_PAGE_SIZE),
   });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [csvError, setCsvError] = useState<string | null>(null);
 
   const filterKey = JSON.stringify(filters);
   const [liveEpoch, setLiveEpoch] = useState(0);
@@ -90,7 +91,6 @@ function useReportSection<T>(
   const load = useCallback(async () => {
     if (!enabled) return;
     setLoading(true);
-    setError(null);
     try {
       await ensureCsrf();
       const parsed = JSON.parse(filterKey) as Record<
@@ -115,18 +115,17 @@ function useReportSection<T>(
         summary: payload.summary,
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Load failed");
+      toastError(err instanceof Error ? err.message : tCommon("loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [enabled, filterKey, page, perPage, section]);
+  }, [enabled, filterKey, page, perPage, section, tCommon]);
 
   useEffect(() => {
     void load();
   }, [load, liveEpoch]);
 
   async function onCsv() {
-    setCsvError(null);
     try {
       const parsed = JSON.parse(filterKey) as Record<
         string,
@@ -134,7 +133,7 @@ function useReportSection<T>(
       >;
       await downloadReportCsv(section, parsed);
     } catch (err) {
-      setCsvError(err instanceof Error ? err.message : "CSV export failed");
+      toastError(err instanceof Error ? err.message : t("csvExportFailed"));
     }
   }
 
@@ -143,8 +142,6 @@ function useReportSection<T>(
     page,
     perPage,
     loading,
-    error,
-    csvError,
     setPage,
     setPerPage,
     onCsv,
@@ -162,9 +159,10 @@ function useServerTableFilters() {
 }
 
 function CsvButton({ onCsv }: { onCsv: () => void }) {
+  const tCommon = useTranslations("common");
   return (
     <Button type="button" variant="outline" onClick={onCsv}>
-      Export CSV
+      {tCommon("exportCsv")}
     </Button>
   );
 }
@@ -174,9 +172,9 @@ export function CompanySection({
 }: {
   sharedFilters?: ReportSharedFilters;
 }) {
+  const t = useTranslations("org.reports");
+  const tCommon = useTranslations("common");
   const [company, setCompany] = useState<CompanyPayload | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [csvError, setCsvError] = useState<string | null>(null);
   const [liveEpoch, setLiveEpoch] = useState(0);
   const tenant = resolveTenant();
   const filterKey = JSON.stringify(sharedFilters ?? {});
@@ -209,14 +207,13 @@ export function CompanySection({
         );
         setCompany(res.data.data as CompanyPayload);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Load failed");
+        toastError(err instanceof Error ? err.message : tCommon("loadFailed"));
       }
     })();
-  }, [filterKey, liveEpoch]);
+  }, [filterKey, liveEpoch, tCommon]);
 
-  if (error) return <Alert variant="destructive">{error}</Alert>;
   if (!company) {
-    return <p className="text-sm text-[var(--muted-foreground)]">Loading company…</p>;
+    return <p className="text-sm text-[var(--muted-foreground)]">{t("loadingCompany")}</p>;
   }
 
   const profileEntries = Object.entries(company.profile).filter(([, v]) => v != null && v !== "");
@@ -230,16 +227,15 @@ export function CompanySection({
           onClick={() => {
             void downloadReportCsv("company", withSharedFilters({}, sharedFilters)).catch(
               (err: unknown) =>
-                setCsvError(err instanceof Error ? err.message : "CSV export failed"),
+                toastError(err instanceof Error ? err.message : t("csvExportFailed")),
             );
           }}
         >
-          Export CSV
+          {tCommon("exportCsv")}
         </Button>
       </div>
-      {csvError ? <Alert variant="destructive">{csvError}</Alert> : null}
       <Panel className="p-4">
-        <h3 className="text-sm font-medium">Organization profile</h3>
+        <h3 className="text-sm font-medium">{t("organizationProfile")}</h3>
         <dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {profileEntries.map(([key, value]) => (
             <div key={key}>
@@ -250,47 +246,47 @@ export function CompanySection({
             </div>
           ))}
           {profileEntries.length === 0 ? (
-            <p className="text-sm text-[var(--muted-foreground)]">No profile fields set.</p>
+            <p className="text-sm text-[var(--muted-foreground)]">{t("noProfileFields")}</p>
           ) : null}
         </dl>
       </Panel>
 
       <Panel className="space-y-3 p-4">
-        <h3 className="text-sm font-medium">By department</h3>
+        <h3 className="text-sm font-medium">{t("byDepartment")}</h3>
         <ReportTable
           rows={company.by_department}
           columns={[
-            { key: "department", header: "Department", cell: (r) => r.department },
-            { key: "targets", header: "Employees", cell: (r) => r.targets },
-            { key: "sent", header: "Sent", cell: (r) => r.sent },
-            { key: "opened", header: "Opened", cell: (r) => r.opened },
-            { key: "completed", header: "Completed", cell: (r) => r.completed },
-            { key: "opened_pct", header: "Open %", cell: (r) => r.opened_pct },
-            { key: "completed_pct", header: "Complete %", cell: (r) => r.completed_pct },
-            { key: "no_action_pct", header: "No-action %", cell: (r) => r.no_action_pct },
+            { key: "department", header: tCommon("department"), cell: (r) => r.department },
+            { key: "targets", header: tCommon("employees"), cell: (r) => r.targets },
+            { key: "sent", header: t("sent"), cell: (r) => r.sent },
+            { key: "opened", header: t("opened"), cell: (r) => r.opened },
+            { key: "completed", header: tCommon("completed"), cell: (r) => r.completed },
+            { key: "opened_pct", header: t("openPct"), cell: (r) => r.opened_pct },
+            { key: "completed_pct", header: t("completePct"), cell: (r) => r.completed_pct },
+            { key: "no_action_pct", header: t("noActionPct"), cell: (r) => r.no_action_pct },
           ]}
         />
       </Panel>
 
       <Panel className="space-y-3 p-4">
-        <h3 className="text-sm font-medium">By group</h3>
+        <h3 className="text-sm font-medium">{t("byGroup")}</h3>
         <ReportTable
           rows={company.by_group}
           columns={[
-            { key: "name", header: "Group", cell: (r) => r.name },
-            { key: "targets", header: "Employees", cell: (r) => r.targets },
-            { key: "source", header: "Source", cell: (r) => r.source ?? "—" },
+            { key: "name", header: tCommon("group"), cell: (r) => r.name },
+            { key: "targets", header: tCommon("employees"), cell: (r) => r.targets },
+            { key: "source", header: tCommon("source"), cell: (r) => r.source ?? tCommon("emDash") },
           ]}
         />
       </Panel>
 
       <Panel className="space-y-3 p-4">
-        <h3 className="text-sm font-medium">By role</h3>
+        <h3 className="text-sm font-medium">{t("byRole")}</h3>
         <ReportTable
           rows={company.by_role}
           columns={[
-            { key: "role", header: "Role", cell: (r) => r.role },
-            { key: "users", header: "Users", cell: (r) => r.users },
+            { key: "role", header: tCommon("role"), cell: (r) => r.role },
+            { key: "users", header: tCommon("users"), cell: (r) => r.users },
           ]}
         />
       </Panel>
@@ -311,6 +307,8 @@ export function UsersSection({
 }: {
   sharedFilters?: ReportSharedFilters;
 }) {
+  const t = useTranslations("org.reports");
+  const tCommon = useTranslations("common");
   const { tableQuery, filters } = useServerTableFilters();
   const list = useReportSection<UserRow>("users", withSharedFilters(filters, sharedFilters));
 
@@ -334,24 +332,24 @@ export function UsersSection({
         toolbarExtra={<CsvButton onCsv={() => void list.onCsv()} />}
         rows={list.rows}
         columns={[
-          { key: "name", header: "Name", cell: (r) => r.name, accessorKey: "name" },
-          { key: "email", header: "Email", cell: (r) => r.email, accessorKey: "email" },
+          { key: "name", header: tCommon("name"), cell: (r) => r.name, accessorKey: "name" },
+          { key: "email", header: tCommon("email"), cell: (r) => r.email, accessorKey: "email" },
           {
             key: "roles",
-            header: "Roles",
-            cell: (r) => r.roles.join(", ") || "—",
+            header: tCommon("roles"),
+            cell: (r) => r.roles.join(", ") || tCommon("emDash"),
             filterValue: (r) => r.roles,
           },
           {
             key: "mfa",
-            header: "MFA",
-            cell: (r) => (r.mfa_enabled ? "Yes" : "No"),
+            header: t("mfa"),
+            cell: (r) => (r.mfa_enabled ? tCommon("yes") : tCommon("no")),
             filter: "select",
             filterOptions: [
-              { label: "Yes", value: "yes" },
-              { label: "No", value: "no" },
+              { label: tCommon("yes"), value: "yes" },
+              { label: tCommon("no"), value: "no" },
             ],
-            filterValue: (r) => (r.mfa_enabled ? "Yes" : "No"),
+            filterValue: (r) => (r.mfa_enabled ? "yes" : "no"),
           },
         ]}
       />
@@ -375,6 +373,7 @@ export function TargetsSection({
 }: {
   sharedFilters?: ReportSharedFilters;
 }) {
+  const tCommon = useTranslations("common");
   const { tableQuery, filters } = useServerTableFilters();
   const list = useReportSection<TargetRow>(
     "targets",
@@ -401,29 +400,35 @@ export function TargetsSection({
         toolbarExtra={<CsvButton onCsv={() => void list.onCsv()} />}
         rows={list.rows}
         columns={[
-          { key: "email", header: "Email", cell: (r) => r.email, accessorKey: "email" },
+          { key: "email", header: tCommon("email"), cell: (r) => r.email, accessorKey: "email" },
           {
             key: "name",
-            header: "Name",
-            cell: (r) => `${r.first_name ?? ""} ${r.last_name ?? ""}`.trim() || "—",
+            header: tCommon("name"),
+            cell: (r) =>
+              `${r.first_name ?? ""} ${r.last_name ?? ""}`.trim() || tCommon("emDash"),
             filterValue: (r) => `${r.first_name ?? ""} ${r.last_name ?? ""}`.trim(),
           },
           {
             key: "department",
-            header: "Department",
-            cell: (r) => r.department ?? "—",
+            header: tCommon("department"),
+            cell: (r) => r.department ?? tCommon("emDash"),
             accessorKey: "department",
           },
           {
             key: "groups",
-            header: "Groups",
-            cell: (r) => r.groups.join(", ") || "—",
+            header: tCommon("groups"),
+            cell: (r) => r.groups.join(", ") || tCommon("emDash"),
             filterValue: (r) => r.groups,
           },
-          { key: "status", header: "Status", cell: (r) => r.status, accessorKey: "status" },
+          {
+            key: "status",
+            header: tCommon("status"),
+            cell: (r) => r.status,
+            accessorKey: "status",
+          },
           {
             key: "risk",
-            header: "Risk",
+            header: tCommon("risk"),
             cell: (r) => r.risk_score,
             filterValue: (r) => r.risk_score,
           },
@@ -467,6 +472,8 @@ export function CampaignsSection({
 }: {
   sharedFilters?: ReportSharedFilters;
 }) {
+  const t = useTranslations("org.reports");
+  const tCommon = useTranslations("common");
   const { tableQuery, filters } = useServerTableFilters();
   const recipientsQuery = useServerTableFilters();
   const [campaignId, setCampaignId] = useState<number | null>(null);
@@ -488,16 +495,62 @@ export function CampaignsSection({
   );
 
   const campaignColumns: Array<ReportColumn<CampaignRow>> = [
-    { key: "campaign", header: "Campaign", cell: (r) => r.name, filterValue: (r) => r.name },
-    { key: "type", header: "Type", cell: (r) => r.type, accessorKey: "type" },
-    { key: "status", header: "Status", cell: (r) => r.status, accessorKey: "status" },
-    { key: "recipients", header: "Recipients", cell: (r) => r.recipients, filter: "none", enableSorting: true },
-    { key: "sent", header: "Sent", cell: (r) => r.sent, filter: "none", enableSorting: true },
-    { key: "opened", header: "Opened", cell: (r) => r.opened, filter: "none", enableSorting: true },
-    { key: "completed", header: "Completed", cell: (r) => r.completed, filter: "none", enableSorting: true },
-    { key: "opened_pct", header: "Open %", cell: (r) => r.opened_pct, filter: "none", enableSorting: true },
-    { key: "completed_pct", header: "Complete %", cell: (r) => r.completed_pct, filter: "none", enableSorting: true },
-    { key: "no_action_pct", header: "No-action %", cell: (r) => r.no_action_pct, filter: "none", enableSorting: true },
+    {
+      key: "campaign",
+      header: tCommon("campaign"),
+      cell: (r) => r.name,
+      filterValue: (r) => r.name,
+    },
+    { key: "type", header: tCommon("type"), cell: (r) => r.type, accessorKey: "type" },
+    {
+      key: "status",
+      header: tCommon("status"),
+      cell: (r) => r.status,
+      accessorKey: "status",
+    },
+    {
+      key: "recipients",
+      header: tCommon("recipients"),
+      cell: (r) => r.recipients,
+      filter: "none",
+      enableSorting: true,
+    },
+    { key: "sent", header: t("sent"), cell: (r) => r.sent, filter: "none", enableSorting: true },
+    {
+      key: "opened",
+      header: t("opened"),
+      cell: (r) => r.opened,
+      filter: "none",
+      enableSorting: true,
+    },
+    {
+      key: "completed",
+      header: tCommon("completed"),
+      cell: (r) => r.completed,
+      filter: "none",
+      enableSorting: true,
+    },
+    {
+      key: "opened_pct",
+      header: t("openPct"),
+      cell: (r) => r.opened_pct,
+      filter: "none",
+      enableSorting: true,
+    },
+    {
+      key: "completed_pct",
+      header: t("completePct"),
+      cell: (r) => r.completed_pct,
+      filter: "none",
+      enableSorting: true,
+    },
+    {
+      key: "no_action_pct",
+      header: t("noActionPct"),
+      cell: (r) => r.no_action_pct,
+      filter: "none",
+      enableSorting: true,
+    },
   ];
 
   return (
@@ -524,7 +577,7 @@ export function CampaignsSection({
           onRowClick={(row) => setCampaignId(row.id)}
         />
         <p className="mt-2 text-xs text-[var(--muted-foreground)]">
-          Click a campaign to drill into recipients.
+          {t("clickCampaignForRecipients")}
         </p>
       </SectionShell>
 
@@ -532,12 +585,12 @@ export function CampaignsSection({
         <Panel className="space-y-3 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-sm font-medium">
-              Recipients for campaign #{campaignId}
+              {t("recipientsForCampaign", { id: campaignId })}
             </h3>
             <div className="flex gap-2">
               <CsvButton onCsv={() => void recipients.onCsv()} />
               <Button type="button" variant="secondary" onClick={() => setCampaignId(null)}>
-                Close
+                {tCommon("close")}
               </Button>
             </div>
           </div>
@@ -559,31 +612,46 @@ export function CampaignsSection({
               }}
               rows={recipients.rows}
               columns={[
-                { key: "email", header: "Email", cell: (r) => r.email ?? "—", accessorKey: "email" },
-                { key: "name", header: "Name", cell: (r) => r.name || "—", accessorKey: "name" },
+                {
+                  key: "email",
+                  header: tCommon("email"),
+                  cell: (r) => r.email ?? tCommon("emDash"),
+                  accessorKey: "email",
+                },
+                {
+                  key: "name",
+                  header: tCommon("name"),
+                  cell: (r) => r.name || tCommon("emDash"),
+                  accessorKey: "name",
+                },
                 {
                   key: "department",
-                  header: "Department",
-                  cell: (r) => r.department ?? "—",
+                  header: tCommon("department"),
+                  cell: (r) => r.department ?? tCommon("emDash"),
                   accessorKey: "department",
                 },
-                { key: "status", header: "Status", cell: (r) => r.status, accessorKey: "status" },
+                {
+                  key: "status",
+                  header: tCommon("status"),
+                  cell: (r) => r.status,
+                  accessorKey: "status",
+                },
                 {
                   key: "sent_at",
-                  header: "Sent",
-                  cell: (r) => (r.sent_at ? "Yes" : "—"),
+                  header: t("sent"),
+                  cell: (r) => (r.sent_at ? tCommon("yes") : tCommon("emDash")),
                   filter: "none",
                 },
                 {
                   key: "opened_at",
-                  header: "Opened",
-                  cell: (r) => (r.opened_at ? "Yes" : "—"),
+                  header: t("opened"),
+                  cell: (r) => (r.opened_at ? tCommon("yes") : tCommon("emDash")),
                   filter: "none",
                 },
                 {
                   key: "completed",
-                  header: "Completed",
-                  cell: (r) => (r.completed ? "Yes" : "—"),
+                  header: tCommon("completed"),
+                  cell: (r) => (r.completed ? tCommon("yes") : tCommon("emDash")),
                   filter: "none",
                 },
               ]}
@@ -613,6 +681,7 @@ export function TrainingSection({
 }: {
   sharedFilters?: ReportSharedFilters;
 }) {
+  const tCommon = useTranslations("common");
   const { tableQuery, filters } = useServerTableFilters();
   const list = useReportSection<TrainingRow>(
     "training",
@@ -639,23 +708,48 @@ export function TrainingSection({
         toolbarExtra={<CsvButton onCsv={() => void list.onCsv()} />}
         rows={list.rows}
         columns={[
-          { key: "email", header: "Email", cell: (r) => r.email ?? "—", accessorKey: "email" },
-          { key: "name", header: "Name", cell: (r) => r.name || "—", accessorKey: "name" },
+          {
+            key: "email",
+            header: tCommon("email"),
+            cell: (r) => r.email ?? tCommon("emDash"),
+            accessorKey: "email",
+          },
+          {
+            key: "name",
+            header: tCommon("name"),
+            cell: (r) => r.name || tCommon("emDash"),
+            accessorKey: "name",
+          },
           {
             key: "department",
-            header: "Department",
-            cell: (r) => r.department ?? "—",
+            header: tCommon("department"),
+            cell: (r) => r.department ?? tCommon("emDash"),
             accessorKey: "department",
           },
-          { key: "course", header: "Course", cell: (r) => r.course ?? "—", accessorKey: "course" },
-          { key: "status", header: "Status", cell: (r) => r.status, accessorKey: "status" },
+          {
+            key: "course",
+            header: tCommon("course"),
+            cell: (r) => r.course ?? tCommon("emDash"),
+            accessorKey: "course",
+          },
+          {
+            key: "status",
+            header: tCommon("status"),
+            cell: (r) => r.status,
+            accessorKey: "status",
+          },
           {
             key: "progress",
-            header: "Progress",
+            header: tCommon("progress"),
             cell: (r) => `${r.progress}%`,
             filterValue: (r) => r.progress,
           },
-          { key: "source", header: "Source", cell: (r) => r.source, accessorKey: "source" },
+          {
+            key: "source",
+            header: tCommon("source"),
+            cell: (r) => r.source,
+            accessorKey: "source",
+          },
         ]}
       />
     </SectionShell>
@@ -673,20 +767,6 @@ type ChecklistRow = {
   progress_pct: number;
 };
 
-const CHECKLIST_CATEGORY_LABELS: Record<string, string> = {
-  custom: "Custom",
-  hr_ops: "HR ops",
-  offboarding: "Offboarding",
-  onboarding: "Onboarding",
-};
-
-const CHECKLIST_STATUS_LABELS: Record<string, string> = {
-  not_started: "Not started",
-  in_progress: "In progress",
-  completed: "Completed",
-  cancelled: "Cancelled",
-};
-
 function humanizeKey(key: string): string {
   const spaced = key.replaceAll("_", " ");
   return spaced.length > 0
@@ -694,12 +774,34 @@ function humanizeKey(key: string): string {
     : spaced;
 }
 
-function checklistCategoryLabel(key: string): string {
-  return CHECKLIST_CATEGORY_LABELS[key] ?? humanizeKey(key);
+function checklistCategoryLabel(key: string, translate: (id: string) => string): string {
+  switch (key) {
+    case "custom":
+      return translate("custom");
+    case "hr_ops":
+      return translate("hrOps");
+    case "offboarding":
+      return translate("offboarding");
+    case "onboarding":
+      return translate("onboarding");
+    default:
+      return humanizeKey(key);
+  }
 }
 
-function checklistStatusLabel(key: string): string {
-  return CHECKLIST_STATUS_LABELS[key] ?? humanizeKey(key);
+function checklistStatusLabel(key: string, translate: (id: string) => string): string {
+  switch (key) {
+    case "not_started":
+      return translate("notStarted");
+    case "in_progress":
+      return translate("inProgress");
+    case "completed":
+      return translate("completed");
+    case "cancelled":
+      return translate("cancelled");
+    default:
+      return humanizeKey(key);
+  }
 }
 
 function checklistStatusBarColor(key: string): string {
@@ -779,6 +881,9 @@ export function ChecklistsSection({
 }: {
   sharedFilters?: ReportSharedFilters;
 }) {
+  const t = useTranslations("org.reports");
+  const tCommon = useTranslations("common");
+  const tChecklists = useTranslations("org.checklists");
   const { tableQuery, filters } = useServerTableFilters();
   const list = useReportSection<ChecklistRow>(
     "checklists",
@@ -791,17 +896,17 @@ export function ChecklistsSection({
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2">
         <BreakdownPanel
-          title="By category"
+          title={t("byCategory")}
           counts={byCategory}
-          emptyLabel="No templates."
-          labelFor={checklistCategoryLabel}
+          emptyLabel={t("noTemplates")}
+          labelFor={(key) => checklistCategoryLabel(key, tChecklists)}
           barColorFor={() => "var(--primary)"}
         />
         <BreakdownPanel
-          title="By status"
+          title={t("byStatus")}
           counts={byStatus}
-          emptyLabel="No instances."
-          labelFor={checklistStatusLabel}
+          emptyLabel={t("noInstances")}
+          labelFor={(key) => checklistStatusLabel(key, tCommon)}
           barColorFor={checklistStatusBarColor}
         />
       </div>
@@ -824,29 +929,39 @@ export function ChecklistsSection({
           toolbarExtra={<CsvButton onCsv={() => void list.onCsv()} />}
           rows={list.rows}
           columns={[
-            { key: "title", header: "Title", cell: (r) => r.title, accessorKey: "title" },
+            {
+              key: "title",
+              header: tCommon("titleLabel"),
+              cell: (r) => r.title,
+              accessorKey: "title",
+            },
             {
               key: "template",
-              header: "Template",
-              cell: (r) => r.template ?? "—",
+              header: tCommon("template"),
+              cell: (r) => r.template ?? tCommon("emDash"),
               accessorKey: "template",
             },
             {
               key: "category",
-              header: "Category",
-              cell: (r) => r.category ?? "—",
+              header: tCommon("category"),
+              cell: (r) => r.category ?? tCommon("emDash"),
               accessorKey: "category",
             },
             {
               key: "assignee",
-              header: "Assignee",
-              cell: (r) => r.email ?? "—",
+              header: tCommon("assignee"),
+              cell: (r) => r.email ?? tCommon("emDash"),
               filterValue: (r) => r.email,
             },
-            { key: "status", header: "Status", cell: (r) => r.status, accessorKey: "status" },
+            {
+              key: "status",
+              header: tCommon("status"),
+              cell: (r) => r.status,
+              accessorKey: "status",
+            },
             {
               key: "progress",
-              header: "Progress",
+              header: tCommon("progress"),
               cell: (r) => `${r.progress_pct}%`,
               filterValue: (r) => r.progress_pct,
             },
@@ -874,6 +989,9 @@ export function TicketingSection({
 }: {
   sharedFilters?: ReportSharedFilters;
 }) {
+  const t = useTranslations("org.reports");
+  const tCommon = useTranslations("common");
+  const tTicketing = useTranslations("org.ticketing");
   const { tableQuery, filters } = useServerTableFilters();
   const list = useReportSection<TicketRow>(
     "ticketing",
@@ -887,45 +1005,49 @@ export function TicketingSection({
         <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Panel className="px-4 py-3">
-              <p className="text-xs uppercase tracking-wide text-[var(--muted-foreground)]">Open</p>
+              <p className="text-xs uppercase tracking-wide text-[var(--muted-foreground)]">
+                {tCommon("open")}
+              </p>
               <p className="mt-1 text-2xl font-medium">{summary.total_open}</p>
             </Panel>
             <Panel className="px-4 py-3">
-              <p className="text-xs uppercase tracking-wide text-[var(--muted-foreground)]">Resolved</p>
+              <p className="text-xs uppercase tracking-wide text-[var(--muted-foreground)]">
+                {tCommon("resolved")}
+              </p>
               <p className="mt-1 text-2xl font-medium">{summary.total_resolved}</p>
             </Panel>
             <Panel className="px-4 py-3">
               <p className="text-xs uppercase tracking-wide text-[var(--muted-foreground)]">
-                Response breach
+                {t("responseBreach")}
               </p>
               <p className="mt-1 text-2xl font-medium">{summary.sla_response_breached}</p>
             </Panel>
             <Panel className="px-4 py-3">
               <p className="text-xs uppercase tracking-wide text-[var(--muted-foreground)]">
-                Resolve breach
+                {t("resolveBreach")}
               </p>
               <p className="mt-1 text-2xl font-medium">{summary.sla_resolve_breached}</p>
             </Panel>
           </div>
           <div className="grid gap-3 lg:grid-cols-3">
             <BreakdownPanel
-              title="By desk"
+              title={t("byDesk")}
               counts={summary.by_desk ?? {}}
-              emptyLabel="No desks."
+              emptyLabel={t("noDesks")}
               labelFor={humanizeKey}
               barColorFor={() => "var(--primary)"}
             />
             <BreakdownPanel
-              title="By priority"
+              title={t("byPriority")}
               counts={summary.by_priority ?? {}}
-              emptyLabel="No priorities."
+              emptyLabel={t("noPriorities")}
               labelFor={humanizeKey}
               barColorFor={() => "var(--primary)"}
             />
             <BreakdownPanel
-              title="By stage"
+              title={t("byStage")}
               counts={summary.by_stage ?? {}}
-              emptyLabel="No stages."
+              emptyLabel={t("noStages")}
               labelFor={humanizeKey}
               barColorFor={() => "var(--primary)"}
             />
@@ -951,27 +1073,52 @@ export function TicketingSection({
           toolbarExtra={<CsvButton onCsv={() => void list.onCsv()} />}
           rows={list.rows}
           columns={[
-            { key: "number", header: "Number", cell: (r) => r.number, accessorKey: "number" },
-            { key: "summary", header: "Summary", cell: (r) => r.summary, accessorKey: "summary" },
-            { key: "desk", header: "Desk", cell: (r) => r.desk ?? "—", accessorKey: "desk" },
-            { key: "stage", header: "Stage", cell: (r) => r.stage ?? "—", accessorKey: "stage" },
+            {
+              key: "number",
+              header: tCommon("number"),
+              cell: (r) => r.number,
+              accessorKey: "number",
+            },
+            {
+              key: "summary",
+              header: tCommon("summary"),
+              cell: (r) => r.summary,
+              accessorKey: "summary",
+            },
+            {
+              key: "desk",
+              header: tCommon("desk"),
+              cell: (r) => r.desk ?? tCommon("emDash"),
+              accessorKey: "desk",
+            },
+            {
+              key: "stage",
+              header: tCommon("stage"),
+              cell: (r) => r.stage ?? tCommon("emDash"),
+              accessorKey: "stage",
+            },
             {
               key: "priority",
-              header: "Priority",
-              cell: (r) => r.priority ?? "—",
+              header: tCommon("priority"),
+              cell: (r) => r.priority ?? tCommon("emDash"),
               accessorKey: "priority",
             },
-            { key: "status", header: "Status", cell: (r) => r.status ?? "—", accessorKey: "status" },
+            {
+              key: "status",
+              header: tCommon("status"),
+              cell: (r) => r.status ?? tCommon("emDash"),
+              accessorKey: "status",
+            },
             {
               key: "sla",
-              header: "SLA",
+              header: tTicketing("sla"),
               cell: (r) =>
                 [
-                  r.sla_response_breached ? "response" : null,
-                  r.sla_resolve_breached ? "resolve" : null,
+                  r.sla_response_breached ? t("slaResponse") : null,
+                  r.sla_resolve_breached ? t("slaResolve") : null,
                 ]
                   .filter(Boolean)
-                  .join(", ") || "OK",
+                  .join(", ") || tCommon("ok"),
               filterValue: (r) =>
                 r.sla_response_breached || r.sla_resolve_breached ? "breach" : "ok",
             },
@@ -983,17 +1130,10 @@ export function TicketingSection({
 }
 
 function SectionShell<T>({
-  list,
   children,
 }: {
   list: ReturnType<typeof useReportSection<T>>;
   children: ReactNode;
 }) {
-  return (
-    <div className="space-y-3">
-      {list.error ? <Alert variant="destructive">{list.error}</Alert> : null}
-      {list.csvError ? <Alert variant="destructive">{list.csvError}</Alert> : null}
-      {children}
-    </div>
-  );
+  return <div className="space-y-3">{children}</div>;
 }

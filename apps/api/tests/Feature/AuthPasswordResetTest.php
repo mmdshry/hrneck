@@ -66,3 +66,20 @@ test('reset password updates credentials with a valid token and rejects invalid 
         'password' => 'NewPass!23456',
     ])->assertOk();
 });
+
+test('reset password does not re-enable a disabled account', function () {
+    $user = User::query()->where('email', 'admin@itneck.test')->firstOrFail();
+    $user->forceFill(['disabled_at' => now()])->save();
+    $token = Password::broker()->createToken($user);
+
+    $this->postJson('/api/v1/auth/password/reset', [
+        'email' => 'admin@itneck.test',
+        'token' => $token,
+        'password' => 'NewPass!23456',
+        'password_confirmation' => 'NewPass!23456',
+    ])->assertStatus(422);
+
+    $user->refresh();
+    expect($user->disabled_at)->not->toBeNull()
+        ->and(Hash::check('NewPass!23456', $user->getAuthPassword()))->toBeFalse();
+});

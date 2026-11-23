@@ -51,6 +51,7 @@ test('org targets list accepts q and department filters', function () {
             'first_name' => 'Dept',
             'last_name' => 'Filter',
             'department' => 'Security-Filter-Lab',
+            'timezone' => 'UTC',
         ])
         ->assertCreated();
 

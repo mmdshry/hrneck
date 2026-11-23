@@ -56,7 +56,7 @@ class DomainsSettings extends Page
     public function save(): void
     {
         if (! FilamentTenant::has()) {
-            Notification::make()->title('Select an organization first')->danger()->send();
+            Notification::make()->title(__('filament.select_organization_first'))->danger()->send();
 
             return;
         }
@@ -73,6 +73,6 @@ class DomainsSettings extends Page
             ],
         );
         $this->guidance = app(BuildDnsGuidance::class)->handle($domain);
-        Notification::make()->title('Sending domain saved')->success()->send();
+        Notification::make()->title(__('filament.sending_domain_saved'))->success()->send();
     }
 }

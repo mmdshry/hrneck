@@ -1,7 +1,9 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Alert } from "@/components/ui/alert";
+import { EmptyState } from "@/components/ui/empty-state";
+import { toastSuccess, toastError, toastInfo } from "@/lib/toast";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
@@ -18,6 +20,8 @@ import { resolveTenant } from "@/lib/tenant";
 import type { ChecklistPack, ChecklistTemplate } from "../checklist-types";
 
 export function ChecklistPacksClient() {
+  const t = useTranslations("org.checklists");
+  const tCommon = useTranslations("common");
   const [session, setSession] = useState<SessionUser | null>(null);
   const [packs, setPacks] = useState<ChecklistPack[]>([]);
   const [templates, setTemplates] = useState<ChecklistTemplate[]>([]);
@@ -25,7 +29,6 @@ export function ChecklistPacksClient() {
   const [description, setDescription] = useState("");
   const [selectedTemplateIds, setSelectedTemplateIds] = useState<number[]>([]);
   const [autoAssign, setAutoAssign] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -52,10 +55,10 @@ export function ChecklistPacksClient() {
   useEffect(() => {
     void refresh()
       .catch((err: unknown) => {
-        setMessage(err instanceof Error ? err.message : "Load failed");
+        toastError(err instanceof Error ? err.message : tCommon("loadFailed"));
       })
       .finally(() => setLoading(false));
-  }, [refresh]);
+  }, [refresh, tCommon]);
 
   function toggleTemplate(id: number) {
     setSelectedTemplateIds((current) =>
@@ -79,10 +82,10 @@ export function ChecklistPacksClient() {
   async function onCreate(event: FormEvent) {
     event.preventDefault();
     if (selectedTemplateIds.length === 0) {
-      setMessage("Select at least one template.");
+      toastInfo(t("selectAtLeastOneTemplate"));
       return;
     }
-    setMessage(null);
+    
     setSaving(true);
     try {
       await ensureCsrf();
@@ -102,10 +105,10 @@ export function ChecklistPacksClient() {
       setDescription("");
       setSelectedTemplateIds([]);
       setAutoAssign(false);
-      setMessage("Pack created.");
+      toastSuccess(t("packCreated"));
       window.location.href = `/org/checklists/packs/${created.data.id}`;
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Create failed");
+      toastError(err instanceof Error ? err.message : tCommon("createFailed"));
     } finally {
       setSaving(false);
     }
@@ -114,40 +117,40 @@ export function ChecklistPacksClient() {
   const columns: Array<DataTableColumn<ChecklistPack>> = [
     {
       id: "name",
-      header: "Name",
+      header: tCommon("name"),
       accessorKey: "name",
       sticky: true,
       cell: (pack) => pack.name,
     },
     {
       id: "status",
-      header: "Status",
+      header: tCommon("status"),
       accessorKey: "status",
       cell: (pack) => pack.status,
     },
     {
       id: "templates",
-      header: "Templates",
+      header: tCommon("templates"),
       filter: "none",
       enableSorting: false,
       cell: (pack) => pack.template_ids?.length ?? pack.templates?.length ?? 0,
     },
     {
       id: "auto",
-      header: "Auto on hire",
+      header: t("autoOnHire"),
       filter: "none",
       enableSorting: false,
-      cell: (pack) => (pack.auto_assign_on_create ? "Yes" : "No"),
+      cell: (pack) => (pack.auto_assign_on_create ? tCommon("yes") : tCommon("no")),
     },
     {
       id: "actions",
-      header: "Actions",
+      header: tCommon("actions"),
       filter: "none",
       enableSorting: false,
       enableGlobalFilter: false,
       cell: (pack) => (
-        <LinkButton href={`/org/checklists/packs/${pack.id}`} size="sm">
-          Edit
+        <LinkButton href={`/org/checklists/packs/${pack.id}`} variant="outline" size="compact">
+          {tCommon("edit")}
         </LinkButton>
       ),
     },
@@ -160,8 +163,8 @@ export function ChecklistPacksClient() {
   if (session && !hasPermission(session, "org.checklists.manage")) {
     return (
       <div className="mx-auto w-full max-w-5xl flex-1 space-y-4 px-4 py-8 sm:px-6">
-        <PageHeader title="Checklist packs" />
-        <Alert>You need org.checklists.manage to manage packs.</Alert>
+        <PageHeader title={t("packsTitle")} />
+        <EmptyState title={t("needManagePacks")} />
       </div>
     );
   }
@@ -169,27 +172,27 @@ export function ChecklistPacksClient() {
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 space-y-6 px-4 py-8 sm:px-6">
       <PageHeader
-        title="Checklist packs"
-        description="Bundle templates (e.g. Welcome Pack) and optionally auto-assign when an employee is created."
+        title={t("packsTitle")}
+        description={t("packsDescription")}
         actions={
           <div className="flex flex-wrap gap-2">
             <LinkButton href="/org/checklists" variant="secondary">
-              Templates
+              {t("templates")}
             </LinkButton>
             <LinkButton href="/org/checklists/instances" variant="secondary">
-              Instances
+              {t("instances")}
             </LinkButton>
           </div>
         }
       />
 
-      {message ? <Alert>{message}</Alert> : null}
+      
 
       <Panel className="space-y-4 p-4">
-        <h2 className="text-sm font-semibold">New pack</h2>
+        <h2 className="text-sm font-semibold">{t("newPack")}</h2>
         <form onSubmit={(e) => void onCreate(e)} className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="pack-name">Name</Label>
+            <Label htmlFor="pack-name">{tCommon("name")}</Label>
             <Input
               id="pack-name"
               value={name}
@@ -198,7 +201,7 @@ export function ChecklistPacksClient() {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="pack-desc">Description</Label>
+            <Label htmlFor="pack-desc">{tCommon("descriptionLabel")}</Label>
             <Textarea
               id="pack-desc"
               value={description}
@@ -207,11 +210,11 @@ export function ChecklistPacksClient() {
             />
           </div>
           <div className="space-y-2">
-            <Label>Templates (order = assign order)</Label>
+            <Label>{t("templatesOrder")}</Label>
             <div className="space-y-2 rounded-md border border-[var(--border)] p-3">
               {templates.length === 0 ? (
                 <p className="text-sm text-[var(--muted-foreground)]">
-                  Copy a system template first, then add it to a pack.
+                  {t("copySystemFirst")}
                 </p>
               ) : (
                 templates.map((template) => {
@@ -241,7 +244,7 @@ export function ChecklistPacksClient() {
                             variant="outline"
                             onClick={() => moveTemplate(template.id, -1)}
                           >
-                            Up
+                            {t("moveUp")}
                           </Button>
                           <Button
                             type="button"
@@ -249,7 +252,7 @@ export function ChecklistPacksClient() {
                             variant="outline"
                             onClick={() => moveTemplate(template.id, 1)}
                           >
-                            Down
+                            {t("moveDown")}
                           </Button>
                         </div>
                       ) : null}
@@ -265,22 +268,22 @@ export function ChecklistPacksClient() {
               checked={autoAssign}
               onChange={(e) => setAutoAssign(e.target.checked)}
             />
-            Auto-assign when a new employee is created
+            {t("autoAssignOnCreate")}
           </label>
           <Button type="submit" disabled={saving}>
-            {saving ? "Creating…" : "Create pack"}
+            {saving ? tCommon("creating") : t("createPack")}
           </Button>
         </form>
       </Panel>
 
       <DataTable
         mode="client"
-        caption="Checklist packs"
+        caption={t("packsCaption")}
         columns={columns}
         rows={packs}
         getRowId={(row) => row.id}
-        emptyTitle="No packs yet"
-        emptyDescription="Create a Welcome Pack from onboarding templates."
+        emptyTitle={t("noPacksYet")}
+        emptyDescription={t("createPackHint")}
       />
     </div>
   );

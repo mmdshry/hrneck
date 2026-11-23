@@ -7,43 +7,68 @@ use App\Domains\Checklists\Actions\AssignAutoChecklistPacks;
 use App\Domains\IdentityAccess\Actions\ProvisionEmployeePair;
 use App\Domains\Realtime\Support\LiveTopics;
 use App\Domains\Realtime\Support\PublishLive;
+use App\Domains\TargetsGroups\Actions\RecalculateTargetRisk;
 use App\Domains\TargetsGroups\Models\Department;
 use App\Domains\TargetsGroups\Models\Target;
+use App\Domains\TargetsGroups\Support\TargetProfileFields;
 use App\Http\Controllers\Controller;
 use App\Support\ApiPagination;
+use App\Support\AppLocale;
 use App\Support\ListQuery;
+use App\Support\MajorCities;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class TargetController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $query = Target::query()->with('groups');
+        $query = Target::query()->with(['groups', 'manager:id,email,first_name,last_name']);
 
         if (! $request->boolean('include_inactive') && ! $request->filled('status')) {
             $query->where('status', 'active');
         }
 
-        ListQuery::applySearch($query, $request, ['email', 'first_name', 'last_name', 'department']);
+        ListQuery::applySearch($query, $request, [
+            'email',
+            'first_name',
+            'last_name',
+            'department',
+            'job_title',
+            'employee_number',
+            'location',
+            'phone',
+        ]);
         ListQuery::applyLikeFilters($query, $request, [
             'email' => 'email',
             'name' => 'first_name',
             'first_name' => 'first_name',
             'last_name' => 'last_name',
             'department' => 'department',
+            'job_title' => 'job_title',
+            'employee_number' => 'employee_number',
+            'location' => 'location',
+            'phone' => 'phone',
         ]);
         ListQuery::applyExactFilters($query, $request, [
             'status' => 'status',
             'risk_score' => 'risk_score',
+            'risk_tier' => 'risk_tier',
             'department_id' => 'department_id',
+            'employment_type' => 'employment_type',
+            'manager_target_id' => 'manager_target_id',
         ]);
         ListQuery::applySort($query, $request, [
             'email' => 'email',
             'department' => 'department',
             'status' => 'status',
             'risk_score' => 'risk_score',
+            'risk_tier' => 'risk_tier',
+            'job_title' => 'job_title',
+            'hire_date' => 'hire_date',
+            'employee_number' => 'employee_number',
         ], 'id', 'desc');
 
         $rows = $query->paginate(ApiPagination::perPage($request, max: 500));
@@ -56,7 +81,9 @@ class TargetController extends Controller
 
     public function show(int $target): JsonResponse
     {
-        $model = Target::query()->with('groups')->findOrFail($target);
+        $model = Target::query()
+            ->with(['groups', 'manager:id,email,first_name,last_name'])
+            ->findOrFail($target);
 
         return response()->json(['data' => $model]);
     }
@@ -66,14 +93,10 @@ class TargetController extends Controller
         LogOrgActivity $audit,
         AssignAutoChecklistPacks $autoAssign,
         ProvisionEmployeePair $provision,
+        RecalculateTargetRisk $recalculateRisk,
     ): JsonResponse {
-        $data = $request->validate([
-            'email' => ['required', 'email', 'unique:targets,email'],
-            'first_name' => ['nullable', 'string', 'max:120'],
-            'last_name' => ['nullable', 'string', 'max:120'],
-            'department_id' => ['nullable', 'integer', 'exists:departments,id'],
-            'department' => ['nullable', 'string', 'max:120'],
-        ]);
+        $data = $request->validate($this->writeRules());
+        $data = $this->normalizeWritableProfile($data);
 
         $departmentFields = $this->resolveDepartmentFields(
             array_key_exists('department_id', $data) ? $data['department_id'] : null,
@@ -84,15 +107,20 @@ class TargetController extends Controller
 
         $tenantId = (string) tenant('id');
         $email = $provision->normalizeEmail($data['email']);
+        $profile = $this->extractProfileAttributes($data);
+        $this->assertManagerNotSelf(null, $profile['manager_target_id'] ?? null);
 
-        $target = Target::query()->create([
+        $target = Target::query()->create(array_merge([
             'email' => $email,
             'first_name' => $data['first_name'] ?? null,
             'last_name' => $data['last_name'] ?? null,
             'department_id' => $departmentFields['department_id'],
             'department' => $departmentFields['department'],
             'status' => 'active',
-        ]);
+            'joined_via' => 'manual',
+        ], $profile));
+
+        $target = $recalculateRisk->handle($target, force: true);
 
         $pair = $provision->ensureUserForTarget($target, $tenantId, queueInvite: true);
 
@@ -104,14 +132,8 @@ class TargetController extends Controller
             'login_invited' => $pair['invited'],
         ]);
 
-        PublishLive::org([
-            LiveTopics::TARGETS,
-            LiveTopics::DEPARTMENTS,
-            LiveTopics::TRAINING_CAMPAIGNS,
-            LiveTopics::TRAINING,
-            LiveTopics::CHECKLIST_INSTANCES,
-            LiveTopics::REPORTS_DETAILED,
-        ]);
+        $target->load(['groups', 'manager:id,email,first_name,last_name']);
+        $this->publishTargetLive();
 
         return response()->json([
             'data' => $target,
@@ -124,20 +146,32 @@ class TargetController extends Controller
 
     public function update(
         Request $request,
-        Target $target,
+        int $target,
         LogOrgActivity $audit,
         ProvisionEmployeePair $provision,
     ): JsonResponse {
-        $data = $request->validate([
-            'email' => ['sometimes', 'email', 'unique:targets,email,'.$target->id],
-            'first_name' => ['sometimes', 'nullable', 'string', 'max:120'],
-            'last_name' => ['sometimes', 'nullable', 'string', 'max:120'],
-            'department_id' => ['sometimes', 'nullable', 'integer', 'exists:departments,id'],
-            'department' => ['sometimes', 'nullable', 'string', 'max:120'],
-            'status' => ['sometimes', 'string', Rule::in(['active', 'inactive'])],
-        ]);
+        $target = Target::query()->findOrFail($target);
+        $data = $request->validate($this->writeRules(forUpdate: true, targetId: $target->id, currentLocation: $target->location));
+        $data = $this->normalizeWritableProfile($data);
 
-        $before = $target->only(['email', 'first_name', 'last_name', 'department', 'department_id', 'status']);
+        $before = $target->only([
+            'email',
+            'first_name',
+            'last_name',
+            'department',
+            'department_id',
+            'status',
+            'job_title',
+            'manager_target_id',
+            'hire_date',
+            'employee_number',
+            'phone',
+            'location',
+            'employment_type',
+            'risk_score',
+            'risk_tier',
+            'external_id',
+        ]);
         $tenantId = (string) tenant('id');
 
         if (array_key_exists('department_id', $data) || array_key_exists('department', $data)) {
@@ -156,7 +190,24 @@ class TargetController extends Controller
             $provision->syncUserEmailFromTarget($tenantId, (string) $before['email'], $data['email']);
         }
 
-        $target->fill($data)->save();
+        $profile = $this->extractProfileAttributes($data);
+        $this->assertManagerNotSelf($target->id, $profile['manager_target_id'] ?? ($data['manager_target_id'] ?? $target->manager_target_id));
+
+        unset(
+            $data['joined_via'],
+            $data['user_id'],
+            $data['risk_source'],
+            $data['risk_score'],
+            $data['risk_tier'],
+            $data['risk_updated_at'],
+            $data['last_training_completed_at'],
+        );
+
+        $target->fill(array_merge($data, $profile))->save();
+
+        if (array_key_exists('department_id', $data) || array_key_exists('department', $data)) {
+            $provision->syncUserDepartmentFromTarget($target, $tenantId);
+        }
 
         if (($data['status'] ?? null) === 'inactive' && $before['status'] !== 'inactive') {
             $provision->onTargetDeactivated($target, $tenantId);
@@ -172,26 +223,24 @@ class TargetController extends Controller
 
         $audit->handle('targets', $event, 'Target '.$event, $target, [
             'before' => $before,
-            'after' => $target->only(['email', 'first_name', 'last_name', 'department', 'department_id', 'status']),
+            'after' => $target->only(array_keys($before)),
         ]);
 
-        PublishLive::org([
-            LiveTopics::TARGETS,
-            LiveTopics::DEPARTMENTS,
-            LiveTopics::TRAINING_CAMPAIGNS,
-            LiveTopics::TRAINING,
-            LiveTopics::REPORTS_DETAILED,
-        ]);
+        $target->load(['groups', 'manager:id,email,first_name,last_name']);
+        $this->publishTargetLive();
 
-        return response()->json(['data' => $target->load('groups')]);
+        return response()->json([
+            'data' => $target,
+        ]);
     }
 
     public function destroy(
-        Target $target,
+        int $target,
         LogOrgActivity $audit,
         ProvisionEmployeePair $provision,
     ): JsonResponse {
-        $snapshot = $target->only(['id', 'email', 'status']);
+        $target = Target::query()->findOrFail($target);
+        $snapshot = $target->only(['id', 'email', 'status', 'user_id']);
         $tenantId = (string) tenant('id');
         $target->groups()->detach();
         $target->delete();
@@ -201,92 +250,167 @@ class TargetController extends Controller
             'target' => $snapshot,
         ]);
 
-        PublishLive::org([
-            LiveTopics::TARGETS,
-            LiveTopics::DEPARTMENTS,
-            LiveTopics::TRAINING_CAMPAIGNS,
-            LiveTopics::TRAINING,
-            LiveTopics::REPORTS_DETAILED,
-        ]);
+        $this->publishTargetLive();
 
         return response()->json(['message' => 'Deleted']);
     }
 
-    public function importCsv(
-        Request $request,
+    public function recalculateRisk(
+        int $target,
+        RecalculateTargetRisk $recalculate,
         LogOrgActivity $audit,
-        AssignAutoChecklistPacks $autoAssign,
-        ProvisionEmployeePair $provision,
     ): JsonResponse {
-        $request->validate(['file' => ['required', 'file', 'mimes:csv,txt']]);
-        $handle = fopen($request->file('file')->getRealPath(), 'r');
-        $header = fgetcsv($handle) ?: [];
-        $created = 0;
-        $autoAssigned = 0;
-        $invited = 0;
-        $tenantId = (string) tenant('id');
-        while (($row = fgetcsv($handle)) !== false) {
-            if (count($header) !== count($row)) {
-                continue;
-            }
-            $item = array_combine($header, $row);
-            if (empty($item['email'])) {
-                continue;
-            }
+        $target = Target::query()->findOrFail($target);
+        $updated = $recalculate->handle($target, force: true);
 
-            $departmentFields = $this->resolveDepartmentFields(
-                null,
-                isset($item['department']) ? (string) $item['department'] : null,
-                false,
-                true,
-            );
+        $audit->handle('targets', 'risk_recalculated', 'Target risk recalculated', $updated, [
+            'risk_score' => $updated->risk_score,
+            'risk_tier' => $updated->risk_tier,
+            'risk_source' => $updated->risk_source,
+        ]);
 
-            $email = $provision->normalizeEmail((string) $item['email']);
-            $target = Target::query()->firstOrNew(['email' => $email]);
-            $isNew = ! $target->exists;
-            $target->fill([
-                'first_name' => $item['first_name'] ?? null,
-                'last_name' => $item['last_name'] ?? null,
-                'department_id' => $departmentFields['department_id'],
-                'department' => $departmentFields['department'],
-                'status' => 'active',
-            ]);
-            $target->save();
-            $created++;
+        $updated->load(['groups', 'manager:id,email,first_name,last_name']);
+        $this->publishTargetLive();
 
-            $pair = $provision->ensureUserForTarget($target, $tenantId, queueInvite: true);
-            if ($pair['invited']) {
-                $invited++;
-            }
+        return response()->json(['data' => $updated]);
+    }
 
-            if ($isNew) {
-                $autoAssigned += $autoAssign->handle($target, $request->user()?->id);
+    /**
+     * @return array<string, mixed>
+     */
+    private function writeRules(bool $forUpdate = false, ?int $targetId = null, ?string $currentLocation = null): array
+    {
+        $optional = $forUpdate ? ['sometimes'] : [];
+
+        return [
+            'email' => array_merge($optional, [
+                $forUpdate ? 'filled' : 'required',
+                'email',
+                Rule::unique('targets', 'email')->ignore($targetId),
+            ]),
+            'first_name' => array_merge($optional, ['nullable', 'string', 'max:120']),
+            'last_name' => array_merge($optional, ['nullable', 'string', 'max:120']),
+            'department_id' => array_merge($optional, [
+                'nullable',
+                'integer',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if ($value === null || $value === '') {
+                        return;
+                    }
+                    if (! Department::query()->whereKey((int) $value)->exists()) {
+                        $fail('The selected department is invalid.');
+                    }
+                },
+            ]),
+            'department' => array_merge($optional, ['nullable', 'string', 'max:120']),
+            'status' => array_merge($optional, ['string', Rule::in(['active', 'inactive'])]),
+            'job_title' => array_merge($optional, ['nullable', 'string', 'max:120']),
+            'manager_target_id' => array_merge($optional, [
+                'nullable',
+                'integer',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if ($value === null || $value === '') {
+                        return;
+                    }
+                    if (! Target::query()->whereKey((int) $value)->exists()) {
+                        $fail('The selected manager is invalid.');
+                    }
+                },
+            ]),
+            'hire_date' => array_merge($optional, ['nullable', 'date']),
+            'employee_number' => array_merge($optional, [
+                'nullable',
+                'string',
+                'max:120',
+                Rule::unique('targets', 'employee_number')->ignore($targetId),
+            ]),
+            'phone' => array_merge($optional, ['nullable', 'string', 'max:40']),
+            'location' => array_merge($optional, [
+                'nullable',
+                'string',
+                'max:120',
+                function (string $attribute, mixed $value, \Closure $fail) use ($currentLocation): void {
+                    if ($value === null || $value === '') {
+                        return;
+                    }
+                    if (! is_string($value)) {
+                        $fail('The selected location is invalid.');
+
+                        return;
+                    }
+                    if (MajorCities::isValid($value)) {
+                        return;
+                    }
+                    if ($currentLocation !== null && $value === $currentLocation) {
+                        return;
+                    }
+                    $fail('The selected location is invalid. Use Country/City (e.g. Iran/Tehran).');
+                },
+            ]),
+            'employment_type' => array_merge($optional, [
+                'nullable',
+                'string',
+                Rule::in(TargetProfileFields::EMPLOYMENT_TYPES),
+            ]),
+            'preferred_language' => array_merge($optional, ['nullable', 'string', 'max:16']),
+            'timezone' => array_merge($optional, [
+                $forUpdate ? 'filled' : 'required',
+                'string',
+                'max:64',
+                'timezone:all',
+            ]),
+            'external_id' => array_merge($optional, ['nullable', 'string', 'max:120']),
+            'notification_opt_out' => array_merge($optional, ['boolean']),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function normalizeWritableProfile(array $data): array
+    {
+        if (array_key_exists('preferred_language', $data)) {
+            $raw = $data['preferred_language'];
+            if ($raw === null || (is_string($raw) && trim($raw) === '')) {
+                $data['preferred_language'] = null;
+            } else {
+                $data['preferred_language'] = AppLocale::normalize(is_string($raw) ? $raw : null);
             }
         }
-        fclose($handle);
 
-        $audit->handle('targets', 'imported', 'Targets CSV imported', null, [
-            'imported' => $created,
-            'auto_assigned_instance_count' => $autoAssigned,
-            'login_invited' => $invited,
-        ]);
+        unset($data['risk_score'], $data['risk_tier'], $data['risk_source'], $data['risk_updated_at']);
 
-        PublishLive::org([
-            LiveTopics::TARGETS,
-            LiveTopics::DEPARTMENTS,
-            LiveTopics::TRAINING_CAMPAIGNS,
-            LiveTopics::TRAINING,
-            LiveTopics::CHECKLIST_INSTANCES,
-            LiveTopics::REPORTS_DETAILED,
-        ]);
+        return $data;
+    }
 
-        return response()->json([
-            'imported' => $created,
-            'meta' => [
-                'auto_assigned_instance_count' => $autoAssigned,
-                'login_invited' => $invited,
-            ],
-        ]);
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function extractProfileAttributes(array $data): array
+    {
+        $out = [];
+        foreach (TargetProfileFields::profileAttributeKeys() as $key) {
+            if (array_key_exists($key, $data)) {
+                $out[$key] = $data[$key];
+            }
+        }
+
+        return $out;
+    }
+
+    private function assertManagerNotSelf(?int $targetId, mixed $managerTargetId): void
+    {
+        if ($managerTargetId === null || $managerTargetId === '') {
+            return;
+        }
+
+        if ($targetId !== null && (int) $managerTargetId === (int) $targetId) {
+            throw ValidationException::withMessages([
+                'manager_target_id' => ['An employee cannot be their own manager.'],
+            ]);
+        }
     }
 
     /**
@@ -332,5 +456,15 @@ class TargetController extends Controller
             'department_id' => $department->id,
             'department' => $department->name,
         ];
+    }
+
+    private function publishTargetLive(): void
+    {
+        PublishLive::metricsBundle();
+        PublishLive::org([
+            LiveTopics::TARGETS,
+            LiveTopics::DEPARTMENTS,
+            LiveTopics::CHECKLIST_INSTANCES,
+        ]);
     }
 }

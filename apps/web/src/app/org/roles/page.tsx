@@ -1,13 +1,15 @@
-import type { Metadata } from "next";
+import { getTranslations } from "next-intl/server";
 import { RolesClient } from "./roles-client";
 
 export const instant = false;
 
-export const metadata: Metadata = {
-  title: "Roles",
-  description: "Manage organization RBAC roles and permissions.",
-};
-
+export async function generateMetadata() {
+  const t = await getTranslations("org.roles");
+  return {
+    title: t("title"),
+    description: t("description"),
+  };
+}
 export default function RolesPage() {
   return <RolesClient />;
 }

@@ -1,12 +1,15 @@
+import { getTranslations } from "next-intl/server";
 import { SearchClient } from "./search-client";
 
 export const instant = false;
 
-export const metadata = {
-  title: "Search all",
-  description: "Search tickets and knowledge base articles.",
-};
-
+export async function generateMetadata() {
+  const t = await getTranslations("org.ticketing");
+  return {
+    title: t("searchAll"),
+    description: t("searchDescription"),
+  };
+}
 export default function SearchPage() {
   return <SearchClient />;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert } from "@/components/ui/alert";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/ui/page-header";
@@ -20,6 +20,7 @@ import {
   type PaginationMeta,
 } from "@/lib/pagination";
 import { clearTenant, setTenant } from "@/lib/tenant";
+import { toastError } from "@/lib/toast";
 
 type TenantRow = {
   id: string;
@@ -75,60 +76,63 @@ function matchesTenant(
   return true;
 }
 
-const columns: Array<DataTableColumn<TenantRow>> = [
-  {
-    id: "name",
-    header: "Name",
-    accessorKey: "name",
-    sticky: true,
-    cell: (tenant) => (
-      <div className="min-w-0">
-        <div className="font-medium">{tenant.name}</div>
-        <div className="text-xs text-[var(--muted-foreground)]">{tenant.id}.hrneck.test</div>
-      </div>
-    ),
-  },
-  {
-    id: "industry",
-    header: "Industry",
-    accessorKey: "industry",
-    cell: (tenant) => tenant.industry || "—",
-  },
-  {
-    id: "employee_band",
-    header: "Employees",
-    accessorKey: "employee_band",
-    filter: "select",
-    filterOptions: EMPLOYEE_BANDS.map((band) => ({ label: band, value: band })),
-    enableSorting: false,
-    cell: (tenant) => tenant.employee_band || "—",
-  },
-  {
-    id: "status",
-    header: "Status",
-    accessorKey: "status",
-    filter: "select",
-    filterOptions: [
-      { label: "Active", value: "active" },
-      { label: "Inactive", value: "inactive" },
-    ],
-    cell: (tenant) => tenant.status,
-  },
-  {
-    id: "training_enabled",
-    header: "Training",
-    filter: "select",
-    filterOptions: [
-      { label: "On", value: "on" },
-      { label: "Off", value: "off" },
-    ],
-    filterValue: (tenant) => (tenant.training_enabled ? "on" : "off"),
-    enableSorting: false,
-    cell: (tenant) => (tenant.training_enabled ? "On" : "Off"),
-  },
-];
-
 export function MspClient() {
+  const t = useTranslations("org.msp");
+  const tCommon = useTranslations("common");
+  const dash = tCommon("emDash");
+
+  const columns: Array<DataTableColumn<TenantRow>> = [
+    {
+      id: "name",
+      header: tCommon("name"),
+      accessorKey: "name",
+      sticky: true,
+      cell: (tenant) => (
+        <div className="min-w-0">
+          <div className="font-medium">{tenant.name}</div>
+          <div className="text-xs text-[var(--muted-foreground)]">{tenant.id}.hrneck.test</div>
+        </div>
+      ),
+    },
+    {
+      id: "industry",
+      header: tCommon("industry"),
+      accessorKey: "industry",
+      cell: (tenant) => tenant.industry || dash,
+    },
+    {
+      id: "employee_band",
+      header: tCommon("employees"),
+      accessorKey: "employee_band",
+      filter: "select",
+      filterOptions: EMPLOYEE_BANDS.map((band) => ({ label: band, value: band })),
+      enableSorting: false,
+      cell: (tenant) => tenant.employee_band || dash,
+    },
+    {
+      id: "status",
+      header: tCommon("status"),
+      accessorKey: "status",
+      filter: "select",
+      filterOptions: [
+        { label: tCommon("active"), value: "active" },
+        { label: tCommon("inactive"), value: "inactive" },
+      ],
+      cell: (tenant) => tenant.status,
+    },
+    {
+      id: "training_enabled",
+      header: tCommon("training"),
+      filter: "select",
+      filterOptions: [
+        { label: tCommon("on"), value: "on" },
+        { label: tCommon("off"), value: "off" },
+      ],
+      filterValue: (tenant) => (tenant.training_enabled ? "on" : "off"),
+      enableSorting: false,
+      cell: (tenant) => (tenant.training_enabled ? tCommon("on") : tCommon("off")),
+    },
+  ];
   const [tenants, setTenants] = useState<TenantRow[]>([]);
   const [liveTenants, setLiveTenants] = useState<TenantRow[] | null>(null);
   const [meta, setMeta] = useState<PaginationMeta>(emptyMeta());
@@ -136,7 +140,6 @@ export function MspClient() {
   const [perPage, setPerPage] = useState<PageSize>(DEFAULT_PAGE_SIZE);
   const [signingOut, setSigningOut] = useState(false);
   const [enteringTenant, setEnteringTenant] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const tableQuery = useDataTableQuery();
   const filters = useMemo(
@@ -223,7 +226,6 @@ export function MspClient() {
   const waitingForLive = liveTenants === null && status !== "live";
 
   async function enterTenant(tenantId: string) {
-    setActionError(null);
     setEnteringTenant(tenantId);
     try {
       await ensureCsrf();
@@ -231,7 +233,7 @@ export function MspClient() {
       setTenant(tenantId);
       window.location.assign(`/org?tenant=${encodeURIComponent(tenantId)}`);
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Unable to enter tenant");
+      toastError(err instanceof Error ? err.message : t("unableToEnterTenant"));
       setEnteringTenant(null);
     }
   }
@@ -243,7 +245,7 @@ export function MspClient() {
       clearTenant();
       window.location.replace("/login");
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Sign out failed");
+      toastError(err instanceof Error ? err.message : tCommon("signOutFailed"));
       setSigningOut(false);
     }
   }
@@ -252,19 +254,21 @@ export function MspClient() {
     ...columns,
     {
       id: "actions",
-      header: "Actions",
+      header: tCommon("actions"),
       filter: "none",
       enableSorting: false,
       enableGlobalFilter: false,
       cell: (tenant) => (
         <Button
           type="button"
-          variant="secondary"
-          size="sm"
+          variant="outline"
+          size="compact"
           disabled={enteringTenant === tenant.id}
           onClick={() => void enterTenant(tenant.id)}
         >
-          {enteringTenant === tenant.id ? "Opening…" : "Open tenant admin"}
+          {enteringTenant === tenant.id
+            ? tCommon("opening")
+            : t("openTenantAdmin")}
         </Button>
       ),
     },
@@ -277,8 +281,8 @@ export function MspClient() {
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">
       <PageHeader
-        title="Organizations"
-        description="MSP workspace for every managed tenant."
+        title={t("title")}
+        description={t("description")}
         actions={
           <Button
             type="button"
@@ -286,39 +290,29 @@ export function MspClient() {
             onClick={() => void signOut()}
             disabled={signingOut}
           >
-            {signingOut ? "Signing out…" : "Sign out"}
+            {signingOut ? tCommon("signingOut") : tCommon("signOut")}
           </Button>
         }
       />
       <p className="mt-2 text-sm uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
-        MSP workspace
-        {statusLabel ? ` · ${statusLabel}` : " · Live"}
+        {t("description")}
+        {statusLabel ? ` · ${statusLabel}` : ` · ${tCommon("live")}`}
       </p>
-      {error ? (
-        <Alert className="mt-4" variant="destructive">
-          {error}
-        </Alert>
-      ) : null}
-      {actionError ? (
-        <Alert className="mt-4" variant="destructive">
-          {actionError}
-        </Alert>
-      ) : null}
       <DataTable
         className="mt-8"
         mode="server"
-        caption="Organizations"
+        caption={t("title")}
         columns={tableColumns}
         rows={tenants}
         filterState={tableQuery.state}
         onFilterStateChange={tableQuery.setState}
         getRowId={(row) => row.id}
         emptyTitle={
-          waitingForLive ? (statusLabel ?? "Waiting for live data…") : "No organizations yet"
+          waitingForLive
+            ? (statusLabel ?? tCommon("loading"))
+            : t("title")
         }
-        emptyDescription={
-          waitingForLive ? undefined : "Create a tenant in the admin panel."
-        }
+        emptyDescription={waitingForLive ? undefined : t("empty")}
         pagination={{
           page,
           perPage,

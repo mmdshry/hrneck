@@ -1,14 +1,15 @@
-import type { Metadata } from "next";
+import { getTranslations } from "next-intl/server";
 import { SettingsClient } from "./settings-client";
 
 export const instant = false;
 
-export const metadata: Metadata = {
-  title: "Settings",
-  description:
-    "White-label branding, timezone, and custom sending domain DNS guidance.",
-};
-
+export async function generateMetadata() {
+  const t = await getTranslations("org.settings");
+  return {
+    title: t("title"),
+    description: t("description"),
+  };
+}
 export default function SettingsPage() {
   return <SettingsClient />;
 }

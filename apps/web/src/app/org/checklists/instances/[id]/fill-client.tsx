@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert } from "@/components/ui/alert";
+import { toastSuccess, toastError, toastInfo } from "@/lib/toast";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
@@ -24,55 +25,57 @@ import {
   type ChecklistItem,
 } from "../../checklist-types";
 
-const auditColumns: Array<DataTableColumn<AuditEvent>> = [
-  {
-    id: "event",
-    header: "Event",
-    accessorKey: "event",
-    sticky: true,
-    cell: (row) => row.event || "—",
-  },
-  {
-    id: "description",
-    header: "Description",
-    accessorKey: "description",
-    className: "max-w-md whitespace-pre-wrap",
-    cell: (row) => row.description,
-  },
-  {
-    id: "created_at",
-    header: "When",
-    accessorKey: "created_at",
-    cell: (row) => row.created_at || "—",
-  },
-  {
-    id: "causer_id",
-    header: "Causer",
-    accessorKey: "causer_id",
-    filterValue: (row) => row.causer_id,
-    cell: (row) => (row.causer_id == null ? "—" : `#${row.causer_id}`),
-  },
-  {
-    id: "properties",
-    header: "Properties",
-    filterValue: (row) => JSON.stringify(row.properties ?? {}),
-    enableGlobalFilter: false,
-    enableSorting: false,
-    className: "max-w-xs",
-    cell: (row) => (
-      <pre className="overflow-x-auto text-xs">{JSON.stringify(row.properties, null, 2)}</pre>
-    ),
-  },
-];
-
 export function ChecklistFillClient({ instanceId }: { instanceId: number }) {
+  const t = useTranslations("org.checklists");
+  const tCommon = useTranslations("common");
+  const dash = tCommon("emDash");
   const tenant = resolveTenant();
+
+  const auditColumns: Array<DataTableColumn<AuditEvent>> = [
+    {
+      id: "event",
+      header: tCommon("event"),
+      accessorKey: "event",
+      sticky: true,
+      cell: (row) => row.event || dash,
+    },
+    {
+      id: "description",
+      header: tCommon("descriptionLabel"),
+      accessorKey: "description",
+      className: "max-w-md whitespace-pre-wrap",
+      cell: (row) => row.description,
+    },
+    {
+      id: "created_at",
+      header: tCommon("when"),
+      accessorKey: "created_at",
+      cell: (row) => row.created_at || dash,
+    },
+    {
+      id: "causer_id",
+      header: tCommon("causer"),
+      accessorKey: "causer_id",
+      filterValue: (row) => row.causer_id,
+      cell: (row) => (row.causer_id == null ? dash : `#${row.causer_id}`),
+    },
+    {
+      id: "properties",
+      header: tCommon("properties"),
+      filterValue: (row) => JSON.stringify(row.properties ?? {}),
+      enableGlobalFilter: false,
+      enableSorting: false,
+      className: "max-w-xs",
+      cell: (row) => (
+        <pre className="overflow-x-auto text-xs">{JSON.stringify(row.properties, null, 2)}</pre>
+      ),
+    },
+  ];
   const [instance, setInstance] = useState<ChecklistInstance | null>(null);
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [files, setFiles] = useState<Record<string, string>>({});
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [tab, setTab] = useState<"form" | "audit">("form");
-  const [message, setMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [liveEpoch, setLiveEpoch] = useState(0);
@@ -118,7 +121,7 @@ export function ChecklistFillClient({ instanceId }: { instanceId: number }) {
     setLoading(true);
     void load()
       .catch((err: unknown) => {
-        setMessage(err instanceof Error ? err.message : "Load failed");
+        toastError(err instanceof Error ? err.message : tCommon("loadFailed"));
       })
       .finally(() => setLoading(false));
   }, [instanceId, liveEpoch, load]);
@@ -135,7 +138,7 @@ export function ChecklistFillClient({ instanceId }: { instanceId: number }) {
   async function saveAnswers(nextStatus?: string) {
     if (!instance) return;
     setSaving(true);
-    setMessage(null);
+    
     try {
       await ensureCsrf();
       const payloadAnswers = Object.entries(answers)
@@ -162,21 +165,25 @@ export function ChecklistFillClient({ instanceId }: { instanceId: number }) {
         },
       );
       setInstance(res.data);
-      setMessage(nextStatus ? `Saved and marked ${nextStatus}.` : "Answers saved.");
+      toastSuccess(
+        nextStatus
+          ? t("savedAndMarked", { status: nextStatus })
+          : t("answersSaved"),
+      );
       const log = await api<{ data: AuditEvent[] }>(
         `/api/v1/org/checklists/instances/${instanceId}/audit`,
         { tenant: resolveTenant() },
       );
       setAudit(log.data ?? []);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Save failed");
+      toastError(err instanceof Error ? err.message : tCommon("saveFailed"));
     } finally {
       setSaving(false);
     }
   }
 
   async function uploadFile(itemKey: string, file: File) {
-    setMessage(null);
+    
     try {
       await ensureCsrf();
       const body = new FormData();
@@ -190,9 +197,9 @@ export function ChecklistFillClient({ instanceId }: { instanceId: number }) {
       });
       setFiles((prev) => ({ ...prev, [itemKey]: res.data.file_disk_path }));
       setAnswers((prev) => ({ ...prev, [itemKey]: file.name }));
-      setMessage(`Uploaded ${file.name}`);
+      toastInfo(`Uploaded ${file.name}`);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Upload failed");
+      toastError(err instanceof Error ? err.message : tCommon("uploadFailed"));
     }
   }
 
@@ -284,7 +291,7 @@ export function ChecklistFillClient({ instanceId }: { instanceId: number }) {
             value={String(value ?? "")}
             onChange={(e) => setAnswers((prev) => ({ ...prev, [item.key]: e.target.value }))}
           >
-            <option value="">Select…</option>
+            <option value="">{tCommon("selectEllipsis")}</option>
             {(item.options ?? []).map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
@@ -339,8 +346,8 @@ export function ChecklistFillClient({ instanceId }: { instanceId: number }) {
   if (!instance) {
     return (
       <div className="mx-auto w-full max-w-5xl flex-1 space-y-4 px-4 py-8 sm:px-6">
-        <PageHeader title="Fill checklist" />
-        {message ? <Alert>{message}</Alert> : null}
+        <PageHeader title={t("fillChecklist")} />
+        
       </div>
     );
   }
@@ -357,7 +364,7 @@ export function ChecklistFillClient({ instanceId }: { instanceId: number }) {
         }
       />
 
-      {message ? <Alert>{message}</Alert> : null}
+      
 
       <div className="flex gap-2">
         <Button
@@ -366,7 +373,7 @@ export function ChecklistFillClient({ instanceId }: { instanceId: number }) {
           variant={tab === "form" ? "default" : "secondary"}
           onClick={() => setTab("form")}
         >
-          Form
+          {t("formTab")}
         </Button>
         <Button
           type="button"
@@ -374,7 +381,7 @@ export function ChecklistFillClient({ instanceId }: { instanceId: number }) {
           variant={tab === "audit" ? "default" : "secondary"}
           onClick={() => setTab("audit")}
         >
-          Audit
+          {t("auditTab")}
         </Button>
       </div>
 
@@ -407,11 +414,11 @@ export function ChecklistFillClient({ instanceId }: { instanceId: number }) {
         <Panel className="space-y-3 p-4">
           <DataTable
             mode="client"
-            caption="Checklist audit"
+            caption={t("checklistAudit")}
             columns={auditColumns}
             rows={audit}
             getRowId={(row) => row.id}
-            emptyTitle="No audit events yet."
+            emptyTitle={t("noAuditEvents")}
           />
         </Panel>
       )}

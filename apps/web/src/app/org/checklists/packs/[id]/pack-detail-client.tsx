@@ -1,7 +1,9 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Alert } from "@/components/ui/alert";
+import { EmptyState } from "@/components/ui/empty-state";
+import { toastSuccess, toastError, toastInfo } from "@/lib/toast";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,6 +20,8 @@ import { resolveTenant } from "@/lib/tenant";
 import type { ChecklistPack, ChecklistTemplate } from "../../checklist-types";
 
 export function ChecklistPackDetailClient({ packId }: { packId: number }) {
+  const t = useTranslations("org.checklists");
+  const tCommon = useTranslations("common");
   const [session, setSession] = useState<SessionUser | null>(null);
   const [pack, setPack] = useState<ChecklistPack | null>(null);
   const [templates, setTemplates] = useState<ChecklistTemplate[]>([]);
@@ -26,7 +30,6 @@ export function ChecklistPackDetailClient({ packId }: { packId: number }) {
   const [status, setStatus] = useState("draft");
   const [autoAssign, setAutoAssign] = useState(false);
   const [selectedTemplateIds, setSelectedTemplateIds] = useState<number[]>([]);
-  const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -35,12 +38,12 @@ export function ChecklistPackDetailClient({ packId }: { packId: number }) {
     const me = await fetchSessionUser();
     setSession(me);
     if (!me) return;
-    const t = resolveTenant();
+    const tenantId = resolveTenant();
     const [packRes, tplRes] = await Promise.all([
-      api<{ data: ChecklistPack }>(`/api/v1/org/checklists/packs/${packId}`, { tenant: t }),
+      api<{ data: ChecklistPack }>(`/api/v1/org/checklists/packs/${packId}`, { tenant: tenantId }),
       api<{ data: ChecklistTemplate[] }>(
         `/api/v1/org/checklists/templates?${paginationQuery(1, 100, { editable_only: 1 })}`,
-        { tenant: t },
+        { tenant: tenantId },
       ),
     ]);
     const next = packRes.data;
@@ -56,10 +59,10 @@ export function ChecklistPackDetailClient({ packId }: { packId: number }) {
   useEffect(() => {
     void refresh()
       .catch((err: unknown) => {
-        setMessage(err instanceof Error ? err.message : "Load failed");
+        toastError(err instanceof Error ? err.message : tCommon("loadFailed"));
       })
       .finally(() => setLoading(false));
-  }, [refresh]);
+  }, [refresh, tCommon]);
 
   function toggleTemplate(id: number) {
     setSelectedTemplateIds((current) =>
@@ -83,10 +86,10 @@ export function ChecklistPackDetailClient({ packId }: { packId: number }) {
   async function onSave(event: FormEvent) {
     event.preventDefault();
     if (selectedTemplateIds.length === 0) {
-      setMessage("Select at least one template.");
+      toastInfo(t("selectAtLeastOneTemplate"));
       return;
     }
-    setMessage(null);
+    
     setSaving(true);
     try {
       await ensureCsrf();
@@ -103,9 +106,9 @@ export function ChecklistPackDetailClient({ packId }: { packId: number }) {
         }),
       });
       setPack(res.data);
-      setMessage("Pack saved.");
+      toastSuccess(t("packSaved"));
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Save failed");
+      toastError(err instanceof Error ? err.message : tCommon("saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -118,8 +121,8 @@ export function ChecklistPackDetailClient({ packId }: { packId: number }) {
   if (session && !hasPermission(session, "org.checklists.manage")) {
     return (
       <div className="mx-auto w-full max-w-5xl flex-1 space-y-4 px-4 py-8 sm:px-6">
-        <PageHeader title="Checklist pack" />
-        <Alert>You need org.checklists.manage to edit packs.</Alert>
+        <PageHeader title={t("checklistPack")} />
+        <EmptyState title={t("needEditPacks")} />
       </div>
     );
   }
@@ -127,10 +130,10 @@ export function ChecklistPackDetailClient({ packId }: { packId: number }) {
   if (!pack) {
     return (
       <div className="mx-auto w-full max-w-5xl flex-1 space-y-4 px-4 py-8 sm:px-6">
-        <PageHeader title="Checklist pack" description="Pack not found." />
-        {message ? <Alert variant="destructive">{message}</Alert> : null}
+        <PageHeader title={t("checklistPack")} description={t("packNotFound")} />
+        
         <LinkButton href="/org/checklists/packs" variant="secondary">
-          Back to packs
+          {t("backToPacks")}
         </LinkButton>
       </div>
     );
@@ -140,20 +143,20 @@ export function ChecklistPackDetailClient({ packId }: { packId: number }) {
     <div className="mx-auto w-full max-w-5xl flex-1 space-y-6 px-4 py-8 sm:px-6">
       <PageHeader
         title={pack.name}
-        description="Edit pack membership and auto-assign on hire."
+        description={t("editPackMembership")}
         actions={
           <LinkButton href="/org/checklists/packs" variant="secondary">
-            All packs
+            {t("allPacks")}
           </LinkButton>
         }
       />
 
-      {message ? <Alert>{message}</Alert> : null}
+      
 
       <Panel className="p-4">
         <form onSubmit={(e) => void onSave(e)} className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="pack-edit-name">Name</Label>
+            <Label htmlFor="pack-edit-name">{tCommon("name")}</Label>
             <Input
               id="pack-edit-name"
               value={name}
@@ -162,7 +165,7 @@ export function ChecklistPackDetailClient({ packId }: { packId: number }) {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="pack-edit-desc">Description</Label>
+            <Label htmlFor="pack-edit-desc">{tCommon("descriptionLabel")}</Label>
             <Textarea
               id="pack-edit-desc"
               value={description}
@@ -171,19 +174,19 @@ export function ChecklistPackDetailClient({ packId }: { packId: number }) {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="pack-edit-status">Status</Label>
+            <Label htmlFor="pack-edit-status">{tCommon("status")}</Label>
             <Select
               id="pack-edit-status"
               value={status}
               onChange={(e) => setStatus(e.target.value)}
             >
-              <option value="draft">Draft</option>
-              <option value="published">Published</option>
-              <option value="archived">Archived</option>
+              <option value="draft">{tCommon("draft")}</option>
+              <option value="published">{tCommon("published")}</option>
+              <option value="archived">{tCommon("archived")}</option>
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Templates</Label>
+            <Label>{tCommon("templates")}</Label>
             <div className="space-y-2 rounded-md border border-[var(--border)] p-3">
               {templates.map((template) => {
                 const selected = selectedTemplateIds.includes(template.id);
@@ -212,7 +215,7 @@ export function ChecklistPackDetailClient({ packId }: { packId: number }) {
                           variant="outline"
                           onClick={() => moveTemplate(template.id, -1)}
                         >
-                          Up
+                          {t("moveUp")}
                         </Button>
                         <Button
                           type="button"
@@ -220,7 +223,7 @@ export function ChecklistPackDetailClient({ packId }: { packId: number }) {
                           variant="outline"
                           onClick={() => moveTemplate(template.id, 1)}
                         >
-                          Down
+                          {t("moveDown")}
                         </Button>
                       </div>
                     ) : null}
@@ -235,10 +238,10 @@ export function ChecklistPackDetailClient({ packId }: { packId: number }) {
               checked={autoAssign}
               onChange={(e) => setAutoAssign(e.target.checked)}
             />
-            Auto-assign when a new employee is created
+            {t("autoAssignOnCreate")}
           </label>
           <Button type="submit" disabled={saving}>
-            {saving ? "Saving…" : "Save pack"}
+            {saving ? tCommon("saving") : t("savePack")}
           </Button>
         </form>
       </Panel>

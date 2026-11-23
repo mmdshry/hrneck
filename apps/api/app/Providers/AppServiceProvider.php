@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
 use App\Models\User;
 use App\Support\StaffTenant;
 use Illuminate\Auth\Notifications\ResetPassword;
@@ -61,6 +62,7 @@ class AppServiceProvider extends ServiceProvider
                 && is_string($tenantId)
                 && $tenantId !== ''
                 && StaffTenant::matches($tenantId)
+                && in_array($ability, OrgPermissionCatalog::staffTenantPermissions(), true)
             ) {
                 return true;
             }
@@ -75,7 +77,6 @@ class AppServiceProvider extends ServiceProvider
             return "{$base}/login/reset?token={$token}&email={$email}";
         });
 
-        Feature::define('directory_sync', fn () => true);
         Feature::define('custom_domains', fn () => true);
         Feature::define('advanced_reporting', fn () => true);
         Feature::define('automation_rules', fn () => true);

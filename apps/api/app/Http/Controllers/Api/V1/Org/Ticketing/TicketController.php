@@ -24,6 +24,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class TicketController extends Controller
@@ -334,9 +335,21 @@ class TicketController extends Controller
     public function uploadAttachment(Request $request, int $ticket, ConvertUploadedImageToWebp $toWebp): JsonResponse
     {
         $model = SdTicket::query()->findOrFail($ticket);
-        $request->validate(['file' => ['required', 'file', 'max:10240']]);
+        $request->validate([
+            'file' => [
+                'required',
+                'file',
+                'max:10240',
+                'mimetypes:application/pdf,image/png,image/jpeg,image/webp,text/plain,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            ],
+        ]);
         $file = $request->file('file');
         $converted = $toWebp->handle($file);
+        if ($converted['mime'] === 'image/svg+xml' || $converted['extension'] === 'svg') {
+            throw ValidationException::withMessages([
+                'file' => ['SVG attachments are not allowed.'],
+            ]);
+        }
 
         $originalName = $file->getClientOriginalName();
         if ($converted['converted']) {

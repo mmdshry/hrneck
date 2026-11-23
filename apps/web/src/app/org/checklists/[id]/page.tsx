@@ -1,12 +1,14 @@
+import { getTranslations } from "next-intl/server";
 import { ChecklistBuilderClient } from "./builder-client";
 
 export const instant = false;
 
-export const metadata = {
-  title: "Checklist builder",
-  description: "Design a flexible multimedia HR checklist template.",
-};
-
+export async function generateMetadata() {
+  const t = await getTranslations("org.checklists");
+  return {
+    title: t("builderTitle"),
+  };
+}
 export default async function ChecklistBuilderPage({
   params,
 }: {

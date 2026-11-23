@@ -36,7 +36,7 @@ final class ResolveUsersFromTargets
         }
 
         return User::query()
-            ->where('tenant_id', $tenantId)
+            ->inTenant($tenantId)
             ->get(['id', 'email'])
             ->filter(function (User $user) use ($emails): bool {
                 return in_array(strtolower(trim((string) $user->email)), $emails, true);

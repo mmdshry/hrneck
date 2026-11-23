@@ -1,12 +1,15 @@
+import { getTranslations } from "next-intl/server";
 import { TargetsClient } from "./targets-client";
 
 export const instant = false;
 
-export const metadata = {
-  title: "Employees",
-  description: "Manage employees, CSV import, and directory sync.",
-};
-
+export async function generateMetadata() {
+  const t = await getTranslations("org.employees");
+  return {
+    title: t("title"),
+    description: t("description"),
+  };
+}
 export default function TargetsPage() {
   return <TargetsClient />;
 }

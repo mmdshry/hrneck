@@ -1,7 +1,10 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert } from "@/components/ui/alert";
+import { toastSuccess, toastError, toastInfo } from "@/lib/toast";
+import { useTranslations } from "next-intl";
+import { Avatar } from "@/components/ui/avatar";
+import { AvatarUploader } from "@/components/ui/avatar-uploader";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
@@ -11,7 +14,9 @@ import { Label } from "@/components/ui/label";
 import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
+import { LocationSelect } from "@/components/ui/location-select";
 import { Select } from "@/components/ui/select";
+import { TimezoneSelect } from "@/components/ui/timezone-select";
 import { liveStatusLabel, useLiveTopic } from "@/hooks/use-live-topic";
 import { useDataTableQuery } from "@/hooks/use-data-table-query";
 import { api, ensureCsrf, fetchSessionUser } from "@/lib/api";
@@ -27,50 +32,42 @@ import {
   type PaginationMeta,
 } from "@/lib/pagination";
 import { resolveTenant } from "@/lib/tenant";
-
-type DepartmentOption = {
-  id: number;
-  name: string;
-  is_active?: boolean;
-};
-
-type Target = {
-  id: number;
-  email: string;
-  first_name?: string;
-  last_name?: string;
-  department?: string;
-  department_id?: number | null;
-  status?: string;
-  risk_score?: number;
-};
+import { ImportWizardDialog } from "./import/import-wizard-dialog";
+import {
+  EMPLOYMENT_TYPE_OPTIONS,
+  PREFERRED_LANGUAGE_OPTIONS,
+  RISK_TIER_OPTIONS,
+  emptyTargetForm,
+  formFromTarget,
+  languageLabel,
+  payloadFromForm,
+  type DepartmentOption,
+  type Target,
+  type TargetFormState,
+} from "./target-types";
 
 type TargetsPayload = {
   data: Target[];
 };
 
-const STATUS_OPTIONS = [
-  { label: "Active", value: "active" },
-  { label: "Inactive", value: "inactive" },
-];
+function formatDateCell(value: string | null | undefined): string {
+  if (!value) return "";
+  return String(value).slice(0, 10);
+}
 
-function alertVariantForMessage(message: string): "destructive" | "success" | "default" {
-  const m = message.toLowerCase();
-  if (
-    /\b(fail|failed|error|invalid|unauthorized|rejected|denied)\b/.test(m) ||
-    m.includes("load failed") ||
-    m.includes("sync failed") ||
-    m.includes("import failed")
-  ) {
-    return "destructive";
-  }
-  if (
-    /\b(synced|imported|created|saved|updated|archived|deleted)\b/.test(m) ||
-    m.includes("rows.")
-  ) {
-    return "success";
-  }
-  return "default";
+function formatDateTimeCell(value: string | null | undefined): string {
+  if (!value) return "";
+  return String(value).replace("T", " ").slice(0, 19);
+}
+
+function managerLabel(target: Target): string {
+  if (!target.manager) return "";
+  const name = [target.manager.first_name, target.manager.last_name].filter(Boolean).join(" ").trim();
+  return name || target.manager.email || "";
+}
+
+function groupsLabel(target: Target): string {
+  return target.groups?.map((group) => group.name).filter(Boolean).join(", ") ?? "";
 }
 
 function targetCells(target: Target): Record<string, string> {
@@ -78,9 +75,27 @@ function targetCells(target: Target): Record<string, string> {
     email: target.email,
     first_name: target.first_name ?? "",
     last_name: target.last_name ?? "",
+    employee_number: target.employee_number ?? "",
+    job_title: target.job_title ?? "",
     department: target.department ?? "",
+    manager: managerLabel(target),
+    phone: target.phone ?? "",
+    location: target.location ?? "",
+    employment_type: target.employment_type ?? "",
+    hire_date: formatDateCell(target.hire_date),
+    preferred_language: languageLabel(target.preferred_language),
+    timezone: target.timezone ?? "",
+    external_id: target.external_id ?? "",
     status: target.status ?? "",
     risk_score: String(target.risk_score ?? 0),
+    risk_tier: target.risk_tier ?? "",
+    risk_source: target.risk_source ?? "",
+    risk_updated_at: formatDateTimeCell(target.risk_updated_at),
+    last_training_completed_at: formatDateTimeCell(target.last_training_completed_at),
+    notification_opt_out: target.notification_opt_out ? "yes" : "no",
+    joined_via: target.joined_via ?? "",
+    user_id: target.user_id != null ? String(target.user_id) : "",
+    groups: groupsLabel(target),
   };
 }
 
@@ -102,21 +117,26 @@ function matchesCells(
 }
 
 export function TargetsClient() {
+  const t = useTranslations("org.employees");
+  const tCommon = useTranslations("common");
+  const statusOptions = [
+    { label: tCommon("active"), value: "active" },
+    { label: tCommon("inactive"), value: "inactive" },
+  ];
   const tenant = resolveTenant();
   const channel = tenant ? orgLiveChannel(tenant, "targets") : null;
   const [targets, setTargets] = useState<Target[]>([]);
+  const [managerOptions, setManagerOptions] = useState<Target[]>([]);
   const [liveTargets, setLiveTargets] = useState<Target[] | null>(null);
   const [targetsMeta, setTargetsMeta] = useState<PaginationMeta>(emptyMeta());
   const [targetsPage, setTargetsPage] = useState(1);
   const [targetsPerPage, setTargetsPerPage] = useState<PageSize>(DEFAULT_PAGE_SIZE);
-  const [message, setMessage] = useState<string | null>(null);
   const [pendingArchive, setPendingArchive] = useState<Target | null>(null);
   const [pendingDeleteTarget, setPendingDeleteTarget] = useState<Target | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const [email, setEmail] = useState("");
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [departmentId, setDepartmentId] = useState("");
+  const [importWizardOpen, setImportWizardOpen] = useState(false);
+  const [editing, setEditing] = useState<Target | null>(null);
+  const [form, setForm] = useState<TargetFormState>(emptyTargetForm());
   const [departments, setDepartments] = useState<DepartmentOption[]>([]);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -196,7 +216,7 @@ export function TargetsClient() {
     }
     void refreshFromApi(targetsPage, targetsPerPage, filters)
       .catch((err: unknown) => {
-        setMessage(err instanceof Error ? err.message : "Load failed");
+        toastError(err instanceof Error ? err.message : tCommon("loadFailed"));
       })
       .finally(() => setLoading(false));
   }, [
@@ -227,119 +247,87 @@ export function TargetsClient() {
     setDepartments(parsed.data.filter((department) => department.is_active !== false));
   }, []);
 
+  const loadManagerOptions = useCallback(async () => {
+    const t = resolveTenant();
+    const res = await api(`/api/v1/org/targets?${paginationQuery(1, 500)}`, { tenant: t });
+    const parsed = parsePaginatedResponse<Target>(res, 500);
+    setManagerOptions(parsed.data);
+  }, []);
+
+  function patchForm<K extends keyof TargetFormState>(key: K, value: TargetFormState[K]) {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
   function openCreateModal() {
-    setEmail("");
-    setFirstName("");
-    setLastName("");
-    setDepartmentId("");
+    setEditing(null);
+    setForm(emptyTargetForm());
     setModalOpen(true);
-    void loadDepartments().catch((err: unknown) => {
-      setMessage(err instanceof Error ? err.message : "Failed to load departments");
+    void Promise.all([loadDepartments(), loadManagerOptions()]).catch((err: unknown) => {
+      toastError(err instanceof Error ? err.message : t("failedFormOptions"));
+    });
+  }
+
+  function openEditModal(target: Target) {
+    setEditing(target);
+    setForm(formFromTarget(target));
+    setModalOpen(true);
+    void Promise.all([loadDepartments(), loadManagerOptions()]).catch((err: unknown) => {
+      toastError(err instanceof Error ? err.message : t("failedFormOptions"));
     });
   }
 
   function closeModal() {
     if (saving) return;
     setModalOpen(false);
-    setEmail("");
-    setFirstName("");
-    setLastName("");
-    setDepartmentId("");
+    setEditing(null);
+    setForm(emptyTargetForm());
   }
 
-  async function createTarget(event: FormEvent) {
+  async function saveTarget(event: FormEvent) {
     event.preventDefault();
-    setMessage(null);
+    
     setSaving(true);
     try {
       await ensureCsrf();
-      const res = await api<{
-        data: Target;
-        meta?: { auto_assigned_instance_count?: number };
-      }>("/api/v1/org/targets", {
-        method: "POST",
-        tenant: resolveTenant(),
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: email.trim(),
-          first_name: firstName.trim() || null,
-          last_name: lastName.trim() || null,
-          department_id: departmentId ? Number(departmentId) : null,
-        }),
-      });
-      const autoCount = res.meta?.auto_assigned_instance_count ?? 0;
-      setMessage(
-        autoCount > 0
-          ? `Employee created. Auto-assigned ${autoCount} checklist instance${autoCount === 1 ? "" : "s"}.`
-          : "Employee created.",
-      );
+      if (editing) {
+        await api<{ data: Target }>(`/api/v1/org/targets/${editing.id}`, {
+          method: "PATCH",
+          tenant: resolveTenant(),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payloadFromForm(form, { includeStatus: true })),
+        });
+        toastSuccess(t("employeeUpdated"));
+      } else {
+        const res = await api<{
+          data: Target;
+          meta?: { auto_assigned_instance_count?: number };
+        }>("/api/v1/org/targets", {
+          method: "POST",
+          tenant: resolveTenant(),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payloadFromForm(form)),
+        });
+        const autoCount = res.meta?.auto_assigned_instance_count ?? 0;
+        toastSuccess(
+          autoCount > 0
+            ? `Employee created. Auto-assigned ${autoCount} checklist instance${autoCount === 1 ? "" : "s"}.`
+            : t("employeeCreated"),
+        );
+      }
       setModalOpen(false);
-      setEmail("");
-      setFirstName("");
-      setLastName("");
-      setDepartmentId("");
+      setEditing(null);
+      setForm(emptyTargetForm());
       setTargetsPage(1);
       await afterMutation(1);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Create failed");
+      toastError(err instanceof Error ? err.message : editing ? tCommon("updateFailed") : tCommon("createFailed"));
     } finally {
       setSaving(false);
     }
   }
 
-  async function syncDirectory() {
-    setMessage(null);
-    try {
-      await ensureCsrf();
-      const res = await api<{ data: { users: number; groups: number } }>(
-        "/api/v1/org/directory-sync",
-        { method: "POST", tenant: resolveTenant() },
-      );
-      setMessage(
-        `Synced ${res.data.users} users / ${res.data.groups} groups (mock until cloud credentials).`,
-      );
-      setTargetsPage(1);
-      await afterMutation(1);
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Sync failed");
-    }
-  }
-
-  async function uploadCsv(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setMessage(null);
-    const form = event.currentTarget;
-    const fileInput = form.elements.namedItem("csv") as HTMLInputElement;
-    const file = fileInput.files?.[0];
-    if (!file) return;
-    try {
-      await ensureCsrf();
-      const body = new FormData();
-      body.append("file", file);
-      const res = await api<{
-        imported: number;
-        meta?: { auto_assigned_instance_count?: number };
-      }>("/api/v1/org/targets/import", {
-        method: "POST",
-        tenant: resolveTenant(),
-        body,
-      });
-      const autoCount = res.meta?.auto_assigned_instance_count ?? 0;
-      setMessage(
-        autoCount > 0
-          ? `Imported ${res.imported} rows. Auto-assigned ${autoCount} checklist instance${autoCount === 1 ? "" : "s"}.`
-          : `Imported ${res.imported} rows.`,
-      );
-      setTargetsPage(1);
-      await afterMutation(1);
-      form.reset();
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : "CSV import failed");
-    }
-  }
-
   async function archiveTarget(target: Target) {
-    setMessage(null);
+    
     try {
       await ensureCsrf();
       await api(`/api/v1/org/targets/${target.id}`, {
@@ -348,96 +336,264 @@ export function TargetsClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "inactive" }),
       });
-      setMessage("Employee archived.");
+      toastSuccess(t("employeeArchived"));
       await afterMutation();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Archive failed");
+      toastError(err instanceof Error ? err.message : t("archiveFailed"));
       throw err;
     }
   }
 
+  async function reactivateTarget(target: Target) {
+    
+    try {
+      await ensureCsrf();
+      await api(`/api/v1/org/targets/${target.id}`, {
+        method: "PATCH",
+        tenant: resolveTenant(),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "active" }),
+      });
+      toastInfo(t("employeeReactivated"));
+      await afterMutation();
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : t("reactivateFailed"));
+    }
+  }
+
   async function deleteTarget(target: Target) {
-    setMessage(null);
+    
     try {
       await ensureCsrf();
       await api(`/api/v1/org/targets/${target.id}`, {
         method: "DELETE",
         tenant: resolveTenant(),
       });
-      setMessage("Employee deleted.");
+      toastSuccess(t("employeeDeleted"));
       await afterMutation();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Delete failed");
+      toastError(err instanceof Error ? err.message : tCommon("deleteFailed"));
       throw err;
     }
   }
 
   const columns: Array<DataTableColumn<Target>> = [
     {
-      id: "email",
-      header: "Email",
-      accessorKey: "email",
+      id: "avatar",
+      header: tCommon("photo"),
+      filter: "none",
+      enableSorting: false,
       sticky: true,
+      cell: (target) => (
+        <Avatar
+          src={target.avatar_url}
+          name={[target.first_name, target.last_name].filter(Boolean).join(" ")}
+          email={target.email}
+          size="sm"
+        />
+      ),
+    },
+    {
+      id: "email",
+      header: tCommon("email"),
+      accessorKey: "email",
       cell: (target) => target.email,
     },
     {
       id: "first_name",
-      header: "First name",
+      header: tCommon("firstName"),
       accessorKey: "first_name",
       cell: (target) => target.first_name || "—",
     },
     {
       id: "last_name",
-      header: "Last name",
+      header: tCommon("lastName"),
       accessorKey: "last_name",
       cell: (target) => target.last_name || "—",
     },
     {
+      id: "employee_number",
+      header: tCommon("employeeNumber"),
+      accessorKey: "employee_number",
+      cell: (target) => target.employee_number || "—",
+    },
+    {
+      id: "job_title",
+      header: tCommon("titleLabel"),
+      accessorKey: "job_title",
+      cell: (target) => target.job_title || "—",
+    },
+    {
       id: "department",
-      header: "Department",
+      header: tCommon("department"),
       accessorKey: "department",
       cell: (target) => target.department || "—",
     },
     {
-      id: "status",
-      header: "Status",
+      id: "manager",
+      header: tCommon("manager"),
+      filterValue: (target) => managerLabel(target),
+      cell: (target) => managerLabel(target) || "—",
+    },
+    {
+      id: "phone",
+      header: tCommon("phone"),
+      accessorKey: "phone",
+      cell: (target) => target.phone || "—",
+    },
+    {
+      id: "location",
+      header: tCommon("location"),
+      accessorKey: "location",
+      cell: (target) => target.location || "—",
+    },
+    {
+      id: "employment_type",
+      header: tCommon("type"),
       filter: "select",
-      filterOptions: STATUS_OPTIONS,
+      filterOptions: EMPLOYMENT_TYPE_OPTIONS,
+      accessorKey: "employment_type",
+      cell: (target) => target.employment_type || "—",
+    },
+    {
+      id: "hire_date",
+      header: tCommon("hireDate"),
+      filterValue: (target) => formatDateCell(target.hire_date),
+      cell: (target) => formatDateCell(target.hire_date) || "—",
+    },
+    {
+      id: "preferred_language",
+      header: tCommon("language"),
+      accessorKey: "preferred_language",
+      cell: (target) => languageLabel(target.preferred_language),
+    },
+    {
+      id: "timezone",
+      header: tCommon("timezone"),
+      accessorKey: "timezone",
+      cell: (target) => target.timezone || "—",
+    },
+    {
+      id: "external_id",
+      header: tCommon("externalId"),
+      accessorKey: "external_id",
+      cell: (target) => target.external_id || "—",
+    },
+    {
+      id: "status",
+      header: tCommon("status"),
+      filter: "select",
+      filterOptions: statusOptions,
       accessorKey: "status",
-      cell: (target) => target.status || "—",
+      cell: (target) => target.status || tCommon("emDash"),
     },
     {
       id: "risk_score",
-      header: "Risk",
+      header: tCommon("risk"),
       filterValue: (target) => target.risk_score ?? 0,
       cell: (target) => target.risk_score ?? 0,
     },
     {
+      id: "risk_tier",
+      header: tCommon("riskTier"),
+      filter: "select",
+      filterOptions: RISK_TIER_OPTIONS,
+      accessorKey: "risk_tier",
+      cell: (target) => target.risk_tier || tCommon("emDash"),
+    },
+    {
+      id: "risk_source",
+      header: tCommon("riskSource"),
+      accessorKey: "risk_source",
+      cell: (target) => target.risk_source || tCommon("emDash"),
+    },
+    {
+      id: "risk_updated_at",
+      header: tCommon("riskUpdated"),
+      filterValue: (target) => formatDateTimeCell(target.risk_updated_at),
+      cell: (target) => formatDateTimeCell(target.risk_updated_at) || tCommon("emDash"),
+    },
+    {
+      id: "last_training_completed_at",
+      header: tCommon("lastTraining"),
+      filterValue: (target) => formatDateTimeCell(target.last_training_completed_at),
+      cell: (target) =>
+        formatDateTimeCell(target.last_training_completed_at) || tCommon("emDash"),
+    },
+    {
+      id: "notification_opt_out",
+      header: tCommon("optOut"),
+      filter: "select",
+      filterOptions: [
+        { label: tCommon("yes"), value: "yes" },
+        { label: tCommon("no"), value: "no" },
+      ],
+      filterValue: (target) => (target.notification_opt_out ? "yes" : "no"),
+      cell: (target) => (target.notification_opt_out ? tCommon("yes") : tCommon("no")),
+    },
+    {
+      id: "joined_via",
+      header: tCommon("joinedVia"),
+      accessorKey: "joined_via",
+      cell: (target) => target.joined_via || tCommon("emDash"),
+    },
+    {
+      id: "user_id",
+      header: tCommon("userId"),
+      filterValue: (target) => (target.user_id != null ? String(target.user_id) : ""),
+      cell: (target) => (target.user_id != null ? target.user_id : tCommon("emDash")),
+    },
+    {
+      id: "groups",
+      header: tCommon("groups"),
+      filterValue: (target) => groupsLabel(target),
+      cell: (target) => groupsLabel(target) || tCommon("emDash"),
+    },
+    {
       id: "actions",
-      header: "Actions",
+      header: tCommon("actions"),
       filter: "none",
       enableSorting: false,
       enableGlobalFilter: false,
       cell: (target) => (
-        <div className="flex items-center gap-2">
-          <LinkButton href={`/org/targets/${target.id}`} size="sm" variant="secondary">
-            Open
+        <div className="flex flex-wrap items-center gap-2">
+          <LinkButton href={`/org/targets/${target.id}`} size="compact" variant="outline">
+            {tCommon("openAction")}
           </LinkButton>
           <Button
             type="button"
             variant="outline"
-            className="min-h-0 px-2 py-1 text-xs"
-            onClick={() => setPendingArchive(target)}
+            size="compact"
+            onClick={() => openEditModal(target)}
           >
-            Archive
+            {tCommon("edit")}
           </Button>
+          {target.status === "inactive" ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="compact"
+              onClick={() => void reactivateTarget(target)}
+            >
+              {tCommon("reactivate")}
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              size="compact"
+              onClick={() => setPendingArchive(target)}
+            >
+              {tCommon("archive")}
+            </Button>
+          )}
           <Button
             type="button"
             variant="outline"
-            className="min-h-0 px-2 py-1 text-xs"
+            size="compact"
             onClick={() => setPendingDeleteTarget(target)}
           >
-            Delete
+            {tCommon("delete")}
           </Button>
         </div>
       ),
@@ -449,55 +605,36 @@ export function TargetsClient() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">
+    <div className="mx-auto w-full min-w-0 max-w-5xl flex-1 overflow-x-clip px-4 py-8 sm:px-6">
       <PageHeader
-        title="Employees"
-        description={statusLabel ?? "Manage employees, CSV upload, and mock directory sync."}
+        title={t("title")}
+        description={statusLabel ?? t("description")}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" variant="secondary" onClick={openCreateModal}>
-              Add employee
+            <Button type="button" variant="secondary" onClick={() => setImportWizardOpen(true)}>
+              {t("importEmployees")}
             </Button>
-            <Button type="button" onClick={() => void syncDirectory()}>
-              Run directory sync
+            <Button type="button" variant="secondary" onClick={openCreateModal}>
+              {t("addEmployee")}
             </Button>
           </div>
         }
       />
-      {message ? (
-        <Alert className="mt-4" variant={alertVariantForMessage(message)}>
-          {message}
-        </Alert>
-      ) : null}
-      {liveError ? (
-        <Alert className="mt-4" variant="destructive">
-          {liveError}
-        </Alert>
-      ) : null}
-      <form onSubmit={uploadCsv} className="mt-6 flex flex-wrap items-end gap-2">
-        <div className="min-w-[200px] flex-1 space-y-1">
-          <Label htmlFor="targets-csv" className="text-[var(--muted-foreground)]">
-            CSV import
-          </Label>
-          <Input id="targets-csv" name="csv" type="file" accept=".csv,text/csv" />
-        </div>
-        <Button type="submit" variant="secondary">
-          Upload CSV
-        </Button>
-      </form>
+      
+      
       <section className="mt-10">
-        <h2 className="text-xl font-medium text-[var(--foreground)]">Employees</h2>
+        <h2 className="text-xl font-medium text-[var(--foreground)]">{t("title")}</h2>
         <DataTable
           className="mt-4"
           mode="server"
-          caption="Employees"
+          caption={t("title")}
           columns={columns}
           rows={targets}
           filterState={tableQuery.state}
           onFilterStateChange={tableQuery.setState}
           getRowId={(row) => row.id}
-          emptyTitle="No employees"
-          emptyDescription="Add an employee, upload a CSV, or run directory sync."
+          emptyTitle={t("noEmployeesYet")}
+          emptyDescription={t("noEmployeesHint")}
           pagination={{
             page: targetsPage,
             perPage: targetsPerPage,
@@ -517,76 +654,265 @@ export function TargetsClient() {
           if (!open) closeModal();
           else setModalOpen(true);
         }}
-        title="Add employee"
-        description="Create a single employee in the training and checklist audience."
+        title={editing ? t("editEmployee") : t("addEmployee")}
+        description={
+          editing ? t("editEmployeeDescription") : t("createEmployeeDescription")
+        }
         dismissible={!saving}
         footer={
           <>
             <Button type="button" variant="outline" onClick={closeModal} disabled={saving}>
-              Cancel
+              {tCommon("cancel")}
             </Button>
-            <Button type="submit" form="target-form" disabled={saving || !email.trim()}>
-              {saving ? "Saving…" : "Add employee"}
+            <Button
+              type="submit"
+              form="target-form"
+              disabled={saving || !form.email.trim() || !form.timezone.trim()}
+            >
+              {saving
+                ? tCommon("saving")
+                : editing
+                  ? tCommon("save")
+                  : t("addEmployee")}
             </Button>
           </>
         }
       >
-        <form id="target-form" onSubmit={(e) => void createTarget(e)} className="space-y-4">
+        <form id="target-form" onSubmit={(e) => void saveTarget(e)} className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
+          {editing ? (
+            <div className="space-y-1">
+              <Label>{tCommon("photo")}</Label>
+              <AvatarUploader
+                name={[form.first_name, form.last_name].filter(Boolean).join(" ")}
+                email={form.email}
+                avatarUrl={editing.avatar_url}
+                endpoint={`/api/v1/org/targets/${editing.id}/avatar`}
+                withTenant
+                size="md"
+                onChanged={(url) => {
+                  setEditing((prev) => (prev ? { ...prev, avatar_url: url } : prev));
+                  setTargets((rows) =>
+                    rows.map((row) =>
+                      row.id === editing.id ? { ...row, avatar_url: url } : row,
+                    ),
+                  );
+                  setLiveTargets((rows) =>
+                    rows
+                      ? rows.map((row) =>
+                          row.id === editing.id ? { ...row, avatar_url: url } : row,
+                        )
+                      : rows,
+                  );
+                }}
+              />
+            </div>
+          ) : null}
           <div className="space-y-1">
-            <Label htmlFor="target-email">Email</Label>
+            <Label htmlFor="target-email">{tCommon("email")}</Label>
             <Input
               id="target-email"
               type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              value={form.email}
+              onChange={(e) => patchForm("email", e.target.value)}
               required
               autoFocus
             />
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1">
-              <Label htmlFor="target-first-name">First name</Label>
+              <Label htmlFor="target-first-name">{tCommon("firstName")}</Label>
               <Input
                 id="target-first-name"
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
+                value={form.first_name}
+                onChange={(e) => patchForm("first_name", e.target.value)}
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="target-last-name">Last name</Label>
+              <Label htmlFor="target-last-name">{tCommon("lastName")}</Label>
               <Input
                 id="target-last-name"
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
+                value={form.last_name}
+                onChange={(e) => patchForm("last_name", e.target.value)}
               />
             </div>
           </div>
-          <div className="space-y-1">
-            <Label htmlFor="target-department">Department</Label>
-            <Select
-              id="target-department"
-              value={departmentId}
-              onChange={(e) => setDepartmentId(e.target.value)}
-            >
-              <option value="">No department</option>
-              {departments.map((department) => (
-                <option key={department.id} value={String(department.id)}>
-                  {department.name}
-                </option>
-              ))}
-            </Select>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label htmlFor="target-job-title">{tCommon("titleLabel")}</Label>
+              <Input
+                id="target-job-title"
+                value={form.job_title}
+                onChange={(e) => patchForm("job_title", e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="target-department">{tCommon("department")}</Label>
+              <Select
+                id="target-department"
+                value={form.department_id}
+                onChange={(e) => patchForm("department_id", e.target.value)}
+              >
+                <option value="">{t("noDepartment")}</option>
+                {departments.map((department) => (
+                  <option key={department.id} value={String(department.id)}>
+                    {department.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
           </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label htmlFor="target-manager">{tCommon("manager")}</Label>
+              <Select
+                id="target-manager"
+                value={form.manager_target_id}
+                onChange={(e) => patchForm("manager_target_id", e.target.value)}
+              >
+                <option value="">{t("noManager")}</option>
+                {managerOptions
+                  .filter((row) => !editing || row.id !== editing.id)
+                  .map((row) => (
+                    <option key={row.id} value={String(row.id)}>
+                      {[row.first_name, row.last_name].filter(Boolean).join(" ") || row.email} ({row.email})
+                    </option>
+                  ))}
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="target-employment-type">{t("employmentType")}</Label>
+              <Select
+                id="target-employment-type"
+                value={form.employment_type}
+                onChange={(e) => patchForm("employment_type", e.target.value)}
+              >
+                <option value="">{t("notSet")}</option>
+                {EMPLOYMENT_TYPE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label htmlFor="target-hire-date">{tCommon("hireDate")}</Label>
+              <Input
+                id="target-hire-date"
+                type="date"
+                value={form.hire_date}
+                onChange={(e) => patchForm("hire_date", e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="target-employee-number">{tCommon("employeeNumber")}</Label>
+              <Input
+                id="target-employee-number"
+                value={form.employee_number}
+                onChange={(e) => patchForm("employee_number", e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label htmlFor="target-phone">{tCommon("phone")}</Label>
+              <Input
+                id="target-phone"
+                value={form.phone}
+                onChange={(e) => patchForm("phone", e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="target-location">{tCommon("location")}</Label>
+              <LocationSelect
+                id="target-location"
+                value={form.location}
+                onChange={(next) => patchForm("location", next)}
+              />
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label htmlFor="target-language">{t("preferredLanguage")}</Label>
+              <Select
+                id="target-language"
+                value={form.preferred_language}
+                onChange={(e) => patchForm("preferred_language", e.target.value)}
+              >
+                <option value="">{t("notSet")}</option>
+                {PREFERRED_LANGUAGE_OPTIONS.map((option) => (
+                  <option key={option.code} value={option.code}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="target-timezone">{tCommon("timezone")}</Label>
+              <TimezoneSelect
+                id="target-timezone"
+                value={form.timezone}
+                onChange={(e) => patchForm("timezone", e.target.value)}
+                required
+              />
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label htmlFor="target-external-id">{tCommon("externalId")}</Label>
+              <Input
+                id="target-external-id"
+                value={form.external_id}
+                onChange={(e) => patchForm("external_id", e.target.value)}
+              />
+            </div>
+            {editing ? (
+              <div className="space-y-1">
+                <Label htmlFor="target-status">{tCommon("status")}</Label>
+                <Select
+                  id="target-status"
+                  value={form.status}
+                  onChange={(e) => patchForm("status", e.target.value)}
+                >
+                  {statusOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            ) : null}
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={form.notification_opt_out}
+              onChange={(e) => patchForm("notification_opt_out", e.target.checked)}
+            />
+            {t("optOutCampaignNotifications")}
+          </label>
         </form>
       </Dialog>
+
+      <ImportWizardDialog
+        open={importWizardOpen}
+        onOpenChange={setImportWizardOpen}
+        onImported={async (summary) => {
+          toastInfo(summary);
+          setTargetsPage(1);
+          await afterMutation(1);
+        }}
+      />
 
       <ConfirmDialog
         open={pendingArchive !== null}
         onOpenChange={(open) => {
           if (!open) setPendingArchive(null);
         }}
-        title="Archive employee"
-        description={`Archive ${pendingArchive?.email}?`}
-        confirmLabel="Archive"
+        title={t("archiveEmployee")}
+        description={t("archiveConfirm", { email: pendingArchive?.email ?? "" })}
+        confirmLabel={tCommon("archive")}
         onConfirm={async () => {
           if (!pendingArchive) return;
           await archiveTarget(pendingArchive);
@@ -598,9 +924,9 @@ export function TargetsClient() {
         onOpenChange={(open) => {
           if (!open) setPendingDeleteTarget(null);
         }}
-        title="Delete employee"
-        description={`Permanently delete ${pendingDeleteTarget?.email}?`}
-        confirmLabel="Delete"
+        title={t("deleteEmployee")}
+        description={t("deleteConfirm", { email: pendingDeleteTarget?.email ?? "" })}
+        confirmLabel={tCommon("delete")}
         variant="destructive"
         onConfirm={async () => {
           if (!pendingDeleteTarget) return;

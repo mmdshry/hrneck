@@ -5,8 +5,12 @@ namespace App\Http\Controllers\Api\V1;
 use App\Domains\IdentityAccess\Actions\MfaService;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\LoginRequest;
+use App\Http\Resources\Api\V1\TenantResource;
 use App\Http\Resources\Api\V1\UserResource;
+use App\Models\Tenant;
 use App\Models\User;
+use App\Support\ActiveOrgTenant;
+use App\Support\AppLocale;
 use App\Support\StaffTenant;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\JsonResponse;
@@ -15,6 +19,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password as PasswordRule;
 use Illuminate\Validation\ValidationException;
 
@@ -26,7 +31,7 @@ class AuthController extends Controller
     {
         if (! Auth::guard('web')->attempt($request->only('email', 'password'), $request->boolean('remember'))) {
             throw ValidationException::withMessages([
-                'email' => ['The provided credentials are incorrect.'],
+                'email' => [__('auth.failed')],
             ]);
         }
 
@@ -37,7 +42,7 @@ class AuthController extends Controller
             Auth::guard('web')->logout();
 
             throw ValidationException::withMessages([
-                'email' => ['This account has been disabled.'],
+                'email' => [__('auth.disabled')],
             ]);
         }
 
@@ -45,7 +50,7 @@ class AuthController extends Controller
             Auth::guard('web')->logout();
 
             throw ValidationException::withMessages([
-                'email' => ['Please use the invite link in your email to set a password before signing in.'],
+                'email' => [__('auth.must_set_password')],
             ]);
         }
 
@@ -53,7 +58,7 @@ class AuthController extends Controller
             Auth::guard('web')->logout();
 
             throw ValidationException::withMessages([
-                'email' => ['This account email address is not verified.'],
+                'email' => [__('auth.email_unverified')],
             ]);
         }
 
@@ -72,6 +77,8 @@ class AuthController extends Controller
             $request->session()->regenerate();
         }
 
+        $this->syncActiveOrgAfterAuth($user);
+
         return response()->json([
             'data' => new UserResource($user),
             'mfa_required' => false,
@@ -88,7 +95,7 @@ class AuthController extends Controller
         $challenge = $this->mfa->challengeFromToken($data['challenge_token']);
         if ($challenge === null) {
             throw ValidationException::withMessages([
-                'code' => ['Invalid or expired authentication challenge. Sign in again.'],
+                'code' => [__('auth.mfa_challenge_invalid')],
             ]);
         }
 
@@ -97,7 +104,7 @@ class AuthController extends Controller
         $ok = $this->mfa->verify($user, $code) || $this->mfa->verifyRecoveryCode($user, $code);
         if (! $ok) {
             throw ValidationException::withMessages([
-                'code' => ['Invalid authentication code.'],
+                'code' => [__('auth.mfa_code_invalid')],
             ]);
         }
 
@@ -107,7 +114,56 @@ class AuthController extends Controller
             $request->session()->regenerate();
         }
 
+        $this->syncActiveOrgAfterAuth($user);
+
         return response()->json(['data' => new UserResource($user)]);
+    }
+
+    public function enterOrg(Request $request, string $tenant): JsonResponse
+    {
+        if (! $request->hasSession()) {
+            abort(400, 'A browser session is required to enter an organization.');
+        }
+
+        /** @var User $user */
+        $user = $request->user();
+        if ($user->isPlatformStaff()) {
+            abort(403, 'Platform staff must enter tenants via MSP.');
+        }
+
+        if (! $user->belongsToTenant($tenant)) {
+            abort(403, 'You do not belong to this organization.');
+        }
+
+        $model = Tenant::query()->findOrFail($tenant);
+        ActiveOrgTenant::set($model->id);
+
+        if ($user->tenant_id !== $model->id) {
+            $membership = $user->membershipFor($model->id);
+            $user->forceFill([
+                'tenant_id' => $model->id,
+                'department_id' => $membership?->department_id,
+                'department' => $membership?->department,
+            ])->save();
+        }
+
+        return response()->json([
+            'data' => (new UserResource($user->fresh(['memberships.tenant', 'roles'])))->resolve(),
+            'tenant' => (new TenantResource($model->load('domains')))->resolve(),
+        ]);
+    }
+
+    public function leaveOrg(Request $request): JsonResponse
+    {
+        if (! $request->hasSession()) {
+            abort(400, 'A browser session is required to leave an organization.');
+        }
+
+        ActiveOrgTenant::clear();
+
+        return response()->json([
+            'data' => (new UserResource($request->user()))->resolve(),
+        ]);
     }
 
     public function setupMfa(Request $request): JsonResponse
@@ -120,7 +176,7 @@ class AuthController extends Controller
         $data = $request->validate(['code' => ['required', 'string']]);
         $codes = $this->mfa->confirmSetup($request->user(), $data['code']);
         if ($codes === null) {
-            throw ValidationException::withMessages(['code' => ['Invalid code.']]);
+            throw ValidationException::withMessages(['code' => [__('auth.mfa_setup_code_invalid')]]);
         }
 
         return response()->json([
@@ -140,13 +196,13 @@ class AuthController extends Controller
         $user = $request->user();
         if (! Hash::check($data['password'], $user->getAuthPassword())) {
             throw ValidationException::withMessages([
-                'password' => ['The provided password is incorrect.'],
+                'password' => [__('auth.password')],
             ]);
         }
 
         if (! $user->mfa_enabled) {
             throw ValidationException::withMessages([
-                'code' => ['Multi-factor authentication is not enabled.'],
+                'code' => [__('auth.mfa_not_enabled')],
             ]);
         }
 
@@ -154,7 +210,7 @@ class AuthController extends Controller
             || $this->mfa->verifyRecoveryCode($user, $data['code']);
         if (! $ok) {
             throw ValidationException::withMessages([
-                'code' => ['Invalid authentication code.'],
+                'code' => [__('auth.mfa_code_invalid')],
             ]);
         }
 
@@ -177,7 +233,7 @@ class AuthController extends Controller
         }
 
         return response()->json([
-            'message' => 'If that email is registered, a reset link has been sent.',
+            'message' => __('auth.forgot_password_sent'),
         ]);
     }
 
@@ -197,11 +253,16 @@ class AuthController extends Controller
                 'token' => $data['token'],
             ],
             function (User $user, string $password): void {
+                if ($user->disabled_at !== null) {
+                    throw ValidationException::withMessages([
+                        'email' => [__('auth.password_reset_disabled')],
+                    ]);
+                }
+
                 $user->forceFill([
                     'password' => $password,
                     'remember_token' => Str::random(60),
                     'must_set_password' => false,
-                    'disabled_at' => null,
                 ])->save();
 
                 event(new PasswordReset($user));
@@ -214,7 +275,7 @@ class AuthController extends Controller
             ]);
         }
 
-        return response()->json(['message' => 'Password has been reset.']);
+        return response()->json(['message' => __('auth.password_reset')]);
     }
 
     public function changePassword(Request $request): JsonResponse
@@ -228,7 +289,7 @@ class AuthController extends Controller
         $user = $request->user();
         if (! Hash::check($data['current_password'], $user->getAuthPassword())) {
             throw ValidationException::withMessages([
-                'current_password' => ['The provided password is incorrect.'],
+                'current_password' => [__('auth.password')],
             ]);
         }
 
@@ -239,24 +300,51 @@ class AuthController extends Controller
         ])->save();
 
         StaffTenant::clear();
+        ActiveOrgTenant::clear();
 
         if ($request->hasSession()) {
             $request->session()->regenerate();
         }
 
-        return response()->json(['message' => 'Password updated.']);
+        return response()->json(['message' => __('auth.password_updated')]);
     }
 
     public function logout(Request $request): JsonResponse
     {
         StaffTenant::clear();
+        ActiveOrgTenant::clear();
         Auth::guard('web')->logout();
         if ($request->hasSession()) {
             $request->session()->invalidate();
             $request->session()->regenerateToken();
         }
 
-        return response()->json(['message' => 'Logged out']);
+        return response()->json(['message' => __('auth.logged_out')]);
+    }
+
+    private function syncActiveOrgAfterAuth(User $user): void
+    {
+        if ($user->isPlatformStaff()) {
+            ActiveOrgTenant::clear();
+
+            return;
+        }
+
+        $user->loadMissing('memberships');
+        $active = $user->memberships->filter(fn ($m): bool => $m->isActive())->values();
+
+        if ($active->count() === 1) {
+            ActiveOrgTenant::set($active->first()->tenant_id);
+
+            return;
+        }
+
+        $current = ActiveOrgTenant::id();
+        if (is_string($current) && $current !== '' && $user->belongsToTenant($current)) {
+            return;
+        }
+
+        ActiveOrgTenant::clear();
     }
 
     public function me(Request $request): UserResource|JsonResponse
@@ -267,5 +355,20 @@ class AuthController extends Controller
         }
 
         return new UserResource($user);
+    }
+
+    public function updateLocale(Request $request): UserResource
+    {
+        $data = $request->validate([
+            'locale' => ['required', 'string', Rule::in(AppLocale::ALLOWED)],
+        ]);
+
+        /** @var User $user */
+        $user = $request->user();
+        $user->forceFill([
+            'locale' => AppLocale::normalize($data['locale']),
+        ])->save();
+
+        return new UserResource($user->fresh());
     }
 }

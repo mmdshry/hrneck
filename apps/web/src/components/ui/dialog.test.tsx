@@ -32,6 +32,26 @@ describe("Dialog", () => {
     );
     expect(screen.queryByRole("dialog")).toBeNull();
   });
+
+  it("keeps input focus when onOpenChange identity changes while open", () => {
+    function Harness({ onOpenChange }: { onOpenChange: (open: boolean) => void }) {
+      return (
+        <Dialog open onOpenChange={onOpenChange} title="Add department">
+          <input aria-label="Name" />
+        </Dialog>
+      );
+    }
+
+    const { rerender } = render(<Harness onOpenChange={() => undefined} />);
+    const input = screen.getByLabelText("Name");
+    input.focus();
+    expect(document.activeElement).toBe(input);
+
+    // Inline handlers are a new function each render (controlled forms).
+    rerender(<Harness onOpenChange={() => undefined} />);
+    expect(document.activeElement).toBe(input);
+  });
+
 });
 
 describe("ConfirmDialog", () => {

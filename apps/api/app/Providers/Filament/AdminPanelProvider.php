@@ -9,6 +9,7 @@ use App\Filament\Widgets\OpenNextMspWidget;
 use App\Filament\Widgets\RecentTenants;
 use App\Filament\Widgets\TenantOpsOverview;
 use App\Http\Middleware\ApplyFilamentTenantContext;
+use App\Http\Middleware\SetUserLocale;
 use Filament\Auth\MultiFactor\App\AppAuthentication;
 use Filament\Enums\ThemeMode;
 use Filament\FontProviders\BunnyFontProvider;
@@ -81,6 +82,8 @@ class AdminPanelProvider extends PanelProvider
                 OpenNextMspWidget::class,
                 RecentTenants::class,
             ])
+            // SetUserLocale after session so $request->user() is available; Filament
+            // ships vendor UI translations for es/fr/pt/de/ru — App::setLocale is enough.
             ->middleware([
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
@@ -92,6 +95,7 @@ class AdminPanelProvider extends PanelProvider
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
                 ApplyFilamentTenantContext::class,
+                SetUserLocale::class,
             ])
             ->authMiddleware([
                 Authenticate::class,

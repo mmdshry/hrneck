@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
+import { getLocale } from "next-intl/server";
 import { GuideArticle } from "@/components/guides/guide-article";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
 import {
@@ -21,7 +22,8 @@ export async function generateMetadata({
   params,
 }: DocsSlugPageProps): Promise<Metadata> {
   const { slug } = await params;
-  const guide = getGuide(slug);
+  const locale = await getLocale();
+  const guide = getGuide(slug, locale);
   if (!guide) {
     return { title: "Guide not found" };
   }
@@ -44,9 +46,10 @@ async function DocsSlugContent({ params }: DocsSlugPageProps) {
   if (!isGuideSlug(slug)) {
     notFound();
   }
-  const guide = getGuide(slug);
+  const locale = await getLocale();
+  const guide = getGuide(slug, locale);
   if (!guide) {
     notFound();
   }
-  return <GuideArticle guide={guide} />;
+  return <GuideArticle guide={guide} locale={locale} />;
 }

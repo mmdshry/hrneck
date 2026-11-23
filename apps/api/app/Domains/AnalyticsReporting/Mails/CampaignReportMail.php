@@ -17,12 +17,15 @@ class CampaignReportMail extends Mailable
         public string $csvBody,
         public ?string $pdfBinary = null,
         public ?string $pdfName = null,
+        public ?string $subjectLine = null,
     ) {}
 
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: config('brand.short').' campaign report',
+            subject: $this->subjectLine ?? __('notifications.campaign_report_subject', [
+                'brand' => config('brand.short'),
+            ]),
         );
     }
 
