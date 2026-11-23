@@ -4,7 +4,7 @@ packages:
 minimumReleaseAgeExclude:
   - playwright-core@1.65.0
 allowBuilds:
-  '@parcel/watcher': set this to true or false
-  '@swc/core': set this to true or false
+  '@parcel/watcher': true
+  '@swc/core': true
   sharp: false
   unrs-resolver: false
