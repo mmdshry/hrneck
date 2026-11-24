@@ -16,8 +16,12 @@ class TestingTenancySeeder extends Seeder
 {
     use SeedsStandardDemoTenants;
 
+    /** Base table names shared by every tenant; cleared whenever tenant schemas are rebuilt. */
+    private static ?array $tableNames = null;
+
     public function run(): void
     {
+        self::$tableNames = null;
         $this->seedPlatformAdmin();
         $tenantIds = $this->seedStandardDemoTenants();
         $this->migrateAndSeedTenantSamples($tenantIds, fresh: true);
@@ -43,11 +47,7 @@ class TestingTenancySeeder extends Seeder
 
             tenancy()->initialize($tenant);
 
-            $tables = collect(DB::select('SHOW FULL TABLES WHERE Table_type = ?', ['BASE TABLE']))
-                ->map(static fn (object $row): string => (string) array_values((array) $row)[0])
-                ->reject(static fn (string $table): bool => $table === 'migrations')
-                ->values()
-                ->all();
+            $tables = self::$tableNames ??= self::baseTableNames();
 
             DB::statement('SET FOREIGN_KEY_CHECKS=0');
             foreach ($tables as $table) {
@@ -58,5 +58,15 @@ class TestingTenancySeeder extends Seeder
             (new TestingTenantFixtureSeeder)->run();
             tenancy()->end();
         }
+    }
+
+    /** @return list<string> */
+    private static function baseTableNames(): array
+    {
+        return collect(DB::select('SHOW FULL TABLES WHERE Table_type = ?', ['BASE TABLE']))
+            ->map(static fn (object $row): string => (string) array_values((array) $row)[0])
+            ->reject(static fn (string $table): bool => $table === 'migrations')
+            ->values()
+            ->all();
     }
 }

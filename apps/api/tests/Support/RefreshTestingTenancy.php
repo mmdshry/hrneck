@@ -11,7 +11,7 @@ use Stancl\Tenancy\Facades\Tenancy;
 /**
  * Migrate + seed standard demo tenancy once per process, then isolate:
  * - central DB via RefreshDatabase transactions
- * - tenant DB via light truncate+fixture for tenants bootstrapped in the previous test
+ * - tenant DB via light truncate+fixture for tenants written to in the previous test
  */
 trait RefreshTestingTenancy
 {
@@ -51,6 +51,7 @@ trait RefreshTestingTenancy
             }
         }
 
+        $this->endTenancyBeforeCentralRollback();
         $this->beginDatabaseTransaction();
     }
 
@@ -59,5 +60,21 @@ trait RefreshTestingTenancy
         if (function_exists('tenancy') && tenancy()->initialized) {
             Tenancy::end();
         }
+    }
+
+    /**
+     * Laravel's teardown rolls back the central transaction after checking the *default*
+     * connection. A test that ends inside a tenant request (X-Tenant middleware never reverts)
+     * still has tenancy initialized, so that check runs against the tenant connection, clears
+     * RefreshDatabaseState::$migrated and forces a full bootstrap before the next test.
+     * Callbacks run in registration order, so ending tenancy here keeps the check on central.
+     */
+    private function endTenancyBeforeCentralRollback(): void
+    {
+        $this->beforeApplicationDestroyed(static function (): void {
+            if (tenancy()->initialized) {
+                Tenancy::end();
+            }
+        });
     }
 }
