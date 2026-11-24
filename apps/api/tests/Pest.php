@@ -12,8 +12,9 @@ pest()->extend(TestCase::class)->in('Unit');
 | Feature tenancy bootstrap
 |--------------------------------------------------------------------------
 |
-| Migrate + TestingTenancySeeder once per process, then isolate with
-| central DB transactions and a tenant sample reset before each test.
+| Migrate + TestingTenancySeeder once per process. Central DB uses
+| RefreshDatabase transactions. Tenant DBs reset with a light fixture for
+| only the tenants touched by the previous test.
 |
 */
 uses(RefreshTestingTenancy::class)->in('Feature');

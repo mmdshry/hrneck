@@ -5,9 +5,12 @@ use App\Domains\Tenancy\Actions\ProvisionTenant;
 use App\Models\Tenant;
 use App\Support\LoadTestMarkers;
 use Illuminate\Support\Facades\DB;
+use Tests\Support\TestingTenancyState;
 
 test('provision tenant creates database domain and sample content', function () {
     $slug = 'prov-'.substr(uniqid(), -6);
+
+    TestingTenancyState::markDirty();
 
     $tenant = app(ProvisionTenant::class)->handle([
         'slug' => $slug,
@@ -36,6 +39,7 @@ test('deprovision only allows loadtest tenants', function () {
         ->toThrow(InvalidArgumentException::class);
 
     $slug = LoadTestMarkers::tenantId(99);
+    TestingTenancyState::markDirty();
     app(ProvisionTenant::class)->handle([
         'slug' => $slug,
         'name' => 'Temp Load',

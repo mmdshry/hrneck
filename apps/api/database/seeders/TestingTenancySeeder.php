@@ -24,8 +24,10 @@ class TestingTenancySeeder extends Seeder
     }
 
     /**
-     * Wipe tenant data tables and re-apply sample content without rebuilding schema.
-     * Used between Feature tests when central DB is transaction-isolated but tenant DBs are not.
+     * Wipe tenant data tables and re-apply a light fixture without audience provisioning.
+     *
+     * Callers that wrap tenancy in test transactions should disable that wrapping
+     * around this method (truncate implies commit on MySQL).
      *
      * @param  list<string>|null  $tenantIds
      */
@@ -53,7 +55,7 @@ class TestingTenancySeeder extends Seeder
             }
             DB::statement('SET FOREIGN_KEY_CHECKS=1');
 
-            (new TenantSampleSeeder)->run();
+            (new TestingTenantFixtureSeeder)->run();
             tenancy()->end();
         }
     }
