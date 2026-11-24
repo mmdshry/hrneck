@@ -20,7 +20,7 @@ class BuildTargetReportMetrics
 
     /**
      * @param  array{
-     *   mode: string,
+     *   mode?: string,
      *   target_id?: int|null,
      *   group_id?: int|null,
      *   target_ids?: list<int>,
@@ -212,7 +212,7 @@ class BuildTargetReportMetrics
             unset($items[$index]['sort_at']);
         }
 
-        return array_values($items);
+        return $items;
     }
 
     /**

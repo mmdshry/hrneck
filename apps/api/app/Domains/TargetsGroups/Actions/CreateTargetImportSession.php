@@ -26,7 +26,8 @@ final class CreateTargetImportSession
      */
     public function handle(UploadedFile $file, ?int $createdBy = null): array
     {
-        if ($file->getSize() !== null && $file->getSize() > TargetCsvParser::MAX_BYTES) {
+        $size = $file->getSize();
+        if ($size !== false && $size > TargetCsvParser::MAX_BYTES) {
             throw ValidationException::withMessages([
                 'file' => ['CSV must be 5 MB or smaller.'],
             ]);

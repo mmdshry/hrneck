@@ -280,7 +280,7 @@ class ProvisionEmployeePair
         }
 
         $next = $remaining->first();
-        if ($user->tenant_id === $tenantId && $next !== null) {
+        if ($user->tenant_id === $tenantId) {
             $user->forceFill([
                 'tenant_id' => $next->tenant_id,
                 'department_id' => $next->department_id,

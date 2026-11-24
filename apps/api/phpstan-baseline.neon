@@ -13,12 +13,6 @@ parameters:
 			path: app/Console/Commands/SmtpSmokeCommand.php
 
 		-
-			message: '#^Access to an undefined property App\\Domains\\TargetsGroups\\Models\\Target\:\:\$department_label\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Domains/AnalyticsReporting/Actions/BuildOrgDetailedReport.php
-
-		-
 			message: '#^Access to an undefined property App\\Domains\\TargetsGroups\\Models\\Target\:\:\$targets\.$#'
 			identifier: property.notFound
 			count: 1
@@ -95,24 +89,6 @@ parameters:
 			identifier: function.alreadyNarrowedType
 			count: 1
 			path: app/Domains/IdentityAccess/Actions/MfaService.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$tenant_id\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Domains/IdentityAccess/Actions/SeedRbacCatalog.php
-
-		-
-			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:assignRole\(\)\.$#'
-			identifier: method.notFound
-			count: 1
-			path: app/Domains/IdentityAccess/Actions/SeedRbacCatalog.php
-
-		-
-			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:removeRole\(\)\.$#'
-			identifier: method.notFound
-			count: 1
-			path: app/Domains/IdentityAccess/Actions/SeedRbacCatalog.php
 
 		-
 			message: '#^Method App\\Domains\\IdentityAccess\\Actions\\SeedRbacCatalog\:\:ensureOrgAdminRole\(\) should return App\\Models\\Role but returns Spatie\\Permission\\Contracts\\Role\.$#'

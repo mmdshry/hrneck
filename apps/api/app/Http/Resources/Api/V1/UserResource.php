@@ -93,7 +93,7 @@ class UserResource extends JsonResource
 
                 return [
                     'tenant_id' => $m->tenant_id,
-                    'name' => $tenant?->name ?? $m->tenant_id,
+                    'name' => $tenant->name ?? $m->tenant_id,
                     'department_id' => $m->department_id,
                     'department' => $m->department,
                 ];
@@ -105,8 +105,8 @@ class UserResource extends JsonResource
             'name' => $this->name,
             'email' => $this->email,
             'tenant_id' => $activeTenantId,
-            'department_id' => $membership?->department_id ?? $this->department_id,
-            'department' => $membership?->department ?? $this->department,
+            'department_id' => $membership->department_id ?? $this->department_id,
+            'department' => $membership->department ?? $this->department,
             'job_title' => $targetFields['job_title'],
             'target_department' => $targetFields['target_department'],
             'avatar_path' => $this->avatar_path,

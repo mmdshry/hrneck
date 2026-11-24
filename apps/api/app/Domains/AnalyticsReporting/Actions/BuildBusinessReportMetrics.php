@@ -158,7 +158,7 @@ class BuildBusinessReportMetrics
     {
         return $rows->filter(function (array $row) use ($start, $end, $timezone): bool {
             foreach ($row['assignment']->events as $event) {
-                if ($event->type !== TrainingAssignmentEvent::SENT || $event->occurred_at === null) {
+                if ($event->type !== TrainingAssignmentEvent::SENT) {
                     continue;
                 }
                 $at = $event->occurred_at->copy()->timezone($timezone);

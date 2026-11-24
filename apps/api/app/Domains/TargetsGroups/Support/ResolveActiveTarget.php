@@ -56,7 +56,7 @@ final class ResolveActiveTarget
      */
     public function mapForUsers(iterable $users): Collection
     {
-        $collection = Collection::make($users)->filter(fn ($user) => $user instanceof User)->values();
+        $collection = Collection::make($users)->values();
         if ($collection->isEmpty()) {
             return collect();
         }
@@ -109,9 +109,6 @@ final class ResolveActiveTarget
     {
         $map = $this->mapForUsers($users);
         foreach ($users as $user) {
-            if (! $user instanceof User) {
-                continue;
-            }
             $user->setRelation('linkedTarget', $map->get((int) $user->id));
         }
     }

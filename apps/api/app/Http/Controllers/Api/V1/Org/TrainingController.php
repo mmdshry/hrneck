@@ -1193,7 +1193,7 @@ class TrainingController extends Controller
 
         try {
             $fullPath = $disk->path($path);
-            if (is_string($fullPath) && is_file($fullPath)) {
+            if (is_file($fullPath)) {
                 return response()->file($fullPath, $headers);
             }
         } catch (\Throwable) {

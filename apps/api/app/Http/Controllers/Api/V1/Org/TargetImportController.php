@@ -37,7 +37,7 @@ class TargetImportController extends Controller
                 'headers' => $session->headers,
                 'sample_rows' => $session->sample_rows,
                 'row_count' => $session->row_count,
-                'expires_at' => $session->expires_at?->toIso8601String(),
+                'expires_at' => $session->expires_at->toIso8601String(),
                 'suggested_map' => $result['suggested_map'],
                 'platform_fields' => $result['platform_fields'],
             ],

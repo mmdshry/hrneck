@@ -13,7 +13,7 @@ class RecordPhishingRecipientEvent
     public function __construct(private readonly RecalculateTargetRisk $recalculate) {}
 
     /**
-     * @param  'clicked'|'submitted'|'reported'  $event
+     * @param  string  $event  One of clicked, submitted, reported. Other values are rejected.
      */
     public function handle(CampaignRecipient $recipient, string $event, bool $recalculateRisk = true): CampaignRecipient
     {

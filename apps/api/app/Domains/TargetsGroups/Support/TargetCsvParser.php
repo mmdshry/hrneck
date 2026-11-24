@@ -43,7 +43,7 @@ final class TargetCsvParser
 
         try {
             $rawHeader = fgetcsv($handle);
-            if ($rawHeader === false || $rawHeader === [null] || $rawHeader === []) {
+            if ($rawHeader === false || $rawHeader === [null]) {
                 throw ValidationException::withMessages([
                     'file' => ['CSV must include a header row.'],
                 ]);

@@ -5,6 +5,7 @@ namespace App\Domains\TargetsGroups\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Support\Carbon;
 
 /**
  * @property string $email
@@ -14,7 +15,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
  * @property int|null $department_id
  * @property string|null $job_title
  * @property int|null $manager_target_id
- * @property string|null $hire_date
+ * @property Carbon|null $hire_date
  * @property string|null $employee_number
  * @property string|null $phone
  * @property string|null $location
@@ -28,6 +29,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
  * @property int $risk_score
  * @property string $risk_tier
  * @property string|null $risk_source
+ * @property Carbon|null $last_training_completed_at
  * @property bool $notification_opt_out
  * @property string|null $joined_via
  */
@@ -117,7 +119,7 @@ class Target extends Model
 
     public function getAvatarUrlAttribute(): ?string
     {
-        if (! filled($this->avatar_path) || $this->id === null) {
+        if (! filled($this->avatar_path) || $this->getKey() === null) {
             return null;
         }
 

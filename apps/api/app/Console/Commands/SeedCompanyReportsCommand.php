@@ -186,7 +186,7 @@ class SeedCompanyReportsCommand extends Command
     }
 
     /**
-     * @return Collection<int, object{id:int,email:string,first_name:?string,last_name:?string,group_id:int,group_name:string}>
+     * @return Collection<int, \stdClass>
      */
     private function ensureTargetsAndGroups(int $count, int $chunk): Collection
     {
@@ -285,7 +285,7 @@ class SeedCompanyReportsCommand extends Command
     }
 
     /**
-     * @return Collection<int, object{id:int,title:string}>
+     * @return Collection<int, \stdClass>
      */
     private function ensureCoursesAndQuizzes(): Collection
     {
@@ -363,8 +363,8 @@ class SeedCompanyReportsCommand extends Command
     }
 
     /**
-     * @param  Collection<int, object>  $targets
-     * @param  Collection<int, object{id:int,title:string}>  $courses
+     * @param  Collection<int, \stdClass>  $targets
+     * @param  Collection<int, \stdClass>  $courses
      */
     private function seedWaves(Collection $targets, Collection $courses, int $chunk): void
     {
@@ -407,7 +407,7 @@ class SeedCompanyReportsCommand extends Command
 
     /**
      * @param  object{id:int,title:string}  $course
-     * @param  Collection<int, object>  $audience
+     * @param  Collection<int, \stdClass>  $audience
      * @param  array{0:float,1:float,2:float,3:float}  $mix  no_action, incomplete, failed, passed
      */
     private function seedCampaignWave(

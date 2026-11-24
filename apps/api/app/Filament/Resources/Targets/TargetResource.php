@@ -52,7 +52,6 @@ class TargetResource extends Resource
                 'pt' => 'Português',
                 'de' => 'Deutsch',
                 'ru' => 'Русский',
-                default => $code,
             };
         }
 

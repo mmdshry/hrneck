@@ -26,6 +26,7 @@ use Stancl\Tenancy\Database\Concerns\CentralConnection;
 /**
  * @property array<int, string>|null $mfa_recovery_codes
  * @property string|null $mfa_secret
+ * @property string|null $tenant_id
  */
 #[Fillable([
     'name',

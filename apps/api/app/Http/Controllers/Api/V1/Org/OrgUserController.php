@@ -77,7 +77,7 @@ class OrgUserController extends Controller
         $audit->handle('users', 'created', 'Org user created', $user, [
             'email' => $user->email,
             'roles' => $data['roles'] ?? ['org_admin'],
-            'department_id' => $user->membershipFor((string) tenant('id'))?->department_id ?? $user->department_id,
+            'department_id' => $user->membershipFor((string) tenant('id'))->department_id ?? $user->department_id,
         ]);
 
         PublishLive::org([LiveTopics::USERS, LiveTopics::REPORTS_DETAILED]);

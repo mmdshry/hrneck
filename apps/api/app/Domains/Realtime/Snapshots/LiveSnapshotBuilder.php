@@ -6,7 +6,6 @@ use App\Domains\AnalyticsReporting\Actions\BuildCampaignReport;
 use App\Domains\AnalyticsReporting\Actions\BuildExportCalendar;
 use App\Domains\AnalyticsReporting\Actions\BuildOrgDetailedReport;
 use App\Domains\AnalyticsReporting\Models\ReportArchive;
-use App\Domains\TargetsGroups\Support\ResolveActiveTarget;
 use App\Domains\Campaigns\Models\Campaign;
 use App\Domains\Checklists\Models\ChecklistInstance;
 use App\Domains\Checklists\Models\ChecklistTemplate;
@@ -21,6 +20,7 @@ use App\Domains\Realtime\Support\LiveTopics;
 use App\Domains\TargetsGroups\Models\Department;
 use App\Domains\TargetsGroups\Models\Group;
 use App\Domains\TargetsGroups\Models\Target;
+use App\Domains\TargetsGroups\Support\ResolveActiveTarget;
 use App\Domains\Ticketing\Actions\TicketingReports;
 use App\Domains\Ticketing\Models\SdDesk;
 use App\Domains\Ticketing\Models\SdEmailReader;
@@ -33,7 +33,7 @@ use App\Http\Resources\Api\V1\UserResource;
 use App\Models\Role;
 use App\Models\Tenant;
 use App\Models\User;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Collection;
 
 class LiveSnapshotBuilder
 {
@@ -439,21 +439,7 @@ class LiveSnapshotBuilder
     }
 
     /**
-     * @return array<string, int|float>
-     */
-    private function campaignDashboard(string $type): array
-    {
-        $campaigns = Campaign::query()
-            ->where('type', $type)
-            ->with('recipients')
-            ->limit(self::LIST_CAP)
-            ->get();
-
-        return $this->campaignDashboardFromCampaigns($campaigns);
-    }
-
-    /**
-     * @param  \Illuminate\Support\Collection<int, Campaign>  $campaigns
+     * @param  Collection<int, Campaign>  $campaigns
      * @return array<string, int|float>
      */
     private function campaignDashboardFromCampaigns($campaigns): array

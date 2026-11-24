@@ -336,12 +336,12 @@ class BuildOrgDetailedReport
             ->orderByDesc('targets')
             ->get();
         $funnelsByDepartment = $this->recipientFunnelsByDepartment(
-            $departmentRows->map(fn ($item) => (string) $item->department_label)->all(),
+            $departmentRows->map(fn ($item) => (string) $item->getAttribute('department_label'))->all(),
         );
 
         $byDepartment = $departmentRows
             ->map(function ($item) use ($funnelsByDepartment) {
-                $dept = (string) $item->department_label;
+                $dept = (string) $item->getAttribute('department_label');
                 $recipientStats = $funnelsByDepartment[$dept] ?? $this->emptyRecipientFunnel();
 
                 return [
@@ -461,7 +461,7 @@ class BuildOrgDetailedReport
             ])
             ->get();
 
-        $grouped = $rows->groupBy(fn ($row) => (string) $row->department_label);
+        $grouped = $rows->groupBy(fn ($row) => (string) $row->getAttribute('department_label'));
         foreach ($grouped as $label => $recipients) {
             $total = max(1, $recipients->count());
             $sent = $recipients->whereNotNull('sent_at')->count();
@@ -483,14 +483,6 @@ class BuildOrgDetailedReport
         }
 
         return $result;
-    }
-
-    private function recipientFunnelForDepartment(?string $department): array
-    {
-        $label = $department === null || $department === '' ? 'Unassigned' : $department;
-        $funnels = $this->recipientFunnelsByDepartment([$label]);
-
-        return $funnels[$label] ?? $this->emptyRecipientFunnel();
     }
 
     /**

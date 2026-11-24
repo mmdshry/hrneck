@@ -13,7 +13,7 @@ class PrefillChecklistInstanceFromTarget
 
     public function handle(ChecklistInstance $instance, Target $target): ChecklistInstance
     {
-        $schema = is_array($instance->schema_snapshot) ? $instance->schema_snapshot : [];
+        $schema = $instance->schema_snapshot;
         $items = is_array($schema['items'] ?? null) ? $schema['items'] : [];
         $keys = [];
         foreach ($items as $item) {

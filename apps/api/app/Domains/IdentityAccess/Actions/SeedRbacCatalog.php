@@ -5,6 +5,8 @@ namespace App\Domains\IdentityAccess\Actions;
 use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
 use App\Models\Permission;
 use App\Models\Role;
+use App\Models\User;
+use LogicException;
 use Spatie\Permission\PermissionRegistrar;
 
 class SeedRbacCatalog
@@ -79,6 +81,9 @@ class SeedRbacCatalog
 
         setPermissionsTeamId($tenantId);
         $role = Role::findOrCreate(OrgPermissionCatalog::LEARNER, OrgPermissionCatalog::GUARD);
+        if (! $role instanceof Role) {
+            throw new LogicException('Expected '.Role::class.' for the learner role.');
+        }
         $role->syncPermissions([OrgPermissionCatalog::TICKETING_PORTAL]);
         setPermissionsTeamId(null);
 
@@ -101,6 +106,9 @@ class SeedRbacCatalog
         $target = Role::findOrCreate($to, OrgPermissionCatalog::GUARD);
 
         foreach ($legacy->users as $user) {
+            if (! $user instanceof User) {
+                continue;
+            }
             $teamId = $user->resolvedActiveTenantId() ?? $user->tenant_id;
             setPermissionsTeamId($teamId);
             $user->assignRole($target);

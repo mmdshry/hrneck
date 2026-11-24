@@ -52,7 +52,7 @@ class ClassifyTrainingAssignmentOutcome
 
         foreach ($assignment->events as $event) {
             $rank = TrainingAssignmentEvent::RANK[$event->type] ?? null;
-            if ($rank === null || $event->occurred_at === null) {
+            if ($rank === null) {
                 continue;
             }
 

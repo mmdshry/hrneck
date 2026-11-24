@@ -96,7 +96,7 @@ class RecordTrainingAssignmentEvent
 
         $assignment->forceFill([
             'status' => $status,
-            'sent_at' => $sent?->occurred_at ?? $assignment->sent_at,
+            'sent_at' => $sent->occurred_at ?? $assignment->sent_at,
         ])->save();
     }
 }
