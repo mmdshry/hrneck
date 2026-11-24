@@ -59,6 +59,7 @@ class UserAvatarController extends Controller
     private function tenantUser(int $userId): User
     {
         $tenantId = (string) tenant('id');
+
         return User::query()->inTenant($tenantId)->whereKey($userId)->firstOrFail();
     }
 }

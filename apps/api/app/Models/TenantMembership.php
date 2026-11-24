@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 use Stancl\Tenancy\Database\Concerns\CentralConnection;
 
 /**
@@ -14,7 +15,7 @@ use Stancl\Tenancy\Database\Concerns\CentralConnection;
  * @property string $tenant_id
  * @property int|null $department_id
  * @property string|null $department
- * @property \Illuminate\Support\Carbon|null $disabled_at
+ * @property Carbon|null $disabled_at
  */
 #[Fillable([
     'user_id',
