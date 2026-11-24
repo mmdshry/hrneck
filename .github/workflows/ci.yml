@@ -158,6 +158,9 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install
+      # Playwright serves the production build (next start), so build before the tests.
+      - name: Build web app for E2E
+        run: pnpm --dir apps/web build
       - run: pnpm --dir apps/web exec playwright install --with-deps chromium
       - name: Playwright desktop
         run: >
