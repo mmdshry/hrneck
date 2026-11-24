@@ -140,8 +140,8 @@ chown itneck:itneck "$APP_ROOT/apps/web/.env.local"
 
 echo "==> pnpm install + builds"
 cd "$APP_ROOT"
-# Use node as-is (v26 present). Prefer corepack pnpm 11.
-sudo -u itneck bash -lc 'cd /home/itneck/apps/hrneck && corepack enable && corepack prepare pnpm@11.6.0 --activate && pnpm install --frozen-lockfile'
+# Use node as-is (v26 present). Prefer corepack pnpm 12.
+sudo -u itneck bash -lc 'cd /home/itneck/apps/hrneck && corepack enable && corepack prepare pnpm@12.23.0 --activate && pnpm install --frozen-lockfile'
 sudo -u itneck bash -lc 'cd /home/itneck/apps/hrneck && pnpm --dir apps/api build'
 sudo -u itneck bash -lc 'cd /home/itneck/apps/hrneck && pnpm --dir apps/web build'
 
