@@ -15,6 +15,7 @@ class QueueNotificationEmail
             return;
         }
 
-        SendNotificationEmailJob::dispatch($email, $subject, $body, $locale);
+        SendNotificationEmailJob::dispatch($email, $subject, $body, $locale)
+            ->onConnection((string) config('queue.notification_connection'));
     }
 }

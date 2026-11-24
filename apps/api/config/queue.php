@@ -17,6 +17,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Notification Email Queue Connection
+    |--------------------------------------------------------------------------
+    |
+    | Connection used for notification emails (announcement fan-out, ticket
+    | alerts). Set to "redis" in environments that run `queue:work redis`, so a
+    | publish request does not wait on SMTP for every recipient. "sync" keeps the
+    | previous inline behavior.
+    |
+    */
+
+    'notification_connection' => env('NOTIFICATION_QUEUE_CONNECTION', 'sync'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Queue Connections
     |--------------------------------------------------------------------------
     |
