@@ -3,6 +3,8 @@ import type { NextRequest } from "next/server";
 import {
   canAccessMsp,
   resolvePostLoginPath,
+  type OrgMembership,
+  type PostLoginUser,
   type StaffGateUser,
 } from "@/lib/session";
 
@@ -60,10 +62,41 @@ type MeUser = {
   email?: unknown;
   tenant_id?: unknown;
   is_platform_staff?: unknown;
+  memberships?: unknown;
+  needs_org_selection?: unknown;
 };
 
 function staffGateUser(user: MeUser): StaffGateUser {
   return { is_platform_staff: user.is_platform_staff === true };
+}
+
+function postLoginUser(user: MeUser): PostLoginUser {
+  const memberships: OrgMembership[] | undefined = Array.isArray(user.memberships)
+    ? user.memberships.flatMap((entry) => {
+        if (typeof entry !== "object" || entry === null) {
+          return [];
+        }
+        const tenantId =
+          typeof (entry as { tenant_id?: unknown }).tenant_id === "string"
+            ? (entry as { tenant_id: string }).tenant_id.trim()
+            : "";
+        if (!tenantId) {
+          return [];
+        }
+        const name =
+          typeof (entry as { name?: unknown }).name === "string"
+            ? (entry as { name: string }).name
+            : tenantId;
+        return [{ tenant_id: tenantId, name }];
+      })
+    : undefined;
+
+  return {
+    is_platform_staff: user.is_platform_staff === true,
+    tenant_id: typeof user.tenant_id === "string" ? user.tenant_id : null,
+    memberships,
+    needs_org_selection: user.needs_org_selection === true,
+  };
 }
 
 async function sessionUser(request: NextRequest): Promise<MeUser | null> {
@@ -102,7 +135,7 @@ export async function proxy(request: NextRequest) {
     const user = await sessionUser(request);
     if (user) {
       const next = request.nextUrl.searchParams.get("next");
-      const dest = resolvePostLoginPath(staffGateUser(user), next);
+      const dest = resolvePostLoginPath(postLoginUser(user), next);
       return NextResponse.redirect(new URL(dest, request.url));
     }
     return NextResponse.next();
