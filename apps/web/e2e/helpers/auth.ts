@@ -1,4 +1,15 @@
+import { mkdirSync } from "node:fs";
+import path from "node:path";
 import { expect, type Page } from "@playwright/test";
+
+/** Session cookies written by e2e/auth.setup.ts. Git-ignored: they are live credentials. */
+export const ORG_STORAGE_STATE = path.join(__dirname, "..", ".auth", "org.json");
+export const PLATFORM_STORAGE_STATE = path.join(__dirname, "..", ".auth", "platform.json");
+
+export async function saveStorageState(page: Page, file: string): Promise<void> {
+  mkdirSync(path.dirname(file), { recursive: true });
+  await page.context().storageState({ path: file });
+}
 
 export async function loginAs(
   page: Page,

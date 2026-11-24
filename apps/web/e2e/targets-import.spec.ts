@@ -2,12 +2,13 @@ import { test, expect } from "@playwright/test";
 import path from "node:path";
 import { writeFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { loginAsOrgAdmin } from "./helpers/auth";
+import { ORG_STORAGE_STATE } from "./helpers/auth";
+
+test.use({ storageState: ORG_STORAGE_STATE });
 
 test.describe("Targets CSV import", () => {
   test("wizard import creates employees from non-canonical headers", async ({ page }) => {
     test.setTimeout(90_000);
-    await loginAsOrgAdmin(page);
     await page.goto("/org/targets");
     await expect(page.getByRole("heading", { name: /employees|targets/i }).first()).toBeVisible();
 
@@ -51,11 +52,11 @@ test.describe("Targets CSV import", () => {
       (res) =>
         res.url().includes("/commit") && res.request().method() === "POST",
     );
-    await page.getByRole("button", { name: "Import" }).click();
+    await page.getByRole("button", { name: "Import", exact: true }).click();
     expect((await commitPromise).ok()).toBeTruthy();
 
     await expect(page.getByRole("heading", { name: /import results/i })).toBeVisible();
-    await page.getByRole("button", { name: "Close" }).click();
+    await page.getByText("Close", { exact: true }).click();
     await expect(page.getByText(email).first()).toBeVisible({ timeout: 20_000 });
   });
 });

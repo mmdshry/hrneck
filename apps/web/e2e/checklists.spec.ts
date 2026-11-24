@@ -1,10 +1,11 @@
 import { test, expect } from "@playwright/test";
-import { loginAsOrgAdmin } from "./helpers/auth";
+import { ORG_STORAGE_STATE } from "./helpers/auth";
+
+test.use({ storageState: ORG_STORAGE_STATE });
 
 test.describe("Checklists UI", () => {
   test("packs and templates happy path", async ({ page }) => {
     test.setTimeout(90_000);
-    await loginAsOrgAdmin(page);
 
     await page.goto("/org/checklists");
     await expect(page.getByRole("heading", { name: "Checklists" })).toBeVisible({

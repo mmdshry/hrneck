@@ -1,10 +1,13 @@
 import { test, expect } from "@playwright/test";
-import { loginAsOrgAdmin } from "./helpers/auth";
+import { ORG_STORAGE_STATE } from "./helpers/auth";
+
+test.use({ storageState: ORG_STORAGE_STATE });
 
 test.describe("Learner portal", () => {
   test("assigns a course then shows progress in /learn", async ({ page }) => {
     test.setTimeout(120_000);
-    await loginAsOrgAdmin(page);
+    // page.evaluate below calls same-origin /api routes and reads XSRF-TOKEN, so open the app origin first.
+    await page.goto("/org");
 
     const result = await page.evaluate(async () => {
       const xsrf = decodeURIComponent(
@@ -37,6 +40,7 @@ test.describe("Learner portal", () => {
           first_name: "Org",
           last_name: "Admin",
           department: "Security",
+          timezone: "UTC",
         }),
       });
       let targetId: number | undefined;

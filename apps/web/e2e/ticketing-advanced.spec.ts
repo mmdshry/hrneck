@@ -1,10 +1,11 @@
 import { test, expect } from "@playwright/test";
-import { loginAsOrgAdmin } from "./helpers/auth";
+import { ORG_STORAGE_STATE } from "./helpers/auth";
+
+test.use({ storageState: ORG_STORAGE_STATE });
 
 test.describe("Ticketing advanced flows", () => {
   test("bulk archive, convert to KB, and portal submit", async ({ page }) => {
     test.setTimeout(180_000);
-    await loginAsOrgAdmin(page);
 
     await page.goto("/org/ticketing");
     await expect(page.getByRole("heading", { name: "Ticketing" })).toBeVisible();

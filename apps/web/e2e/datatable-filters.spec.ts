@@ -1,11 +1,11 @@
 import { test, expect } from "@playwright/test";
-import { loginAsOrgAdmin } from "./helpers/auth";
+import { ORG_STORAGE_STATE } from "./helpers/auth";
 
+test.use({ storageState: ORG_STORAGE_STATE });
 
 test.describe("DataTable filters", () => {
   test("ticketing queue exposes search and column filters", async ({ page }) => {
     test.setTimeout(90_000);
-    await loginAsOrgAdmin(page);
     await page.goto("/org/ticketing");
     await expect(page.getByRole("heading", { name: "Ticketing" })).toBeVisible();
     // Empty queues render EmptyState (no column filter row). Seed one ticket first.
@@ -29,7 +29,6 @@ test.describe("DataTable filters", () => {
 
   test("reports users section has searchable DataTable", async ({ page }) => {
     test.setTimeout(90_000);
-    await loginAsOrgAdmin(page);
     await page.goto("/org/reports");
     await expect(page.getByRole("heading", { name: /Reports/i }).first()).toBeVisible({
       timeout: 20_000,
@@ -45,7 +44,6 @@ test.describe("DataTable filters", () => {
 
   test("portal kb uses DataTable search", async ({ page }) => {
     test.setTimeout(90_000);
-    await loginAsOrgAdmin(page);
     await page.goto("/portal/kb");
     await expect(page.getByRole("heading", { name: /Knowledge base/i })).toBeVisible();
     await expect(page.getByLabel("Search table")).toBeVisible();

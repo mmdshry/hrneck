@@ -1,6 +1,9 @@
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
+// login-form.tsx prefills the demo email only under `next dev`; the production build starts empty.
+const expectedDemoEmail = process.env.PLAYWRIGHT_DEV_SERVER === "1" ? "admin@hrneck.test" : "";
+
 const AXE_ROUTES = [
   "/",
   "/login",
@@ -45,9 +48,9 @@ test.describe("HRNECK smoke", () => {
     });
   }
 
-  test("login page renders demo credentials fields", async ({ page }) => {
+  test("login page demo prefill matches the build mode", async ({ page }) => {
     await page.goto("/login");
-    await expect(page.getByLabel("Email")).toHaveValue("admin@hrneck.test");
+    await expect(page.getByLabel("Email")).toHaveValue(expectedDemoEmail);
     await expect(page.getByRole("button", { name: "Continue" })).toBeVisible();
   });
 
