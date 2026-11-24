@@ -1,19 +1,12 @@
 <?php
 
+use App\Domains\IdentityAccess\Actions\CreateOrgUser;
 use App\Domains\TargetsGroups\Models\Department;
 use App\Domains\TargetsGroups\Models\Target;
 use App\Domains\TargetsGroups\Models\TargetImportMapping;
 use App\Models\Tenant;
-use Database\Seeders\DemoSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Stancl\Tenancy\Facades\Tenancy;
-
-uses(RefreshDatabase::class);
-
-beforeEach(function () {
-    $this->seed(DemoSeeder::class);
-});
 
 test('csv import upserts targets in tenant', function () {
     $user = orgAdmin();
@@ -170,7 +163,7 @@ test('import mapping crud', function () {
 
 test('import session preview is forbidden for another org admin', function () {
     $owner = orgAdmin();
-    $other = app(\App\Domains\IdentityAccess\Actions\CreateOrgUser::class)->handle(
+    $other = app(CreateOrgUser::class)->handle(
         'itneck',
         'Other Admin',
         'other.admin@itneck.test',

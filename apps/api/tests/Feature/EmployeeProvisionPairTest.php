@@ -7,16 +7,8 @@ use App\Domains\TargetsGroups\Models\Target;
 use App\Filament\Resources\Targets\TargetResource;
 use App\Models\Tenant;
 use App\Models\User;
-use Database\Seeders\DemoSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 use Stancl\Tenancy\Facades\Tenancy;
-
-uses(RefreshDatabase::class);
-
-beforeEach(function () {
-    $this->seed(DemoSeeder::class);
-});
 
 test('creating a target provisions a learner user and queues invite', function () {
     Queue::fake();

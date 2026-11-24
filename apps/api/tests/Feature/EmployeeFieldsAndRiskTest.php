@@ -15,18 +15,10 @@ use App\Domains\TargetsGroups\Support\ResolveActiveTarget;
 use App\Domains\TargetsGroups\Support\TargetProfileFields;
 use App\Models\Tenant;
 use App\Models\User;
-use Database\Seeders\DemoSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Validation\ValidationException;
 use Stancl\Tenancy\Facades\Tenancy;
-
-uses(RefreshDatabase::class);
-
-beforeEach(function () {
-    $this->seed(DemoSeeder::class);
-});
 
 test('creating a target links user_id and stores profile fields', function () {
     Queue::fake();

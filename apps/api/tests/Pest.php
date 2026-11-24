@@ -1,13 +1,25 @@
 <?php
 
 use App\Models\User;
+use Tests\Support\RefreshTestingTenancy;
 use Tests\TestCase;
 
 pest()->extend(TestCase::class)->in('Feature');
 pest()->extend(TestCase::class)->in('Unit');
 
+/*
+|--------------------------------------------------------------------------
+| Feature tenancy bootstrap
+|--------------------------------------------------------------------------
+|
+| Migrate + TestingTenancySeeder once per process, then isolate with
+| central DB transactions and a tenant sample reset before each test.
+|
+*/
+uses(RefreshTestingTenancy::class)->in('Feature');
+
 /**
- * Demo organization admin for tenant "itneck" (seeded by DemoSeeder).
+ * Demo organization admin for tenant "itneck" (seeded by TestingTenancySeeder).
  */
 function orgAdmin(string $tenantId = 'itneck'): User
 {

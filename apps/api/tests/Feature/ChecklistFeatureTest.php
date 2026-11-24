@@ -6,17 +6,12 @@ use App\Domains\Checklists\Models\ChecklistTemplate;
 use App\Domains\TargetsGroups\Models\Target;
 use App\Models\Tenant;
 use App\Models\User;
-use Database\Seeders\DemoSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Spatie\Activitylog\Models\Activity;
 use Stancl\Tenancy\Facades\Tenancy;
 
-uses(RefreshDatabase::class);
-
 beforeEach(function () {
-    $this->seed(DemoSeeder::class);
     $this->user = orgAdmin();
     $this->tenant = Tenant::query()->findOrFail('itneck');
 });

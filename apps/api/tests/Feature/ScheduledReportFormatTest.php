@@ -4,17 +4,12 @@ use App\Domains\AnalyticsReporting\Actions\DispatchDueReportSchedules;
 use App\Domains\AnalyticsReporting\Mails\CampaignReportMail;
 use App\Domains\AnalyticsReporting\Models\ReportSchedule;
 use App\Models\Tenant;
-use Database\Seeders\DemoSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Stancl\Tenancy\Facades\Tenancy;
 
-uses(RefreshDatabase::class);
-
 beforeEach(function () {
-    $this->seed(DemoSeeder::class);
     Mail::fake();
     Tenancy::initialize(Tenant::query()->findOrFail('itneck'));
     Storage::fake('local');

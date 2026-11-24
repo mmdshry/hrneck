@@ -12,8 +12,6 @@ use App\Domains\Ticketing\Models\SdDesk;
 use App\Domains\TrainingLms\Models\Course;
 use App\Domains\TrainingLms\Models\Enrollment;
 use App\Models\Tenant;
-use Database\Seeders\DemoSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Mail;
@@ -21,10 +19,7 @@ use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Stancl\Tenancy\Facades\Tenancy;
 
-uses(RefreshDatabase::class);
-
 beforeEach(function () {
-    $this->seed(DemoSeeder::class);
     $this->tenant = Tenant::query()->findOrFail('itneck');
     $this->admin = orgAdmin();
 });

@@ -9,15 +9,10 @@ use App\Domains\TrainingLms\Models\Enrollment;
 use App\Domains\TrainingLms\Models\Lesson;
 use App\Domains\TrainingLms\Models\LessonProgress;
 use App\Models\Tenant;
-use Database\Seeders\DemoSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use Stancl\Tenancy\Facades\Tenancy;
 
-uses(RefreshDatabase::class);
-
 beforeEach(function () {
-    $this->seed(DemoSeeder::class);
     $this->tenant = Tenant::query()->findOrFail('itneck');
 });
 

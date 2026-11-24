@@ -1,14 +1,5 @@
 <?php
 
-use Database\Seeders\DemoSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
-
-uses(RefreshDatabase::class);
-
-beforeEach(function () {
-    $this->seed(DemoSeeder::class);
-});
-
 test('org users list accepts q and name filters', function () {
     $admin = orgAdmin();
 

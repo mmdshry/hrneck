@@ -2,18 +2,10 @@
 
 use App\Domains\AnalyticsReporting\Models\ReportArchive;
 use App\Models\Tenant;
-use Database\Seeders\DemoSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Storage;
 use Spatie\Activitylog\Models\Activity;
 use Stancl\Tenancy\Facades\Tenancy;
-
-uses(RefreshDatabase::class);
-
-beforeEach(function () {
-    $this->seed(DemoSeeder::class);
-});
 
 test('hrneck prune-activity-logs deletes only rows older than retention', function () {
     Tenancy::initialize(Tenant::query()->findOrFail('itneck'));

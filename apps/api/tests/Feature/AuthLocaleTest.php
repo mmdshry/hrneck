@@ -1,10 +1,7 @@
 <?php
 
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
-
-uses(RefreshDatabase::class);
 
 test('authenticated user can update locale preference', function () {
     $user = User::factory()->create([

@@ -1,14 +1,5 @@
 <?php
 
-use Database\Seeders\DemoSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
-
-uses(RefreshDatabase::class);
-
-beforeEach(function () {
-    $this->seed(DemoSeeder::class);
-});
-
 test('integrations endpoint reports smtp status without secrets', function () {
     config([
         'mail.mailers.smtp.host' => 'mail.hrneck.com',

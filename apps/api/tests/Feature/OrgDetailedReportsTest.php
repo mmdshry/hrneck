@@ -1,14 +1,5 @@
 <?php
 
-use Database\Seeders\DemoSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
-
-uses(RefreshDatabase::class);
-
-beforeEach(function () {
-    $this->seed(DemoSeeder::class);
-});
-
 test('org admin can load detailed reports overview', function () {
     $user = orgAdmin();
 

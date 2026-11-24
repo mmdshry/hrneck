@@ -10,15 +10,10 @@ use App\Domains\Ticketing\Models\SdKbArticle;
 use App\Domains\Ticketing\Models\SdTicket;
 use App\Models\Role;
 use App\Models\Tenant;
-use Database\Seeders\DemoSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Stancl\Tenancy\Facades\Tenancy;
 
-uses(RefreshDatabase::class);
-
 beforeEach(function () {
-    $this->seed(DemoSeeder::class);
     $this->user = orgAdmin();
     $this->tenant = Tenant::query()->findOrFail('itneck');
 });

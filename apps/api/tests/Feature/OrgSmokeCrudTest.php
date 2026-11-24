@@ -2,15 +2,7 @@
 
 use App\Domains\Checklists\Models\ChecklistTemplate;
 use App\Domains\Ticketing\Models\SdDesk;
-use Database\Seeders\DemoSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
-
-uses(RefreshDatabase::class);
-
-beforeEach(function () {
-    $this->seed(DemoSeeder::class);
-});
 
 test('org admin can perform core CRUD across modules', function () {
     $admin = orgAdmin();

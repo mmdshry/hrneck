@@ -3,15 +3,7 @@
 use App\Domains\TargetsGroups\Models\Department;
 use App\Models\Tenant;
 use App\Models\User;
-use Database\Seeders\DemoSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Stancl\Tenancy\Facades\Tenancy;
-
-uses(RefreshDatabase::class);
-
-beforeEach(function () {
-    $this->seed(DemoSeeder::class);
-});
 
 test('org admin can assign and clear user department_id', function () {
     $admin = orgAdmin();

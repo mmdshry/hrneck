@@ -4,13 +4,8 @@ use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
 use App\Models\Role;
 use App\Models\User;
 use App\Support\StaffTenant;
-use Database\Seeders\DemoSeeder;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Hash;
-
-beforeEach(function () {
-    $this->seed(DemoSeeder::class);
-});
 
 test('platform staff can enter tenant context and call org apis', function () {
     $staff = platformAdmin();

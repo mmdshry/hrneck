@@ -4,16 +4,8 @@ use App\Domains\Campaigns\Models\Campaign;
 use App\Domains\TargetsGroups\Models\Target;
 use App\Domains\TrainingLms\Models\Course;
 use App\Models\Tenant;
-use Database\Seeders\DemoSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use Stancl\Tenancy\Facades\Tenancy;
-
-uses(RefreshDatabase::class);
-
-beforeEach(function () {
-    $this->seed(DemoSeeder::class);
-});
 
 test('org can launch training campaign and queue reminders', function () {
     Mail::fake();

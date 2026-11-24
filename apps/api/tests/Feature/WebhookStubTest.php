@@ -1,14 +1,6 @@
 <?php
 
-use Database\Seeders\DemoSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
-
-uses(RefreshDatabase::class);
-
-beforeEach(function () {
-    $this->seed(DemoSeeder::class);
-});
 
 test('webhook stub skips empty urls and posts when a public url is provided', function () {
     Http::fake([

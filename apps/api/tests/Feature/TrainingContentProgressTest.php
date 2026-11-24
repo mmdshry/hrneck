@@ -13,17 +13,12 @@ use App\Domains\TrainingLms\Models\Quiz;
 use App\Domains\TrainingLms\Models\QuizQuestion;
 use App\Models\Tenant;
 use App\Models\User;
-use Database\Seeders\DemoSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Stancl\Tenancy\Facades\Tenancy;
 
-uses(RefreshDatabase::class);
-
 beforeEach(function () {
-    $this->seed(DemoSeeder::class);
     $this->user = orgAdmin();
     $this->tenant = Tenant::query()->findOrFail('itneck');
 });

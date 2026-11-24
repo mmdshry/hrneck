@@ -6,16 +6,8 @@ use App\Domains\Realtime\Support\LiveChannelGate;
 use App\Domains\Realtime\Support\LiveTopics;
 use App\Models\Tenant;
 use App\Support\StaffTenant;
-use Database\Seeders\DemoSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
 use Stancl\Tenancy\Tenancy;
-
-uses(RefreshDatabase::class);
-
-beforeEach(function () {
-    $this->seed(DemoSeeder::class);
-});
 
 test('msp live channel gate allows platform staff only', function () {
     $gate = app(LiveChannelGate::class);

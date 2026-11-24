@@ -2,15 +2,7 @@
 
 use App\Domains\TargetsGroups\Models\Group;
 use App\Models\Tenant;
-use Database\Seeders\DemoSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Stancl\Tenancy\Facades\Tenancy;
-
-uses(RefreshDatabase::class);
-
-beforeEach(function () {
-    $this->seed(DemoSeeder::class);
-});
 
 test('deleting a group soft-archives instead of hard delete', function () {
     $user = orgAdmin();

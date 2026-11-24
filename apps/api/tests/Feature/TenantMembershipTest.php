@@ -2,21 +2,16 @@
 
 use App\Domains\IdentityAccess\Actions\CreateOrgUser;
 use App\Domains\IdentityAccess\Actions\EnsureTenantMembership;
+use App\Domains\IdentityAccess\Actions\ProvisionEmployeePair;
 use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
 use App\Domains\TargetsGroups\Models\Target;
+use App\Models\Tenant;
 use App\Models\TenantMembership;
 use App\Models\User;
 use App\Support\ActiveOrgTenant;
-use Database\Seeders\DemoSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\ValidationException;
 use Stancl\Tenancy\Facades\Tenancy;
-
-uses(RefreshDatabase::class);
-
-beforeEach(function () {
-    $this->seed(DemoSeeder::class);
-});
 
 test('same email can hold memberships in multiple tenants', function () {
     $email = 'shared@example.test';
@@ -109,7 +104,7 @@ test('provisioning an employee in a second org reuses the same user', function (
     );
 
     try {
-        Tenancy::initialize(\App\Models\Tenant::query()->findOrFail('company'));
+        Tenancy::initialize(Tenant::query()->findOrFail('company'));
         $target = Target::query()->create([
             'email' => $email,
             'first_name' => 'Emp',
@@ -118,7 +113,7 @@ test('provisioning an employee in a second org reuses the same user', function (
             'joined_via' => 'manual',
         ]);
 
-        $result = app(\App\Domains\IdentityAccess\Actions\ProvisionEmployeePair::class)
+        $result = app(ProvisionEmployeePair::class)
             ->ensureUserForTarget($target, 'company');
 
         expect($result['created'])->toBeFalse();
@@ -140,7 +135,7 @@ test('platform staff email cannot be linked as an org member', function () {
         $staff->email,
         'DemoPass!234',
         [OrgPermissionCatalog::ORG_ADMIN],
-    ))->toThrow(\Illuminate\Validation\ValidationException::class);
+    ))->toThrow(ValidationException::class);
 });
 
 test('disabled membership blocks that tenant only', function () {

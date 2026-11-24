@@ -7,19 +7,11 @@ use App\Http\Middleware\ApplyFilamentTenantContext;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Support\FilamentTenant;
-use Database\Seeders\DemoSeeder;
 use Filament\Facades\Filament;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
 use Livewire\Livewire;
 use Stancl\Tenancy\Facades\Tenancy;
-
-uses(RefreshDatabase::class);
-
-beforeEach(function () {
-    $this->seed(DemoSeeder::class);
-});
 
 test('organization users get the same generic Filament login failure as bad passwords', function () {
     Filament::setCurrentPanel(Filament::getPanel('admin'));

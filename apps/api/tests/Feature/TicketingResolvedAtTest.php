@@ -5,15 +5,7 @@ use App\Domains\Ticketing\Actions\UpdateTicket;
 use App\Domains\Ticketing\Models\SdDesk;
 use App\Domains\Ticketing\Models\SdStage;
 use App\Models\Tenant;
-use Database\Seeders\DemoSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Stancl\Tenancy\Facades\Tenancy;
-
-uses(RefreshDatabase::class);
-
-beforeEach(function () {
-    $this->seed(DemoSeeder::class);
-});
 
 test('moving ticket to resolved stage sets resolved_at', function () {
     $tenant = Tenant::query()->findOrFail('itneck');

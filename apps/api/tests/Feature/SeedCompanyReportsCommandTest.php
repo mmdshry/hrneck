@@ -3,17 +3,9 @@
 use App\Console\Commands\SeedCompanyReportsCommand;
 use App\Domains\AnalyticsReporting\Actions\BuildBusinessReportMetrics;
 use App\Models\Tenant;
-use Database\Seeders\DemoSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Stancl\Tenancy\Facades\Tenancy;
-
-uses(RefreshDatabase::class);
-
-beforeEach(function () {
-    $this->seed(DemoSeeder::class);
-});
 
 test('company report seed creates employees quizzes and dated outcomes', function () {
     expect(Tenant::query()->whereKey('company')->exists())->toBeTrue();

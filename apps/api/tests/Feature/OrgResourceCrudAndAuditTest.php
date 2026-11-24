@@ -4,16 +4,8 @@ use App\Domains\IdentityAccess\Actions\CreateOrgUser;
 use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
 use App\Domains\TargetsGroups\Models\Target;
 use App\Models\Role;
-use Database\Seeders\DemoSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Activitylog\Models\Activity;
 use Stancl\Tenancy\Facades\Tenancy;
-
-uses(RefreshDatabase::class);
-
-beforeEach(function () {
-    $this->seed(DemoSeeder::class);
-});
 
 test('org admin can update archive and delete targets and groups with audit', function () {
     $admin = orgAdmin();

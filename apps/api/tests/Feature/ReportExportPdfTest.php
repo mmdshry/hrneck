@@ -8,16 +8,8 @@ use App\Domains\Campaigns\Models\TrainingAssignmentEvent;
 use App\Domains\TargetsGroups\Models\Group;
 use App\Domains\TargetsGroups\Models\Target;
 use App\Models\Tenant;
-use Database\Seeders\DemoSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Stancl\Tenancy\Facades\Tenancy;
-
-uses(RefreshDatabase::class);
-
-beforeEach(function () {
-    $this->seed(DemoSeeder::class);
-});
 
 /**
  * @param  list<array{type: string, at: string}>  $events

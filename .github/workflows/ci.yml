@@ -57,7 +57,7 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "26"
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - name: Build Filament Vite assets
@@ -69,7 +69,25 @@ jobs:
       - run: vendor/bin/pint --test
       - run: vendor/bin/phpstan analyse --memory-limit=1G
 
-  web:
+  web-unit:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "26"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install
+      - run: pnpm --dir apps/web lint
+      - run: pnpm --dir apps/web test
+      - run: pnpm --dir apps/web build
+
+  web-e2e:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -136,12 +154,10 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "26"
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install
-      - run: pnpm --dir apps/web lint
-      - run: pnpm --dir apps/web test
       - run: pnpm --dir apps/web exec playwright install --with-deps chromium
       - name: Playwright desktop
         run: >
@@ -170,4 +186,10 @@ jobs:
           exit 1
       - name: Playwright mobile
         run: pnpm --dir apps/web exec playwright test --project=mobile-chrome
-      - run: pnpm --dir apps/web build
+
+  # Keep a single green check name for branch protection / Deploy needs.
+  web:
+    runs-on: ubuntu-latest
+    needs: [web-unit, web-e2e]
+    steps:
+      - run: echo "web-unit and web-e2e passed"

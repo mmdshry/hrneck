@@ -16,18 +16,13 @@ use App\Domains\TrainingLms\Models\LessonProgress;
 use App\Domains\TrainingLms\Models\Quiz;
 use App\Domains\TrainingLms\Models\QuizAttempt;
 use App\Models\Tenant;
-use Database\Seeders\DemoSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Stancl\Tenancy\Facades\Tenancy;
 
-uses(RefreshDatabase::class);
-
 beforeEach(function () {
-    $this->seed(DemoSeeder::class);
     Tenancy::initialize(Tenant::query()->findOrFail('itneck'));
     DB::table('organization_settings')->updateOrInsert(
         ['id' => 1],
