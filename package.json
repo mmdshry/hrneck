@@ -1,12 +1,13 @@
 {
   "name": "hrneck",
   "private": true,
-  "packageManager": "pnpm@11.6.0",
+  "packageManager": "pnpm@12.23.0",
   "scripts": {
-    "dev": "concurrently -k -n api,reverb,web -c blue,magenta,green \"pnpm dev:api\" \"pnpm dev:reverb\" \"pnpm dev:web\"",
+    "dev": "concurrently -k -n api,reverb,queue,web -c blue,magenta,yellow,green \"pnpm dev:api\" \"pnpm dev:reverb\" \"pnpm dev:queue\" \"pnpm dev:web\"",
     "dev:web": "pnpm --dir apps/web dev --hostname 127.0.0.1 --port 3100",
     "dev:api": "php apps/api/artisan serve --host=127.0.0.1 --port=8000 --no-reload",
     "dev:reverb": "php apps/api/artisan reverb:start",
+    "dev:queue": "php apps/api/artisan queue:work redis --tries=3",
     "build:web": "pnpm --dir apps/web build",
     "lint:web": "pnpm --dir apps/web lint",
     "test:web": "pnpm --dir apps/web test"

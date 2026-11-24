@@ -1,4 +1,4 @@
-import html2canvas from "html2canvas";
+import { domToBlob } from "modern-screenshot";
 import { ensureCsrf } from "@/lib/api";
 import { resolveTenant } from "@/lib/tenant";
 
@@ -46,18 +46,15 @@ export async function captureElementPng(
   element: HTMLElement,
   filename: string,
 ): Promise<void> {
-  const canvas = await html2canvas(element, {
-    backgroundColor: null,
+  const blob = await domToBlob(element, {
+    type: "image/png",
     scale: window.devicePixelRatio > 1 ? 2 : 1,
-    useCORS: true,
+    backgroundColor: null,
   });
 
-  const blob = await new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob((result) => {
-      if (result) resolve(result);
-      else reject(new Error("PNG export failed"));
-    }, "image/png");
-  });
+  if (!blob) {
+    throw new Error("PNG export failed");
+  }
 
   downloadBlob(blob, filename);
 }
