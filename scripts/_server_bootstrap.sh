@@ -80,7 +80,7 @@ repl = {
     "REDIS_HOST": "127.0.0.1",
     "REDIS_PASSWORD": "null",
     "REDIS_PORT": "6379",
-    "MAIL_MAILER": "log",
+    "MAIL_MAILER": "smtp",
     "FRONTEND_URL": "https://hrneck.com",
     "HRNECK_SMTP_SMOKE": "0",
     "TURNSTILE_SECRET_KEY": json.dumps(os.environ["HRNECK_TURNSTILE_SECRET_KEY"]),
