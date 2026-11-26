@@ -128,10 +128,12 @@ class TenantSampleSeeder extends Seeder
 
         foreach ($users as $user) {
             $email = $this->tenantScopedEmail((string) $user['email'], $tenantId !== '' ? $tenantId : 'central');
+            // Key by email (unique per tenant): account backfill can create a target for this
+            // person before the sample runs, and a second insert on the same email would collide.
             $target = Target::query()->updateOrCreate(
-                ['external_id' => $user['external_id']],
+                ['email' => $provision->normalizeEmail($email)],
                 [
-                    'email' => $provision->normalizeEmail($email),
+                    'external_id' => $user['external_id'],
                     'first_name' => $user['first_name'],
                     'last_name' => $user['last_name'],
                     'status' => 'active',

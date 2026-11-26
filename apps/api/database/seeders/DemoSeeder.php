@@ -28,6 +28,7 @@ class DemoSeeder extends Seeder
 
         $tenantIds = $this->seedStandardDemoTenants(extraTenantIds: ['mmdshry']);
         $this->migrateAndSeedTenantSamples($tenantIds, fresh: true);
+        $this->seedStandardDemoOrgAdmins();
         $this->seedMmdshryOrg();
     }
 

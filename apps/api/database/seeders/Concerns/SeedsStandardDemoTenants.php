@@ -68,7 +68,6 @@ trait SeedsStandardDemoTenants
      */
     protected function seedStandardDemoTenants(array $extraTenantIds = []): array
     {
-        $rbac = app(SeedRbacCatalog::class);
         $base = (string) config('brand.tenancy_base_domain');
         $orgs = $this->standardDemoOrgs();
         $tenantIds = array_values(array_unique([
@@ -112,7 +111,22 @@ trait SeedsStandardDemoTenants
 
             $dbName = config('tenancy.database.prefix').$org['id'];
             DB::statement("CREATE DATABASE IF NOT EXISTS `{$dbName}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+        }
 
+        return array_column($orgs, 'id');
+    }
+
+    /**
+     * Create the org admin account for each standard demo tenant.
+     *
+     * Call after {@see migrateAndSeedTenantSamples()}: every organization account gets a Target
+     * in its tenant database, so the tenant schema must exist before accounts are created.
+     */
+    protected function seedStandardDemoOrgAdmins(): void
+    {
+        $rbac = app(SeedRbacCatalog::class);
+
+        foreach ($this->standardDemoOrgs() as $org) {
             $rbac->ensureOrgAdminRole($org['id']);
 
             $orgEmail = 'admin@'.$org['id'].'.test';
@@ -126,8 +140,6 @@ trait SeedsStandardDemoTenants
                 );
             }
         }
-
-        return array_column($orgs, 'id');
     }
 
     /**

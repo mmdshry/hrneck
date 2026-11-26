@@ -25,6 +25,7 @@ class TestingTenancySeeder extends Seeder
         $this->seedPlatformAdmin();
         $tenantIds = $this->seedStandardDemoTenants();
         $this->migrateAndSeedTenantSamples($tenantIds, fresh: true);
+        $this->seedStandardDemoOrgAdmins();
     }
 
     /**
