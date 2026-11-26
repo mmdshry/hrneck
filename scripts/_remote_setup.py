@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Remote SSH helper for HRNECK deploy. Passwords via env only."""
+"""Remote SSH helper for HRneck deploy. Passwords via env only."""
 
 from __future__ import annotations
 

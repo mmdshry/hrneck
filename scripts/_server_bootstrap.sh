@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-shot bootstrap for HRNECK on the production host. Run as root.
+# One-shot bootstrap for HRneck on the production host. Run as root.
 set -euo pipefail
 
 APP_ROOT=/home/itneck/apps/hrneck
@@ -53,7 +53,7 @@ from pathlib import Path
 path = Path("/home/itneck/apps/hrneck/apps/api/.env")
 text = path.read_text()
 repl = {
-    "APP_NAME": '"HRNECK Training Portal"',
+    "APP_NAME": '"HRneck Training Portal"',
     "APP_ENV": "production",
     "APP_DEBUG": "false",
     "TELESCOPE_ENABLED": "false",
@@ -83,6 +83,7 @@ repl = {
     "MAIL_MAILER": "log",
     "FRONTEND_URL": "https://hrneck.com",
     "HRNECK_SMTP_SMOKE": "0",
+    "TURNSTILE_SECRET_KEY": json.dumps(os.environ["HRNECK_TURNSTILE_SECRET_KEY"]),
     "REVERB_APP_ID": "hrneck",
     "REVERB_APP_KEY": "hrneck-reverb-key",
     "REVERB_APP_SECRET": "hrneck-reverb-secret",
@@ -126,14 +127,15 @@ echo "==> Web env"
 cat > "$APP_ROOT/apps/web/.env.production" <<'EOF'
 API_ORIGIN=https://api.hrneck.com
 NEXT_PUBLIC_SITE_URL=https://hrneck.com
-NEXT_PUBLIC_BRAND_NAME=HRNECK Training Portal
-NEXT_PUBLIC_BRAND_SHORT=HRNECK
+NEXT_PUBLIC_BRAND_NAME=HRneck Training Portal
+NEXT_PUBLIC_BRAND_SHORT=HRneck
 NEXT_PUBLIC_API_URL=https://api.hrneck.com
 NEXT_PUBLIC_REVERB_APP_KEY=hrneck-reverb-key
 NEXT_PUBLIC_REVERB_HOST=hrneck.com
 NEXT_PUBLIC_REVERB_PORT=443
 NEXT_PUBLIC_REVERB_SCHEME=https
 NEXT_PUBLIC_CONTACT_EMAIL=support@itneck.com
+NEXT_PUBLIC_TURNSTILE_SITE_KEY=0x4AAAAAAGUmVB4Hay_Hea1y
 EOF
 chown itneck:itneck "$APP_ROOT/apps/web/.env.production"
 cp "$APP_ROOT/apps/web/.env.production" "$APP_ROOT/apps/web/.env.local"
