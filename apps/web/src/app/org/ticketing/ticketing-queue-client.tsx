@@ -28,6 +28,7 @@ import {
 import { hasPermission, type SessionUser } from "@/lib/session";
 import { resolveTenant } from "@/lib/tenant";
 import { toastError, toastInfo, toastSuccess } from "@/lib/toast";
+import { describeDeskLoadError, loadActiveDesks } from "./load-desks";
 import { NewTicketDialog } from "./new-ticket-dialog";
 import {
   defaultTicketDeskId,
@@ -155,18 +156,28 @@ export function TicketingQueueClient() {
     setLiveTickets(Array.isArray(payload.data) ? payload.data : []);
   }, []);
 
-  const loadDesksOnce = useCallback(async () => {
-    await ensureCsrf();
-    const me = await fetchSessionUser();
-    setSession(me);
-    if (!me) return;
-    const t = resolveTenant();
-    const deskList = await api<{ data: SdDesk[] }>("/api/v1/org/ticketing/desks?per_page=100", {
-      tenant: t,
-    });
-    const activeDesks = (deskList.data ?? []).filter((d) => d.type !== "kb");
-    setDesks(activeDesks);
-  }, []);
+  // Never rejects: a failure is shown as a toast so the New ticket dialog is not left empty without explanation.
+  const loadDesks = useCallback(async () => {
+    try {
+      await ensureCsrf();
+      const me = await fetchSessionUser();
+      setSession(me);
+      if (!me) return;
+      const t = resolveTenant();
+      const activeDesks = await loadActiveDesks(() =>
+        api<{ data: SdDesk[] }>("/api/v1/org/ticketing/desks?per_page=100", { tenant: t }),
+      );
+      setDesks(activeDesks);
+    } catch (err) {
+      toastError(tCommon("loadFailed"), describeDeskLoadError(err));
+    }
+  }, [tCommon]);
+
+  const openNewTicket = useCallback(() => {
+    setNewTicketOpen(true);
+    // The first load may have failed or raced with login; retry when the user actually needs the list.
+    if (desks.length === 0) void loadDesks();
+  }, [desks.length, loadDesks]);
 
   const loadPreferences = useCallback(async () => {
     await ensureCsrf();
@@ -225,13 +236,11 @@ export function TicketingQueueClient() {
   }, [session, t]);
 
   useEffect(() => {
-    void loadDesksOnce().catch(() => {
-      /* tickets bootstrap may still succeed */
-    });
+    void loadDesks();
     void loadPreferences().catch(() => {
       /* preferences are optional on first paint */
     });
-  }, [loadDesksOnce, loadPreferences]);
+  }, [loadDesks, loadPreferences]);
 
   // Live snapshot is active tickets only and ignores ticket_scope prefs — use REST then.
   const useLiveQueue = !showArchived && prefs.ticket_scope === "all";
@@ -461,7 +470,7 @@ export function TicketingQueueClient() {
         }
         actions={
           <div className="flex flex-wrap gap-2">
-            <Button type="button" onClick={() => setNewTicketOpen(true)}>
+            <Button type="button" onClick={openNewTicket}>
               {t("newTicket")}
             </Button>
             <Button type="button" variant="outline" onClick={() => setPreferencesOpen(true)}>
