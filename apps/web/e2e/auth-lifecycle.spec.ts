@@ -35,13 +35,14 @@ test.describe("Auth lifecycle", () => {
     });
     await openOrgNavIfNeeded(page);
     const navRoot = page.locator("#org-mobile-nav");
-    const users = (await navRoot.isVisible())
-      ? navRoot.getByRole("link", { name: "Users" })
-      : visibleRole(page, "link", "Users");
+    // Employee management lives at /org/targets, labelled "Employees" in the org nav.
+    const employees = (await navRoot.isVisible())
+      ? navRoot.getByRole("link", { name: "Employees" })
+      : visibleRole(page, "link", "Employees");
     const ticketing = (await navRoot.isVisible())
       ? navRoot.getByRole("link", { name: "Ticketing" })
       : visibleRole(page, "link", "Ticketing");
-    await expect(users.first()).toBeVisible({ timeout: 15_000 });
+    await expect(employees.first()).toBeVisible({ timeout: 15_000 });
     await expect(ticketing.first()).toBeVisible();
   });
 });
