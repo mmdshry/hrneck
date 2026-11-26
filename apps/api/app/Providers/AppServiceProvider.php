@@ -34,8 +34,11 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('tenant-api', function (Request $request) {
             $tenant = $request->header('X-Tenant', 'central');
             $key = $tenant.'|'.($request->user()?->id ?: $request->ip());
+            // Playwright drives many org pages as one shared tenant admin; a 120/min bucket trips mid-suite
+            // and silently drops reads (e.g. the ticket dialog's desk list). Keep prod tight.
+            $perMinute = app()->environment(['local', 'testing']) ? 1200 : 120;
 
-            return Limit::perMinute(120)->by($key);
+            return Limit::perMinute($perMinute)->by($key);
         });
 
         RateLimiter::for('mfa', function (Request $request) {
