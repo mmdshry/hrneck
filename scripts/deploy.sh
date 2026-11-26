@@ -14,10 +14,18 @@ export GIT_CONFIG_COUNT=1
 export GIT_CONFIG_KEY_0=safe.directory
 export GIT_CONFIG_VALUE_0="$ROOT"
 
+# shellcheck source=preserve-reports.sh
+source "$ROOT/scripts/preserve-reports.sh"
+
 echo "==> Fetching ${BRANCH}"
 git fetch --prune origin
 git checkout "$BRANCH"
+
+echo "==> Saving generated report PDFs before reset"
+preserve_tracked_reports "$ROOT" "$(dirname "$ROOT")/backups/hrneck-reports"
+
 git reset --hard "origin/${BRANCH}"
+restore_preserved_reports "$ROOT"
 
 echo "==> PHP dependencies"
 cd "$ROOT/apps/api"
