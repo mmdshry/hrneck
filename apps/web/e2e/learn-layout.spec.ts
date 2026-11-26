@@ -7,11 +7,12 @@ test.use({
 });
 
 test.describe("Employee dashboard layout", () => {
-  test("renders in the end-user chrome without horizontal overflow", async ({
+  test("renders in the portal shell without horizontal overflow", async ({
     page,
   }) => {
     await page.goto("/portal");
-    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    // Name-scoped: a loading skeleton can also render an h1 while the dashboard loads.
+    await expect(page.getByRole("heading", { level: 1, name: "My dashboard" })).toBeVisible();
     await expect(page.locator("#main-content")).toHaveCount(1);
 
     const overflowPx = await page.evaluate(
@@ -30,7 +31,7 @@ test.describe("Employee dashboard layout", () => {
     await expect(toggle).toBeVisible();
     await toggle.click();
 
-    const menu = page.locator("#end-user-mobile-nav");
+    const menu = page.locator("#org-mobile-nav");
     await expect(menu.getByRole("link", { name: /my courses/i })).toBeVisible();
 
     await page.keyboard.press("Escape");
