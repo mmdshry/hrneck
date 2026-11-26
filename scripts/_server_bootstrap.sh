@@ -86,13 +86,14 @@ repl = {
     "REVERB_APP_ID": "hrneck",
     "REVERB_APP_KEY": "hrneck-reverb-key",
     "REVERB_APP_SECRET": "hrneck-reverb-secret",
-    "REVERB_HOST": "hrneck.com",
-    "REVERB_PORT": "443",
-    "REVERB_SCHEME": "https",
+    # Server-side publishing uses local Reverb; browsers use NEXT_PUBLIC_REVERB_* (hrneck.com:443).
+    "REVERB_HOST": "127.0.0.1",
+    "REVERB_PORT": "8080",
+    "REVERB_SCHEME": "http",
     "VITE_REVERB_APP_KEY": '"${REVERB_APP_KEY}"',
-    "VITE_REVERB_HOST": '"${REVERB_HOST}"',
-    "VITE_REVERB_PORT": '"${REVERB_PORT}"',
-    "VITE_REVERB_SCHEME": '"${REVERB_SCHEME}"',
+    "VITE_REVERB_HOST": '"hrneck.com"',
+    "VITE_REVERB_PORT": '"443"',
+    "VITE_REVERB_SCHEME": '"https"',
     "LOG_LEVEL": "error",
 }
 lines = text.splitlines()
