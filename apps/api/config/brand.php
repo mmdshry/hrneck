@@ -1,8 +1,8 @@
 <?php
 
 return [
-    'name' => env('BRAND_NAME', 'HRNECK Training Portal'),
-    'short' => env('BRAND_SHORT', 'HRNECK'),
+    'name' => env('BRAND_NAME', 'HRneck Training Portal'),
+    'short' => env('BRAND_SHORT', 'HRneck'),
     'domain' => env('BRAND_DOMAIN', 'hrneck.test'),
     'tenancy_base_domain' => env('TENANCY_BASE_DOMAIN', 'hrneck.test'),
     'demo_admin_email' => env('DEMO_ADMIN_EMAIL', 'admin@hrneck.test'),

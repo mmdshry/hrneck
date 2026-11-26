@@ -23,7 +23,7 @@ final class TicketAddNoteTool implements AssistantTool
 
     public function description(): string
     {
-        return 'Add a note to an existing ticket. Notes are internal unless is_public is true. Requires the user to confirm in HRNECK.';
+        return 'Add a note to an existing ticket. Notes are internal unless is_public is true. Requires the user to confirm in HRneck.';
     }
 
     public function permission(): string

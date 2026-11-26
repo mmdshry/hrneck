@@ -7,7 +7,7 @@ test('demo admin can login without mfa', function () {
     $user = User::query()->updateOrCreate(
         ['email' => 'admin@hrneck.test'],
         [
-            'name' => 'HRNECK Admin',
+            'name' => 'HRneck Admin',
             'password' => Hash::make('DemoPass!234'),
         ],
     );

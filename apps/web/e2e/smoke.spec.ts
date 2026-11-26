@@ -18,7 +18,7 @@ const AXE_ROUTES = [
   "/portal",
 ] as const;
 
-test.describe("HRNECK smoke", () => {
+test.describe("HRneck smoke", () => {
   test("home is accessible and branded", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByRole("heading", { level: 1 })).toContainText(

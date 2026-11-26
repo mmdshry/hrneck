@@ -5,5 +5,5 @@ test('health endpoint returns brand metadata', function () {
 
     $response->assertOk()
         ->assertJsonPath('ok', true)
-        ->assertJsonPath('brand', 'HRNECK');
+        ->assertJsonPath('brand', 'HRneck');
 });

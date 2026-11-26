@@ -109,7 +109,7 @@ class RunAssistantTool
                 'status' => 'pending_confirmation',
                 'pending_action_id' => $action->id,
                 'summary' => $action->summary,
-                'message' => 'This action has not run yet. The user must confirm it in HRNECK before it runs.',
+                'message' => 'This action has not run yet. The user must confirm it in HRneck before it runs.',
             ],
         ];
     }

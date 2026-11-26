@@ -11,7 +11,7 @@ class BuildDnsGuidance
     {
         $domain = strtolower(trim($sendingDomain));
         $base = (string) config('brand.domain', 'hrneck.test');
-        $short = strtolower((string) config('brand.short', 'HRNECK'));
+        $short = strtolower((string) config('brand.short', 'HRneck'));
 
         return [
             'domain' => $domain,

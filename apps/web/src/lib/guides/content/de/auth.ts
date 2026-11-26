@@ -22,7 +22,7 @@ export const authGuide: GuideModule = {
   ],
   openInAppHref: "/login",
   overview:
-    "HRNECK nutzt Cookie-Sitzungen auf Tenant-Hosts ({slug}.hrneck.test) und dem App-Alias. Die Anmeldung unterstützt Angemeldet bleiben, eine E-Mail-Verifizierungsschranke (von Admins erstellte Benutzer sind typischerweise bereits verifiziert), Mit Google oder Microsoft fortfahren für Konten, die ein Administrator bereits angelegt hat, TOTP-MFA oder Passkeys als zweiten Faktor mit einmaligen Wiederherstellungscodes sowie Vergessen-/Zurücksetzen-/Ändern-Flows für Passwörter. Einrichtung, Passkeys und Deaktivierung von MFA liegen unter Einstellungen → MFA für angemeldete Operatoren. Plattform-Mitarbeiter und Org-Benutzer teilen dieselben Login-Seiten, landen aber je nach Rolle auf /msp oder /org. Eine Passwortänderung löscht jeden Staff-Tenant-Kontext.",
+    "HRneck nutzt Cookie-Sitzungen auf Tenant-Hosts ({slug}.hrneck.test) und dem App-Alias. Die Anmeldung unterstützt Angemeldet bleiben, eine E-Mail-Verifizierungsschranke (von Admins erstellte Benutzer sind typischerweise bereits verifiziert), Mit Google oder Microsoft fortfahren für Konten, die ein Administrator bereits angelegt hat, TOTP-MFA oder Passkeys als zweiten Faktor mit einmaligen Wiederherstellungscodes sowie Vergessen-/Zurücksetzen-/Ändern-Flows für Passwörter. Einrichtung, Passkeys und Deaktivierung von MFA liegen unter Einstellungen → MFA für angemeldete Operatoren. Plattform-Mitarbeiter und Org-Benutzer teilen dieselben Login-Seiten, landen aber je nach Rolle auf /msp oder /org. Eine Passwortänderung löscht jeden Staff-Tenant-Kontext.",
   example: {
     title: "Org-Admin stellt Zugang vor dem Launch wieder her",
     narrative:
@@ -77,7 +77,7 @@ export const authGuide: GuideModule = {
       steps: [
         {
           title: "Google oder Microsoft (SSO)",
-          body: "Die Login-Seite zeigt Mit Google fortfahren oder Mit Microsoft fortfahren nur, wenn Ihre Organisation diesen Anbieter eingerichtet hat. SSO funktioniert nur für Konten, die ein Administrator bereits angelegt hat: Es erstellt nie einen Benutzer und verknüpft ein bestehendes Konto über die E-Mail-Adresse nur, wenn der Anbieter diese bestätigt. Ihr Identitätsanbieter übernimmt das MFA, daher erscheint nach SSO keine MFA-Abfrage von HRNECK. Die Anmeldung mit Passwort bleibt neben SSO verfügbar.",
+          body: "Die Login-Seite zeigt Mit Google fortfahren oder Mit Microsoft fortfahren nur, wenn Ihre Organisation diesen Anbieter eingerichtet hat. SSO funktioniert nur für Konten, die ein Administrator bereits angelegt hat: Es erstellt nie einen Benutzer und verknüpft ein bestehendes Konto über die E-Mail-Adresse nur, wenn der Anbieter diese bestätigt. Ihr Identitätsanbieter übernimmt das MFA, daher erscheint nach SSO keine MFA-Abfrage von HRneck. Die Anmeldung mit Passwort bleibt neben SSO verfügbar.",
         },
         {
           title: "Passkeys",

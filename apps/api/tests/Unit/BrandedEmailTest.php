@@ -9,7 +9,7 @@ use Symfony\Component\Mime\Part\DataPart;
 
 test('a trailing link line becomes the call to action and is removed from the text', function () {
     $mail = BrandedNotificationMail::fromPlainBody(
-        'HRNECK: Policy update',
+        'HRneck: Policy update',
         "Hello team,\n\nNew remote-work policy is live.\n\nOpen: https://app.hrneck.test/portal\n",
     );
 
@@ -19,7 +19,7 @@ test('a trailing link line becomes the call to action and is removed from the te
 
 test('localized link labels are recognised as the call to action', function () {
     $mail = BrandedNotificationMail::fromPlainBody(
-        'HRNECK: Annonce',
+        'HRneck: Annonce',
         "Bonjour,\n\nNouvelle politique publiée.\n\nOuvrir : https://app.hrneck.test/portal",
     );
 
@@ -29,7 +29,7 @@ test('localized link labels are recognised as the call to action', function () {
 
 test('a url inside a sentence is not turned into a button', function () {
     $mail = BrandedNotificationMail::fromPlainBody(
-        'HRNECK: Notice',
+        'HRneck: Notice',
         'Read https://app.hrneck.test/faq before you start.',
     );
 
@@ -81,7 +81,7 @@ test('employee invite mail asks for a password and states the seven day expiry',
 
 test('branded mail is sent with an html body, a plain text alternative and an inline logo', function () {
     Mail::mailer('array')->to('ana@example.test')->send(
-        BrandedNotificationMail::fromPlainBody('HRNECK: Test', "Hi Ana,\n\nOpen: https://app.hrneck.test/portal"),
+        BrandedNotificationMail::fromPlainBody('HRneck: Test', "Hi Ana,\n\nOpen: https://app.hrneck.test/portal"),
     );
 
     /** @var ArrayTransport $transport */
@@ -93,7 +93,7 @@ test('branded mail is sent with an html body, a plain text alternative and an in
         fn (DataPart $part): bool => $part->getDisposition() === 'inline',
     );
 
-    expect($sent->getSubject())->toBe('HRNECK: Test')
+    expect($sent->getSubject())->toBe('HRneck: Test')
         ->and($sent->getHtmlBody())->toContain('href="https://app.hrneck.test/portal"')
         ->and($sent->getTextBody())->toContain('Open: https://app.hrneck.test/portal')
         ->and($sent->getTextBody())->not->toContain('<')

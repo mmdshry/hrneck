@@ -8,7 +8,7 @@ export const gettingStartedGuide: GuideModule = {
   keywords: ["onboarding", "login", "demo", "roles", "hosts", "start"],
   openInAppHref: "/org",
   overview:
-    "HRNECK tenant workspaces run on {slug}.hrneck.test (or the app.hrneck.test alias). Org admins use the left sidebar to manage training, employees, checklists, ticketing, reporting, users, and settings. Guides stay public so you can review workflows before signing in.",
+    "HRneck tenant workspaces run on {slug}.hrneck.test (or the app.hrneck.test alias). Org admins use the left sidebar to manage training, employees, checklists, ticketing, reporting, users, and settings. Guides stay public so you can review workflows before signing in.",
   example: {
     title: "Acme Corp first login",
     narrative:

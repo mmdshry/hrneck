@@ -23,7 +23,7 @@ export const authGuide: GuideModule = {
   ],
   openInAppHref: "/login",
   overview:
-    "A HRNECK usa sessões por cookie nos hosts de tenant ({slug}.hrneck.test) e no alias da app. O início de sessão suporta lembrar-me, um filtro de verificação de e-mail (utilizadores criados por admin estão tipicamente já verificados), Continuar com o Google ou a Microsoft para contas que um administrador já criou, MFA TOTP ou chaves de acesso como segundo fator com códigos de recuperação de utilização única, e fluxos de esquecer/repor/alterar palavra-passe. A configuração, as chaves de acesso e a desativação do MFA estão em Definições → MFA para operadores com sessão iniciada. A equipa da plataforma e os utilizadores da org partilham as mesmas páginas de login, mas chegam a /msp ou /org conforme a função. Alterar a palavra-passe limpa qualquer contexto de tenant de staff.",
+    "A HRneck usa sessões por cookie nos hosts de tenant ({slug}.hrneck.test) e no alias da app. O início de sessão suporta lembrar-me, um filtro de verificação de e-mail (utilizadores criados por admin estão tipicamente já verificados), Continuar com o Google ou a Microsoft para contas que um administrador já criou, MFA TOTP ou chaves de acesso como segundo fator com códigos de recuperação de utilização única, e fluxos de esquecer/repor/alterar palavra-passe. A configuração, as chaves de acesso e a desativação do MFA estão em Definições → MFA para operadores com sessão iniciada. A equipa da plataforma e os utilizadores da org partilham as mesmas páginas de login, mas chegam a /msp ou /org conforme a função. Alterar a palavra-passe limpa qualquer contexto de tenant de staff.",
   example: {
     title: "Administrador da org recupera o acesso antes do lançamento",
     narrative:
@@ -78,7 +78,7 @@ export const authGuide: GuideModule = {
       steps: [
         {
           title: "Google ou Microsoft (SSO)",
-          body: "A página de login só mostra Continuar com o Google ou Continuar com a Microsoft quando a sua organização configurou esse fornecedor. O SSO funciona apenas com contas que um administrador já criou: nunca cria um utilizador e associa uma conta existente pelo e-mail apenas quando o fornecedor confirma esse endereço. O seu fornecedor de identidade trata do MFA, por isso o pedido de MFA do HRNECK não aparece após o SSO. O início de sessão com palavra-passe continua disponível junto ao SSO.",
+          body: "A página de login só mostra Continuar com o Google ou Continuar com a Microsoft quando a sua organização configurou esse fornecedor. O SSO funciona apenas com contas que um administrador já criou: nunca cria um utilizador e associa uma conta existente pelo e-mail apenas quando o fornecedor confirma esse endereço. O seu fornecedor de identidade trata do MFA, por isso o pedido de MFA do HRneck não aparece após o SSO. O início de sessão com palavra-passe continua disponível junto ao SSO.",
         },
         {
           title: "Chaves de acesso",

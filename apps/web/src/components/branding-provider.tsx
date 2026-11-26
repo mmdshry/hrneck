@@ -126,7 +126,7 @@ export function useBranding(): BrandingContextValue {
   if (!ctx) {
     return {
       branding: null,
-      displayName: "HRNECK",
+      displayName: "HRneck",
       logoUrl: null,
       loading: false,
       refresh: async () => undefined,

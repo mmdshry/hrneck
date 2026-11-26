@@ -15,7 +15,7 @@ export const gettingStartedGuide: GuideModule = {
   ],
   openInAppHref: "/org",
   overview:
-    "Los espacios de trabajo de tenant de HRNECK se ejecutan en {slug}.hrneck.test (o el alias app.hrneck.test). Los administradores de la organización usan la barra lateral izquierda para gestionar formación, empleados, checklists, ticketing, informes, usuarios y ajustes. Las guías permanecen públicas para que pueda revisar los flujos antes de iniciar sesión.",
+    "Los espacios de trabajo de tenant de HRneck se ejecutan en {slug}.hrneck.test (o el alias app.hrneck.test). Los administradores de la organización usan la barra lateral izquierda para gestionar formación, empleados, checklists, ticketing, informes, usuarios y ajustes. Las guías permanecen públicas para que pueda revisar los flujos antes de iniciar sesión.",
   example: {
     title: "Primer acceso de Acme Corp",
     narrative:

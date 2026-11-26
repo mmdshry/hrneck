@@ -45,7 +45,7 @@ trait SeedsStandardDemoTenants
         $admin = User::query()->updateOrCreate(
             ['email' => config('brand.demo_admin_email')],
             [
-                'name' => 'HRNECK Admin',
+                'name' => 'HRneck Admin',
                 'password' => Hash::make((string) config('brand.demo_admin_password')),
                 'tenant_id' => null,
             ],

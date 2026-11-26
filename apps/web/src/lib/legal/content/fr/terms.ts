@@ -4,14 +4,14 @@ export const termsFr: LegalDocument = {
   slug: "terms",
   title: "Conditions d’utilisation",
   summary:
-    "Les règles d’utilisation du HRNECK Training Portal, y compris l’application du Business Associate Agreement aux informations de santé protégées.",
+    "Les règles d’utilisation du HRneck Training Portal, y compris l’application du Business Associate Agreement aux informations de santé protégées.",
   effectiveDate: "2026-11-26",
   sections: [
     {
       id: "acceptance",
       title: "Acceptation des présentes conditions",
       paragraphs: [
-        "Les présentes Conditions d’utilisation (les « Conditions ») régissent l’accès au HRNECK Training Portal et à ses services associés (les « Services ») fournis par HRNECK (« HRNECK », « nous »), ainsi que leur utilisation. En créant un compte, en vous connectant ou en utilisant les Services au nom d’une organisation, vous acceptez les présentes Conditions. Si vous les acceptez au nom d’une organisation, vous déclarez être habilité à engager cette organisation.",
+        "Les présentes Conditions d’utilisation (les « Conditions ») régissent l’accès au HRneck Training Portal et à ses services associés (les « Services ») fournis par HRneck (« HRneck », « nous »), ainsi que leur utilisation. En créant un compte, en vous connectant ou en utilisant les Services au nom d’une organisation, vous acceptez les présentes Conditions. Si vous les acceptez au nom d’une organisation, vous déclarez être habilité à engager cette organisation.",
         "Si vous n’acceptez pas les présentes Conditions, n’utilisez pas les Services.",
       ],
     },
@@ -20,10 +20,10 @@ export const termsFr: LegalDocument = {
       title: "Définitions",
       paragraphs: ["Dans les présentes Conditions :"],
       bullets: [
-        "Client : le MSP ou l’organisation qui a conclu un contrat avec HRNECK pour les Services.",
+        "Client : le MSP ou l’organisation qui a conclu un contrat avec HRneck pour les Services.",
         "Utilisateurs : les personnes qui accèdent aux Services pour le compte d’un Client, y compris les opérateurs, administrateurs, apprenants et utilisateurs du service desk.",
         "PHI : informations de santé protégées telles que définies à 45 CFR 160.103.",
-        "BAA : un Business Associate Agreement écrit entre HRNECK et un Client, conforme à 45 CFR 164.504(e) et 164.308(b).",
+        "BAA : un Business Associate Agreement écrit entre HRneck et un Client, conforme à 45 CFR 164.504(e) et 164.308(b).",
         "Tenant : l’espace de travail isolé d’un Client au sein des Services.",
       ],
     },
@@ -38,8 +38,8 @@ export const termsFr: LegalDocument = {
       id: "baa",
       title: "Business Associate Agreement et ordre de priorité",
       paragraphs: [
-        "Un Client qui est une entité couverte ou un business associate doit conclure un BAA avec HRNECK avant de créer, recevoir, conserver ou transmettre des PHI dans les Services.",
-        "Le BAA définit la manière dont HRNECK peut utiliser et divulguer les PHI et fixe les obligations de sécurité, de notification de violation, de sous-traitance, ainsi que de restitution ou destruction. En cas de conflit entre les présentes Conditions et un BAA concernant les PHI, le BAA prévaut. À tous autres égards, les présentes Conditions s’appliquent.",
+        "Un Client qui est une entité couverte ou un business associate doit conclure un BAA avec HRneck avant de créer, recevoir, conserver ou transmettre des PHI dans les Services.",
+        "Le BAA définit la manière dont HRneck peut utiliser et divulguer les PHI et fixe les obligations de sécurité, de notification de violation, de sous-traitance, ainsi que de restitution ou destruction. En cas de conflit entre les présentes Conditions et un BAA concernant les PHI, le BAA prévaut. À tous autres égards, les présentes Conditions s’appliquent.",
       ],
     },
     {
@@ -102,7 +102,7 @@ export const termsFr: LegalDocument = {
       id: "intellectual_property",
       title: "Propriété intellectuelle",
       paragraphs: [
-        "HRNECK et ses concédants détiennent les droits sur les Services, y compris les logiciels, les créations graphiques et la documentation. Nous vous accordons un droit limité, non exclusif et non cessible d’utiliser les Services pendant la durée de votre abonnement. Les Clients sont propriétaires de leurs données. Vous nous accordez les droits nécessaires pour héberger et traiter ces données afin de fournir les Services.",
+        "HRneck et ses concédants détiennent les droits sur les Services, y compris les logiciels, les créations graphiques et la documentation. Nous vous accordons un droit limité, non exclusif et non cessible d’utiliser les Services pendant la durée de votre abonnement. Les Clients sont propriétaires de leurs données. Vous nous accordez les droits nécessaires pour héberger et traiter ces données afin de fournir les Services.",
       ],
     },
     {
@@ -116,7 +116,7 @@ export const termsFr: LegalDocument = {
       id: "liability",
       title: "Limitation de responsabilité",
       paragraphs: [
-        "Dans toute la mesure permise par la loi, HRNECK n’est pas responsable des dommages indirects, accessoires, spéciaux, consécutifs ou punitifs. Notre responsabilité totale est limitée aux frais payés par le Client pour les Services au cours des douze mois précédant le fait générateur de la réclamation [TBD: confirm cap]. Lorsqu’un BAA prévoit ses propres conditions de responsabilité pour les PHI, ces conditions s’appliquent aux PHI. Rien dans les présentes Conditions ne limite une responsabilité qui ne peut pas être limitée par la loi.",
+        "Dans toute la mesure permise par la loi, HRneck n’est pas responsable des dommages indirects, accessoires, spéciaux, consécutifs ou punitifs. Notre responsabilité totale est limitée aux frais payés par le Client pour les Services au cours des douze mois précédant le fait générateur de la réclamation [TBD: confirm cap]. Lorsqu’un BAA prévoit ses propres conditions de responsabilité pour les PHI, ces conditions s’appliquent aux PHI. Rien dans les présentes Conditions ne limite une responsabilité qui ne peut pas être limitée par la loi.",
       ],
     },
     {
@@ -124,7 +124,7 @@ export const termsFr: LegalDocument = {
       title: "Résiliation",
       paragraphs: [
         "Chaque partie peut résilier l’abonnement dans les conditions définies dans le bon de commande ou le forfait. Nous pouvons suspendre ou résilier l’accès immédiatement en cas de manquement grave aux présentes Conditions ou au BAA, ou si la poursuite de l’accès présente un risque pour la sécurité.",
-        "À la fin de l’abonnement, votre accès prend fin et HRNECK restitue ou détruit les PHI selon les modalités décrites dans la Politique de confidentialité et le BAA. Les sections relatives à la propriété intellectuelle, aux clauses de non-responsabilité, à la limitation de responsabilité et au droit applicable survivent à la résiliation.",
+        "À la fin de l’abonnement, votre accès prend fin et HRneck restitue ou détruit les PHI selon les modalités décrites dans la Politique de confidentialité et le BAA. Les sections relatives à la propriété intellectuelle, aux clauses de non-responsabilité, à la limitation de responsabilité et au droit applicable survivent à la résiliation.",
       ],
     },
     {
@@ -145,7 +145,7 @@ export const termsFr: LegalDocument = {
       id: "contact",
       title: "Contact",
       paragraphs: [
-        "Les questions relatives aux présentes Conditions peuvent être envoyées à support@hrneck.com. Les notifications juridiques doivent être adressées à HRNECK, San Diego, Californie, États-Unis. [TBD: confirm the legal entity name and notice address.]",
+        "Les questions relatives aux présentes Conditions peuvent être envoyées à support@hrneck.com. Les notifications juridiques doivent être adressées à HRneck, San Diego, Californie, États-Unis. [TBD: confirm the legal entity name and notice address.]",
       ],
     },
   ],

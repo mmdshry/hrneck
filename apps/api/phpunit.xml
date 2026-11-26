@@ -37,8 +37,8 @@
         <env name="TENANCY_DATABASE_PREFIX" value="hrneck_tenant_testing_"/>
         <env name="TENANCY_BASE_DOMAIN" value="hrneck.test"/>
         <env name="BRAND_DOMAIN" value="hrneck.test"/>
-        <env name="BRAND_SHORT" value="HRNECK"/>
-        <env name="BRAND_NAME" value="HRNECK Training Portal"/>
+        <env name="BRAND_SHORT" value="HRneck"/>
+        <env name="BRAND_NAME" value="HRneck Training Portal"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="NOTIFICATION_QUEUE_CONNECTION" value="sync"/>

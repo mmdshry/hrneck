@@ -30,7 +30,7 @@ export function SendingProfileDialog({ profile, onClose, onSaved }: SendingProfi
   const t = useTranslations("org.settings");
   const tCommon = useTranslations("common");
   const [name, setName] = useState(profile?.name ?? t("defaultProfileName"));
-  const [fromName, setFromName] = useState(profile?.from_name ?? "HRNECK");
+  const [fromName, setFromName] = useState(profile?.from_name ?? "HRneck");
   const [fromEmail, setFromEmail] = useState(profile?.from_email ?? "noreply@hrneck.com");
   const [saving, setSaving] = useState(false);
 

@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\File;
 use RuntimeException;
 
 /**
- * Renders every HRNECK PDF report (quarterly, target, ticketing, training viewing)
+ * Renders every HRneck PDF report (quarterly, target, ticketing, training viewing)
  * so fonts, page size, wordmark and page numbering stay identical across them.
  */
 final class ReportPdf

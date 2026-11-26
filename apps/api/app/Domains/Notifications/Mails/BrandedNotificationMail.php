@@ -9,7 +9,7 @@ use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
 /**
- * Generic HRNECK-branded email: an HTML layout with a plain-text alternative.
+ * Generic HRneck-branded email: an HTML layout with a plain-text alternative.
  */
 class BrandedNotificationMail extends Mailable
 {

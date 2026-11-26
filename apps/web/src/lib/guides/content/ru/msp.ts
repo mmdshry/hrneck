@@ -82,7 +82,7 @@ export const mspGuide: GuideModule = {
     ],
   },
   mock: {
-    chromeTitle: "HRNECK · MSP · Организации",
+    chromeTitle: "HRneck · MSP · Организации",
     stats: [
       { label: "Тенанты", value: "3" },
       { label: "Активные", value: "3" },

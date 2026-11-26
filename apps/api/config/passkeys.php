@@ -13,7 +13,7 @@ return [
     |
     */
 
-    'rp_name' => env('PASSKEY_RP_NAME', env('BRAND_SHORT', 'HRNECK')),
+    'rp_name' => env('PASSKEY_RP_NAME', env('BRAND_SHORT', 'HRneck')),
 
     'rp_id' => env('PASSKEY_RP_ID', env('BRAND_DOMAIN', 'hrneck.test')),
 

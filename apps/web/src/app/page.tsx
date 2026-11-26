@@ -8,7 +8,7 @@ import { LandingHero } from "@/components/landing/landing-hero";
 import { LandingHowItWorks } from "@/components/landing/landing-how-it-works";
 
 const brandName =
-  process.env.NEXT_PUBLIC_BRAND_NAME ?? "HRNECK Training Portal";
+  process.env.NEXT_PUBLIC_BRAND_NAME ?? "HRneck Training Portal";
 
 export const metadata: Metadata = {
   title: brandName,

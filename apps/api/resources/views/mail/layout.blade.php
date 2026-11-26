@@ -24,7 +24,7 @@
         <table role="presentation" class="container" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px; max-width:600px; background-color:#FFFFFF; border:1px solid #E2E8F0; border-radius:12px;">
           <tr>
             <td class="px" style="padding:36px 40px 0 40px;">
-              <img src="{{ $message->embed(resource_path('images/hrneck-wordmark.png')) }}" width="148" height="35" alt="HRNECK" style="display:block; width:148px; height:auto; border:0;">
+              <img src="{{ $message->embed(resource_path('images/hrneck-wordmark.png')) }}" width="148" height="35" alt="HRneck" style="display:block; width:148px; height:auto; border:0;">
               <div style="width:48px; height:3px; background-color:#F76B13; line-height:3px; font-size:0; margin-top:20px;">&nbsp;</div>
             </td>
           </tr>

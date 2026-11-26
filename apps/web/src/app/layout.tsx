@@ -16,9 +16,9 @@ const sans = Plus_Jakarta_Sans({
   display: "swap",
 });
 
-const brand = process.env.NEXT_PUBLIC_BRAND_SHORT ?? "HRNECK";
+const brand = process.env.NEXT_PUBLIC_BRAND_SHORT ?? "HRneck";
 const brandName =
-  process.env.NEXT_PUBLIC_BRAND_NAME ?? "HRNECK Training Portal";
+  process.env.NEXT_PUBLIC_BRAND_NAME ?? "HRneck Training Portal";
 const siteUrl =
   process.env.NEXT_PUBLIC_SITE_URL ?? "https://hrneck.com";
 

@@ -23,7 +23,7 @@ export const authGuide: GuideModule = {
   ],
   openInAppHref: "/login",
   overview:
-    "HRNECK uses cookie sessions on tenant hosts ({slug}.hrneck.test) and the app alias. Sign-in supports remember-me, an email-verification gate (admin-created users are typically already verified), Continue with Google or Microsoft for accounts an administrator already created, TOTP MFA or passkeys as the second factor with one-time recovery codes, and forgot/reset/change password flows. MFA setup, passkeys, and disable live under Settings → MFA for signed-in operators. Platform staff and org users share the same login pages but land on /msp or /org depending on role. Changing a password clears any staff tenant context.",
+    "HRneck uses cookie sessions on tenant hosts ({slug}.hrneck.test) and the app alias. Sign-in supports remember-me, an email-verification gate (admin-created users are typically already verified), Continue with Google or Microsoft for accounts an administrator already created, TOTP MFA or passkeys as the second factor with one-time recovery codes, and forgot/reset/change password flows. MFA setup, passkeys, and disable live under Settings → MFA for signed-in operators. Platform staff and org users share the same login pages but land on /msp or /org depending on role. Changing a password clears any staff tenant context.",
   example: {
     title: "Org admin recovers access before launch",
     narrative:
@@ -78,7 +78,7 @@ export const authGuide: GuideModule = {
       steps: [
         {
           title: "Google or Microsoft (SSO)",
-          body: "The login page shows Continue with Google or Continue with Microsoft only when your organization has that provider set up. SSO works only for accounts an administrator already created: it never creates a user, and it matches an existing account by email only when the provider confirms that address. Your identity provider handles MFA, so HRNECK's MFA prompt does not appear after SSO. Password sign-in stays available next to SSO.",
+          body: "The login page shows Continue with Google or Continue with Microsoft only when your organization has that provider set up. SSO works only for accounts an administrator already created: it never creates a user, and it matches an existing account by email only when the provider confirms that address. Your identity provider handles MFA, so HRneck's MFA prompt does not appear after SSO. Password sign-in stays available next to SSO.",
         },
         {
           title: "Passkeys",

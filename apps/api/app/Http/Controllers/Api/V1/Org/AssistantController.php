@@ -16,7 +16,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * Session-authenticated endpoints the HRNECK chat UI calls. Every write is confirmed here, never by the agent.
+ * Session-authenticated endpoints the HRneck chat UI calls. Every write is confirmed here, never by the agent.
  */
 class AssistantController extends Controller
 {

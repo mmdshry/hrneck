@@ -4,15 +4,15 @@ export const privacyFr: LegalDocument = {
   slug: "privacy",
   title: "Politique de confidentialité",
   summary:
-    "Comment HRNECK traite les informations de santé protégées et les autres données personnelles en tant que Business Associate au sens de HIPAA, et les garanties que nous maintenons.",
+    "Comment HRneck traite les informations de santé protégées et les autres données personnelles en tant que Business Associate au sens de HIPAA, et les garanties que nous maintenons.",
   effectiveDate: "2026-11-26",
   sections: [
     {
       id: "scope",
       title: "Champ d’application et notre rôle",
       paragraphs: [
-        "La présente Politique de confidentialité décrit la manière dont HRNECK (« HRNECK », « nous ») collecte, utilise, divulgue et protège les informations contenues dans le HRNECK Training Portal, une plateforme de formation à la sensibilisation à la sécurité destinée aux prestataires de services managés (MSP) et aux organisations.",
-        "Lorsqu’un client qui est une entité couverte ou un business associate au sens de la Health Insurance Portability and Accountability Act of 1996 et de ses textes d’application (HIPAA) utilise HRNECK pour créer, recevoir, conserver ou transmettre des informations de santé protégées (PHI), HRNECK agit en qualité de business associate de ce client. Le Business Associate Agreement (BAA) conclu entre HRNECK et le client est le document contraignant pour les PHI. En cas de conflit entre la présente politique et un BAA concernant les PHI, le BAA prévaut.",
+        "La présente Politique de confidentialité décrit la manière dont HRneck (« HRneck », « nous ») collecte, utilise, divulgue et protège les informations contenues dans le HRneck Training Portal, une plateforme de formation à la sensibilisation à la sécurité destinée aux prestataires de services managés (MSP) et aux organisations.",
+        "Lorsqu’un client qui est une entité couverte ou un business associate au sens de la Health Insurance Portability and Accountability Act of 1996 et de ses textes d’application (HIPAA) utilise HRneck pour créer, recevoir, conserver ou transmettre des informations de santé protégées (PHI), HRneck agit en qualité de business associate de ce client. Le Business Associate Agreement (BAA) conclu entre HRneck et le client est le document contraignant pour les PHI. En cas de conflit entre la présente politique et un BAA concernant les PHI, le BAA prévaut.",
         "La présente politique décrit notre fonctionnement. Elle ne remplace ni le BAA, ni l’avis de pratiques de confidentialité propre au client, ni les obligations du client au titre de HIPAA.",
       ],
     },
@@ -20,7 +20,7 @@ export const privacyFr: LegalDocument = {
       id: "information",
       title: "Informations que nous traitons",
       paragraphs: [
-        "Selon l’usage que fait le client de HRNECK, nous traitons pour son compte les catégories d’informations suivantes :",
+        "Selon l’usage que fait le client de HRneck, nous traitons pour son compte les catégories d’informations suivantes :",
       ],
       bullets: [
         "Données du personnel et des cibles : noms, adresses e-mail professionnelles, numéros de téléphone, localisations, numéros d’employé, services et appartenance à des groupes.",
@@ -38,7 +38,7 @@ export const privacyFr: LegalDocument = {
       title: "Informations de santé protégées",
       paragraphs: [
         "Les dossiers d’emploi détenus par une entité couverte en sa qualité d’employeur sont exclus de la définition des PHI (45 CFR 160.103). Les données de formation du personnel et les listes de contrôle RH détenues par un client en qualité d’employeur sont généralement des dossiers d’emploi. Cette exclusion ne couvre pas les informations de santé relatives à des patients ou clients qui seraient placées dans ces dossiers.",
-        "Les clients ne doivent pas saisir de PHI dans HRNECK, sauf si un BAA couvre cet usage. Les tickets, les réponses aux listes de contrôle, les notes, les fichiers téléversés et les messages envoyés à l’Assistant sont des canaux de texte libre et ne doivent pas contenir de PHI, sauf si le BAA le permet.",
+        "Les clients ne doivent pas saisir de PHI dans HRneck, sauf si un BAA couvre cet usage. Les tickets, les réponses aux listes de contrôle, les notes, les fichiers téléversés et les messages envoyés à l’Assistant sont des canaux de texte libre et ne doivent pas contenir de PHI, sauf si le BAA le permet.",
         "Nous n’utilisons et ne divulguons les PHI que dans les conditions permises par le BAA ou exigées par la loi (45 CFR 164.502(a)).",
       ],
     },
@@ -46,7 +46,7 @@ export const privacyFr: LegalDocument = {
       id: "use",
       title: "Utilisation et divulgation des informations",
       paragraphs: [
-        "Nous utilisons les informations uniquement pour fournir, sécuriser, accompagner et améliorer les services HRNECK pour le client, tels que décrits dans le contrat client et le BAA.",
+        "Nous utilisons les informations uniquement pour fournir, sécuriser, accompagner et améliorer les services HRneck pour le client, tels que décrits dans le contrat client et le BAA.",
         "Nous ne vendons pas de PHI et ne les utilisons pas à des fins de marketing ou de publicité.",
         "Nous n’utilisons ni ne divulguons de PHI d’une manière que le client ne pourrait pas faire lui-même, sauf si le BAA le permet expressément. Toute dés-identification ou analyse agrégée n’est réalisée que lorsque le BAA le permet et conformément à 45 CFR 164.514.",
         "Nous ne divulguons des PHI à des sous-traitants que dans les conditions de la section relative aux sous-traitants ci-dessous, et aux autorités publiques lorsque la loi l’exige.",
@@ -92,7 +92,7 @@ export const privacyFr: LegalDocument = {
       id: "individual_rights",
       title: "Droits des personnes",
       paragraphs: [
-        "Les personnes dont les PHI sont traitées par HRNECK doivent adresser leurs demandes d’accès, de modification ou de liste des divulgations à l’entité couverte qui les emploie ou leur fournit des soins. Nous aiderons l’entité couverte à répondre à ces demandes selon les exigences du BAA (45 CFR 164.524, 164.526 et 164.528).",
+        "Les personnes dont les PHI sont traitées par HRneck doivent adresser leurs demandes d’accès, de modification ou de liste des divulgations à l’entité couverte qui les emploie ou leur fournit des soins. Nous aiderons l’entité couverte à répondre à ces demandes selon les exigences du BAA (45 CFR 164.524, 164.526 et 164.528).",
         "Nous mettons à la disposition du Secrétaire du ministère américain de la Santé et des Services sociaux nos pratiques internes, livres et registres relatifs aux PHI, afin de déterminer la conformité à HIPAA (45 CFR 164.504(e)(2)(ii)(I)).",
       ],
     },
@@ -109,7 +109,7 @@ export const privacyFr: LegalDocument = {
       id: "cookies",
       title: "Cookies et sessions",
       paragraphs: [
-        "HRNECK utilise des cookies essentiels pour maintenir la connexion des utilisateurs et protéger les sessions. Nous n’utilisons pas de cookies publicitaires tiers. [TBD: confirm that no analytics or marketing cookies are loaded on the marketing pages.]",
+        "HRneck utilise des cookies essentiels pour maintenir la connexion des utilisateurs et protéger les sessions. Nous n’utilisons pas de cookies publicitaires tiers. [TBD: confirm that no analytics or marketing cookies are loaded on the marketing pages.]",
       ],
     },
     {
@@ -124,7 +124,7 @@ export const privacyFr: LegalDocument = {
       title: "Contact",
       paragraphs: [
         "Contact confidentialité et sécurité : support@hrneck.com. [TBD: name a designated privacy officer and security officer.]",
-        "HRNECK, San Diego, Californie, États-Unis.",
+        "HRneck, San Diego, Californie, États-Unis.",
         "Les personnes qui estiment que leurs droits en matière de confidentialité ont été violés peuvent déposer une plainte auprès de l’entité couverte ou auprès du ministère américain de la Santé et des Services sociaux, Office for Civil Rights.",
       ],
     },

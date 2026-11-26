@@ -1,5 +1,5 @@
 /**
- * PM2 process file for HRNECK production.
+ * PM2 process file for HRneck production.
  * Run from repo root: pm2 start deploy/ecosystem.config.cjs
  */
 const path = require("path");

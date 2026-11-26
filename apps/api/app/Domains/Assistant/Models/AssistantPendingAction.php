@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 
 /**
- * A write action proposed by the assistant. It runs only after the user confirms it in HRNECK.
+ * A write action proposed by the assistant. It runs only after the user confirms it in HRneck.
  *
  * @property int $id
  * @property string $conversation_id

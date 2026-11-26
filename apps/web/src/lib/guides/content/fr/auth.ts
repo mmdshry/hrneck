@@ -23,7 +23,7 @@ export const authGuide: GuideModule = {
   ],
   openInAppHref: "/login",
   overview:
-    "HRNECK utilise des sessions par cookie sur les hôtes tenant ({slug}.hrneck.test) et l'alias de l'app. La connexion prend en charge se souvenir de moi, un filtre de vérification e-mail (les utilisateurs créés par un admin sont généralement déjà vérifiés), Continuer avec Google ou Microsoft pour les comptes déjà créés par un administrateur, le MFA TOTP ou les clés d'accès comme second facteur avec codes de récupération à usage unique, et les flux oubli/réinitialisation/changement de mot de passe. La configuration, les clés d'accès et la désactivation du MFA se trouvent sous Paramètres → MFA pour les opérateurs connectés. Le personnel plateforme et les utilisateurs org partagent les mêmes pages de connexion mais atterrissent sur /msp ou /org selon le rôle. Changer le mot de passe efface tout contexte de tenant personnel.",
+    "HRneck utilise des sessions par cookie sur les hôtes tenant ({slug}.hrneck.test) et l'alias de l'app. La connexion prend en charge se souvenir de moi, un filtre de vérification e-mail (les utilisateurs créés par un admin sont généralement déjà vérifiés), Continuer avec Google ou Microsoft pour les comptes déjà créés par un administrateur, le MFA TOTP ou les clés d'accès comme second facteur avec codes de récupération à usage unique, et les flux oubli/réinitialisation/changement de mot de passe. La configuration, les clés d'accès et la désactivation du MFA se trouvent sous Paramètres → MFA pour les opérateurs connectés. Le personnel plateforme et les utilisateurs org partagent les mêmes pages de connexion mais atterrissent sur /msp ou /org selon le rôle. Changer le mot de passe efface tout contexte de tenant personnel.",
   example: {
     title: "L'admin org récupère l'accès avant le lancement",
     narrative:
@@ -78,7 +78,7 @@ export const authGuide: GuideModule = {
       steps: [
         {
           title: "Google ou Microsoft (SSO)",
-          body: "La page de connexion n'affiche Continuer avec Google ou Continuer avec Microsoft que si votre organisation a configuré ce fournisseur. Le SSO fonctionne uniquement pour les comptes déjà créés par un administrateur : il ne crée jamais d'utilisateur et ne relie un compte existant par e-mail que si le fournisseur confirme cette adresse. Votre fournisseur d'identité gère le MFA, donc l'invite MFA de HRNECK n'apparaît pas après le SSO. La connexion par mot de passe reste disponible à côté du SSO.",
+          body: "La page de connexion n'affiche Continuer avec Google ou Continuer avec Microsoft que si votre organisation a configuré ce fournisseur. Le SSO fonctionne uniquement pour les comptes déjà créés par un administrateur : il ne crée jamais d'utilisateur et ne relie un compte existant par e-mail que si le fournisseur confirme cette adresse. Votre fournisseur d'identité gère le MFA, donc l'invite MFA de HRneck n'apparaît pas après le SSO. La connexion par mot de passe reste disponible à côté du SSO.",
         },
         {
           title: "Clés d'accès",

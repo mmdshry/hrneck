@@ -66,7 +66,7 @@ test('sending profile create broadcasts org topic', function () {
         ->withHeader('X-Tenant', 'itneck')
         ->postJson('/api/v1/org/sending-profiles', [
             'name' => 'Live SMTP',
-            'from_name' => 'HRNECK',
+            'from_name' => 'HRneck',
             'from_email' => 'noreply@itneck.test',
             'mailer' => 'smtp',
             'is_default' => true,

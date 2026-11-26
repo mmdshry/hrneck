@@ -8,7 +8,7 @@ export const gettingStartedGuide: GuideModule = {
   keywords: ["onboarding", "login", "demo", "rollen", "hosts", "start"],
   openInAppHref: "/org",
   overview:
-    "HRNECK-Tenant-Arbeitsbereiche laufen unter {slug}.hrneck.test (oder dem Alias app.hrneck.test). Organisationsadministratoren nutzen die linke Seitenleiste, um Schulung, Mitarbeitende, Checklisten, Ticketing, Berichte, Benutzer und Einstellungen zu verwalten. Guides bleiben öffentlich, damit Sie Workflows vor der Anmeldung prüfen können.",
+    "HRneck-Tenant-Arbeitsbereiche laufen unter {slug}.hrneck.test (oder dem Alias app.hrneck.test). Organisationsadministratoren nutzen die linke Seitenleiste, um Schulung, Mitarbeitende, Checklisten, Ticketing, Berichte, Benutzer und Einstellungen zu verwalten. Guides bleiben öffentlich, damit Sie Workflows vor der Anmeldung prüfen können.",
   example: {
     title: "Acme Corp Erstanmeldung",
     narrative:

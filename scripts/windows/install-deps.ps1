@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 
-Write-Host "==> HRNECK native dependency checklist (no Docker)"
+Write-Host "==> HRneck native dependency checklist (no Docker)"
 Write-Host "Required:"
 Write-Host "  - PHP 8.5+ with extensions: pgsql/mysql, redis, mbstring, openssl, intl, fileinfo, sodium, zip"
 Write-Host "  - Composer"

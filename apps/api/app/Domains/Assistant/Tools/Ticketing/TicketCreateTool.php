@@ -24,7 +24,7 @@ final class TicketCreateTool implements AssistantTool
 
     public function description(): string
     {
-        return 'Create a service desk ticket. Requires the user to confirm in HRNECK before it is created.';
+        return 'Create a service desk ticket. Requires the user to confirm in HRneck before it is created.';
     }
 
     public function permission(): string

@@ -17,7 +17,7 @@ import { useMemo } from "react";
 import { HrneckWordmark } from "@/components/hrneck-wordmark";
 
 const brandName =
-  process.env.NEXT_PUBLIC_BRAND_NAME ?? "HRNECK Training Portal";
+  process.env.NEXT_PUBLIC_BRAND_NAME ?? "HRneck Training Portal";
 const supportEmail =
   process.env.NEXT_PUBLIC_CONTACT_EMAIL ?? "support@hrneck.com";
 const supportPhoneDisplay = "858-740-8878";

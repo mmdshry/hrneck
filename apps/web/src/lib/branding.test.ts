@@ -42,7 +42,7 @@ describe("branding helpers", () => {
 
   it("resolves display name", () => {
     expect(brandDisplayName({ display_name: "ITneck" })).toBe("ITneck");
-    expect(brandDisplayName({ display_name: "  " })).toBe("HRNECK");
-    expect(brandDisplayName(null)).toBe("HRNECK");
+    expect(brandDisplayName({ display_name: "  " })).toBe("HRneck");
+    expect(brandDisplayName(null)).toBe("HRneck");
   });
 });

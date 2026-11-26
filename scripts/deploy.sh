@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Production deploy for HRNECK monorepo.
+# Production deploy for HRneck monorepo.
 # Does NOT overwrite apps/api/.env or apps/web/.env* — those live only on the server.
 
 ROOT="${DEPLOY_ROOT:-/home/itneck/apps/hrneck}"

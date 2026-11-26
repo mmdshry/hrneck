@@ -76,7 +76,7 @@ Write-Host "==> Starting platform processes (including Reverb WebSocket)"
 # Optional helpers — skip quietly if binary missing / already bound.
 if (Get-Command caddy -ErrorAction SilentlyContinue) {
   if (-not (Test-TcpPort 80)) {
-    Start-DevWindow "HRNECK Caddy" $root "caddy run --config `"$caddyfile`""
+    Start-DevWindow "HRneck Caddy" $root "caddy run --config `"$caddyfile`""
   } else {
     Write-Host "  skip Caddy (:80 already in use — stop XAMPP Apache if needed)" -ForegroundColor DarkYellow
   }
@@ -85,20 +85,20 @@ if (Get-Command caddy -ErrorAction SilentlyContinue) {
 }
 
 if (-not (Test-TcpPort 8000)) {
-  Start-DevWindow "HRNECK API" $api "`$env:PHP_CLI_SERVER_WORKERS='8'; php artisan serve --host=127.0.0.1 --port=8000 --no-reload"
+  Start-DevWindow "HRneck API" $api "`$env:PHP_CLI_SERVER_WORKERS='8'; php artisan serve --host=127.0.0.1 --port=8000 --no-reload"
 } else {
   Write-Host "  skip API serve (:8000 already in use)" -ForegroundColor DarkYellow
 }
 
 # Reverb is required for live MSP/org WebSocket pages — always start by default.
 if (-not (Test-TcpPort 8080)) {
-  Start-DevWindow "HRNECK Reverb" $api "php artisan reverb:start"
+  Start-DevWindow "HRneck Reverb" $api "php artisan reverb:start"
 } else {
   Write-Host "  skip Reverb (:8080 already in use)" -ForegroundColor DarkYellow
 }
 
 if (-not (Test-TcpPort 3100)) {
-  Start-DevWindow "HRNECK Web" $web "pnpm dev --hostname 127.0.0.1 --port 3100"
+  Start-DevWindow "HRneck Web" $web "pnpm dev --hostname 127.0.0.1 --port 3100"
 } else {
   Write-Host "  skip Next (:3100 already in use)" -ForegroundColor DarkYellow
 }

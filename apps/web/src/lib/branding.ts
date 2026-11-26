@@ -48,7 +48,7 @@ export function clearPrimaryColor(): void {
 
 export function brandDisplayName(
   branding: OrgBranding | null | undefined,
-  fallback = "HRNECK",
+  fallback = "HRneck",
 ): string {
   const name = branding?.display_name?.trim();
   return name && name.length > 0 ? name : fallback;

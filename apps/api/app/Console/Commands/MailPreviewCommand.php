@@ -22,11 +22,11 @@ class MailPreviewCommand extends Command
 
         $previews = [
             'notification' => BrandedNotificationMail::fromPlainBody(
-                'HRNECK: New announcement',
+                'HRneck: New announcement',
                 "Hello team,\n\nWe published a new policy for remote work.\n\nOpen: {$appUrl}/portal",
             ),
             'training-reminder' => new BrandedNotificationMail(
-                subjectLine: 'HRNECK training: 2 courses',
+                subjectLine: 'HRneck training: 2 courses',
                 title: 'Training reminder',
                 lines: ['Hi Sara,', 'Please complete the following training:'],
                 actions: [

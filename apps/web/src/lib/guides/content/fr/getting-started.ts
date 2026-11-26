@@ -15,7 +15,7 @@ export const gettingStartedGuide: GuideModule = {
   ],
   openInAppHref: "/org",
   overview:
-    "Les espaces de travail tenant HRNECK s'exécutent sur {slug}.hrneck.test (ou l'alias app.hrneck.test). Les administrateurs d'organisation utilisent la barre latérale gauche pour gérer la formation, les employés, les checklists, le ticketing, les rapports, les utilisateurs et les paramètres. Les guides restent publics afin que vous puissiez examiner les flux avant de vous connecter.",
+    "Les espaces de travail tenant HRneck s'exécutent sur {slug}.hrneck.test (ou l'alias app.hrneck.test). Les administrateurs d'organisation utilisent la barre latérale gauche pour gérer la formation, les employés, les checklists, le ticketing, les rapports, les utilisateurs et les paramètres. Les guides restent publics afin que vous puissiez examiner les flux avant de vous connecter.",
   example: {
     title: "Première connexion d'Acme Corp",
     narrative:

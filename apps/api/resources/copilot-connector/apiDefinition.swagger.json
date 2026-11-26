@@ -1,8 +1,8 @@
 {
     "swagger":  "2.0",
     "info":  {
-                 "title":  "HRNECK Assistant Tools v2",
-                 "description":  "Tools the HRNECK assistant uses to read and write ticketing and training data for the signed-in user. The server checks the user\u0027s permissions for every call and ignores any user or tenant identifiers sent in the request.",
+                 "title":  "HRneck Assistant Tools v2",
+                 "description":  "Tools the HRneck assistant uses to read and write ticketing and training data for the signed-in user. The server checks the user\u0027s permissions for every call and ignores any user or tenant identifiers sent in the request.",
                  "version":  "1.0.0"
              },
     "host": "ynfuk-185-194-188-15.free.pinggy.net",
@@ -60,7 +60,7 @@
                                                                                                                           },
                                                                                                                 "conversation_ref":  {
                                                                                                                                          "type":  "string",
-                                                                                                                                         "description":  "Session reference from the HRNECK chat. The topic sets it from channel data."
+                                                                                                                                         "description":  "Session reference from the HRneck chat. The topic sets it from channel data."
                                                                                                                                      }
                                                                                                             }
                                                                                          }
@@ -112,7 +112,7 @@
                                                                                                                            },
                                                                                                              "conversation_ref":  {
                                                                                                                                       "type":  "string",
-                                                                                                                                      "description":  "Session reference from the HRNECK chat. The topic sets it from channel data."
+                                                                                                                                      "description":  "Session reference from the HRneck chat. The topic sets it from channel data."
                                                                                                                                   }
                                                                                                          }
                                                                                       }
@@ -158,7 +158,7 @@
                                                                                            "properties":  {
                                                                                                               "conversation_ref":  {
                                                                                                                                        "type":  "string",
-                                                                                                                                       "description":  "Session reference from the HRNECK chat. The topic sets it from channel data."
+                                                                                                                                       "description":  "Session reference from the HRneck chat. The topic sets it from channel data."
                                                                                                                                    }
                                                                                                           }
                                                                                        }
@@ -215,7 +215,7 @@
                                                                                                                      },
                                                                                                            "conversation_ref":  {
                                                                                                                                     "type":  "string",
-                                                                                                                                    "description":  "Session reference from the HRNECK chat. The topic sets it from channel data."
+                                                                                                                                    "description":  "Session reference from the HRneck chat. The topic sets it from channel data."
                                                                                                                                 }
                                                                                                        }
                                                                                     }
@@ -261,7 +261,7 @@
                                                                                                         "properties":  {
                                                                                                                            "conversation_ref":  {
                                                                                                                                                     "type":  "string",
-                                                                                                                                                    "description":  "Session reference from the HRNECK chat. The topic sets it from channel data."
+                                                                                                                                                    "description":  "Session reference from the HRneck chat. The topic sets it from channel data."
                                                                                                                                                 }
                                                                                                                        }
                                                                                                     }
@@ -293,7 +293,7 @@
                                          "post":  {
                                                       "operationId":  "TicketCreate",
                                                       "summary":  "Propose a new ticket",
-                                                      "description":  "Propose a new ticket. HRNECK does not create it until the user confirms in the HRNECK chat panel. The response is 202 with pending_confirmation. desk_id must come from the user\u0027s message or from ticket_desks.",
+                                                      "description":  "Propose a new ticket. HRneck does not create it until the user confirms in the HRneck chat panel. The response is 202 with pending_confirmation. desk_id must come from the user\u0027s message or from ticket_desks.",
                                                       "parameters":  [
                                                                          {
                                                                              "name":  "body",
@@ -324,7 +324,7 @@
                                                                                                                                },
                                                                                                                "conversation_ref":  {
                                                                                                                                         "type":  "string",
-                                                                                                                                        "description":  "Session reference from the HRNECK chat. The topic sets it from channel data."
+                                                                                                                                        "description":  "Session reference from the HRneck chat. The topic sets it from channel data."
                                                                                                                                     }
                                                                                                            }
                                                                                         }
@@ -356,7 +356,7 @@
                                            "post":  {
                                                         "operationId":  "TicketAddNote",
                                                         "summary":  "Propose a note on a ticket",
-                                                        "description":  "Propose a note on an existing ticket. HRNECK does not add it until the user confirms in the HRNECK chat panel. The response is 202 with pending_confirmation.",
+                                                        "description":  "Propose a note on an existing ticket. HRneck does not add it until the user confirms in the HRneck chat panel. The response is 202 with pending_confirmation.",
                                                         "parameters":  [
                                                                            {
                                                                                "name":  "body",
@@ -386,7 +386,7 @@
                                                                                                                                },
                                                                                                                  "conversation_ref":  {
                                                                                                                                           "type":  "string",
-                                                                                                                                          "description":  "Session reference from the HRNECK chat. The topic sets it from channel data."
+                                                                                                                                          "description":  "Session reference from the HRneck chat. The topic sets it from channel data."
                                                                                                                                       }
                                                                                                              }
                                                                                           }
@@ -423,7 +423,7 @@
                                                 }
                                  },
                       "ToolAccepted":  {
-                                           "description":  "Write action proposed. The user must confirm it in HRNECK before it runs.",
+                                           "description":  "Write action proposed. The user must confirm it in HRneck before it runs.",
                                            "schema":  {
                                                           "type":  "object"
                                                       }
@@ -441,7 +441,7 @@
                                       "description":  "Invalid input."
                                   },
                       "Unavailable":  {
-                                          "description":  "HRNECK is temporarily unavailable."
+                                          "description":  "HRneck is temporarily unavailable."
                                       }
                   }
 }

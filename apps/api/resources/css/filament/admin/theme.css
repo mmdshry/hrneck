@@ -4,7 +4,7 @@
 @source '../../../../resources/views/filament/**/*';
 @source '../../../../resources/views/livewire/filament-tenant-switcher.blade.php';
 
-/* HRNECK Vault dark — denser chrome aligned with apps/web tokens */
+/* HRneck Vault dark — denser chrome aligned with apps/web tokens */
 .fi-body {
   --spacing: 0.22rem;
 }

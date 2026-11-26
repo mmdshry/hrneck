@@ -4,7 +4,7 @@ param(
 )
 
 $hostsPath = "$env:SystemRoot\System32\drivers\etc\hosts"
-$marker = "# HRNECK local hosts"
+$marker = "# HRneck local hosts"
 $entries = @(
     "127.0.0.1 hrneck.test",
     "127.0.0.1 app.hrneck.test",

@@ -125,9 +125,9 @@ export function BrandMark({
     );
   }
 
-  // Without a custom logo: optional white-label name, else HRNECK wordmark.
+  // Without a custom logo: optional white-label name, else HRneck wordmark.
   // showName=false never renders the text name (sidebar logo-only mode).
-  if (showName && displayName.trim() !== "" && displayName !== "HRNECK") {
+  if (showName && displayName.trim() !== "" && displayName !== "HRneck") {
     return (
       <div className={cn("flex min-w-0 items-center", className)}>
         <span
