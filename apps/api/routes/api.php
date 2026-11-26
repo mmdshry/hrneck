@@ -6,6 +6,7 @@ use App\Domains\Subscriptions\Support\PlanFeature;
 use App\Http\Controllers\Api\V1\Assistant\ToolController as AssistantToolController;
 use App\Http\Controllers\Api\V1\AuthAvatarController;
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\DemoRequestController;
 use App\Http\Controllers\Api\V1\HealthController;
 use App\Http\Controllers\Api\V1\Msp\TenantController;
 use App\Http\Controllers\Api\V1\Org\AnnouncementController;
@@ -82,6 +83,8 @@ Route::prefix('v1')->group(function (): void {
     Route::delete('/auth/passkeys/{passkey}', [PasskeyController::class, 'destroy'])->middleware(['auth:sanctum', 'throttle:mfa']);
     Route::post('/auth/password/forgot', [AuthController::class, 'forgotPassword'])->middleware('throttle:auth-login');
     Route::post('/auth/password/reset', [AuthController::class, 'resetPassword'])->middleware('throttle:auth-login');
+    // Public "Request a demo" form on the landing page. Turnstile + honeypot + per-IP limit guard it.
+    Route::post('/demo-requests', DemoRequestController::class)->middleware('throttle:demo-request');
     Route::post('/auth/password', [AuthController::class, 'changePassword'])->middleware('auth:sanctum');
     Route::put('/auth/locale', [AuthController::class, 'updateLocale'])->middleware('auth:sanctum');
     Route::middleware('auth:sanctum')->group(function (): void {
@@ -135,7 +138,7 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/branding', [BrandingController::class, 'show']);
             Route::get('/branding/logo', [BrandingController::class, 'streamLogo']);
 
-            // HRNECK chat assistant. Any member may chat; each tool checks the permission it needs.
+            // HRneck chat assistant. Any member may chat; each tool checks the permission it needs.
             Route::prefix('assistant')->group(function (): void {
                 Route::get('/status', [AssistantController::class, 'status']);
                 Route::post('/conversations', [AssistantController::class, 'startConversation']);

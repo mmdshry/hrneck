@@ -25,11 +25,13 @@ const nextConfig: NextConfig = {
       "base-uri 'self'",
       "frame-ancestors 'none'",
       "object-src 'none'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob:",
       "font-src 'self' data:",
       "connect-src 'self' ws: wss:",
+      // Turnstile renders its challenge inside this iframe.
+      "frame-src https://challenges.cloudflare.com",
       "form-action 'self'",
     ].join("; ");
 

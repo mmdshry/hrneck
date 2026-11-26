@@ -65,6 +65,13 @@ class AppServiceProvider extends ServiceProvider
             ];
         });
 
+        // Public demo form: a small per-IP budget per hour, looser outside production so suites can run.
+        RateLimiter::for('demo-request', function (Request $request) {
+            $perHour = app()->environment(['local', 'testing']) ? 1000 : 10;
+
+            return Limit::perHour($perHour)->by('demo-request-ip:'.$request->ip());
+        });
+
         // Chat messages wait on Copilot Studio, so they get a tighter per-user budget than other org APIs.
         RateLimiter::for('assistant-messages', function (Request $request) {
             $tenant = (string) $request->header('X-Tenant', 'central');
