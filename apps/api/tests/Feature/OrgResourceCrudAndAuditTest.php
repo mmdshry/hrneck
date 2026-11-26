@@ -16,7 +16,6 @@ test('org admin can update archive and delete targets and groups with audit', fu
             'email' => 'audit.target@itneck.test',
             'first_name' => 'Audit',
             'last_name' => 'Target',
-            'timezone' => 'UTC',
         ])
         ->assertCreated();
 
@@ -107,7 +106,6 @@ test('org admin can manage departments with rename sync and blocked delete', fun
         ->postJson('/api/v1/org/targets', [
             'email' => $suffix.'@itneck.test',
             'department_id' => $departmentId,
-            'timezone' => 'UTC',
         ])
         ->assertCreated()
         ->assertJsonPath('data.department', $name)
@@ -172,7 +170,6 @@ test('org admin can cancel campaigns and mutate sending profiles', function () {
             ->withHeader('X-Tenant', 'itneck')
             ->postJson('/api/v1/org/targets', [
                 'email' => 'campaign.audience@itneck.test',
-                'timezone' => 'UTC',
             ])
             ->assertCreated();
 
@@ -279,7 +276,7 @@ test('org admin can patch users announcements schedules and archives routes exis
             'name' => 'Weekly',
             'cadence' => 'weekly',
             'format' => 'csv',
-            'recipient_email' => 'leaders@itneck.test',
+            'recipient_user_ids' => [$admin->id],
         ])
         ->assertCreated();
 

@@ -2,12 +2,20 @@
 
 namespace App\Domains\Ticketing\Models;
 
+use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
 use App\Domains\TargetsGroups\Models\Target;
+use App\Models\User;
+use Carbon\Carbon;
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * @property Carbon|null $first_responded_at
+ * @property Carbon|null $resolved_at
+ */
 class SdTicket extends Model
 {
     protected $table = 'sd_tickets';
@@ -153,5 +161,28 @@ class SdTicket extends Model
     public function scopeArchived(Builder $query): Builder
     {
         return $query->whereNotNull('archived_at');
+    }
+
+    /**
+     * Users holding org.ticketing.view_all see every ticket. Everyone else only sees tickets
+     * they requested or are assigned to.
+     *
+     * @param  Builder<SdTicket>  $query
+     * @return Builder<SdTicket>
+     */
+    public function scopeVisibleTo(Builder $query, ?Authenticatable $actor): Builder
+    {
+        if (! $actor instanceof User) {
+            return $query->whereIn('id', []);
+        }
+
+        if ($actor->can(OrgPermissionCatalog::TICKETING_VIEW_ALL)) {
+            return $query;
+        }
+
+        return $query->where(function (Builder $builder) use ($actor): void {
+            $builder->where('requester_user_id', $actor->id)
+                ->orWhere('assignee_user_id', $actor->id);
+        });
     }
 }

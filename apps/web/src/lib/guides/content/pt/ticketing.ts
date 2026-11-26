@@ -22,7 +22,7 @@ export const ticketingGuide: GuideModule = {
   ],
   openInAppHref: "/org/ticketing",
   overview:
-    "O módulo de ticketing cobre o básico de service desk ITIL para operadores em /org/ticketing: mesas, tickets com notas/tarefas/anexos, ações em massa, procedimentos e escalamento, políticas de SLA, leitores de e-mail IMAP, artigos KB (incluindo conversão ticket→KB), Search All, preferências e relatórios CSV/PDF/JSON. Os colaboradores submetem e acompanham trabalho no portal de serviço separado (/portal)—consulte esse guia para os passos do utilizador final. As permissões dividem-se por org.ticketing.tickets, .admin, .kb, .reports e .portal, com funções seed sd_* / kb_admin.",
+    "O módulo de ticketing cobre o básico de service desk ITIL para operadores em /org/ticketing: mesas, tickets com notas/tarefas/anexos, ações em massa, procedimentos e escalamento, políticas de SLA, leitores de e-mail IMAP, artigos KB (incluindo conversão ticket→KB), Search All, preferências e relatórios CSV/PDF/JSON. Os colaboradores submetem e acompanham trabalho no portal de serviço separado (/portal)—consulte esse guia para os passos do utilizador final. As permissões dividem-se por org.ticketing.tickets, .admin, .reports e .portal, com funções seed sd_* / kb_admin. Os artigos KB têm seção própria (/org/kb) com as permissões org.kb.view e org.kb.manage.",
   example: {
     title: "Relatório de phishing torna-se artigo KB",
     narrative:
@@ -46,7 +46,7 @@ export const ticketingGuide: GuideModule = {
     {
       title: "Publique conhecimento e exporte",
       body: "Converta tickets resolvidos em KB, verifique Search All / visibilidade no portal e depois exporte packs CSV/PDF ou JSON.",
-      href: "/org/ticketing/kb",
+      href: "/org/kb",
     },
   ],
   sections: [
@@ -125,7 +125,7 @@ export const ticketingGuide: GuideModule = {
         {
           title: "Crie e publique artigos",
           body: "Crie, edite, publique/despublique ou elimine artigos KB. Rascunhos não publicados ficam fora do portal do colaborador.",
-          href: "/org/ticketing/kb",
+          href: "/org/kb",
         },
         {
           title: "Converta ticket → KB",

@@ -1,18 +1,16 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toastSuccess, toastError } from "@/lib/toast";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
 import { useDataTableQuery } from "@/hooks/use-data-table-query";
-import { liveStatusLabel, useLiveTopic } from "@/hooks/use-live-topic";
+import { liveStatusLabel, useLiveStatusLabels, useLiveTopic } from "@/hooks/use-live-topic";
 import { api, ensureCsrf } from "@/lib/api";
 import { serializeDataTableQuery } from "@/lib/data-table-query";
 import {
@@ -24,7 +22,9 @@ import {
   type PageSize,
   type PaginationMeta,
 } from "@/lib/pagination";
+import { matchesCells } from "@/lib/table-filter";
 import { resolveTenant } from "@/lib/tenant";
+import { SendingProfileDialog } from "./sending-profile-dialog";
 
 type Profile = {
   id: number;
@@ -38,23 +38,6 @@ type Profile = {
 type ProfilesPayload = {
   data: Profile[];
 };
-
-function matchesCells(
-  q: string,
-  columnFilters: Record<string, string>,
-  cells: Record<string, string>,
-): boolean {
-  const needle = q.trim().toLowerCase();
-  if (needle && !Object.values(cells).join(" ").toLowerCase().includes(needle)) {
-    return false;
-  }
-  for (const [key, raw] of Object.entries(columnFilters)) {
-    const value = raw.trim().toLowerCase();
-    if (!value) continue;
-    if (!String(cells[key] ?? "").toLowerCase().includes(value)) return false;
-  }
-  return true;
-}
 
 function profileCells(profile: Profile): Record<string, string> {
   return {
@@ -74,10 +57,8 @@ export function SendingProfilesClient() {
   const [meta, setMeta] = useState<PaginationMeta>(emptyMeta());
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState<PageSize>(DEFAULT_PAGE_SIZE);
-  const [name, setName] = useState("Default SMTP");
-  const [fromName, setFromName] = useState("HRNECK");
-  const [fromEmail, setFromEmail] = useState("noreply@hrneck.com");
-  const [editingId, setEditingId] = useState<number | null>(null);
+  /** Open editor. `profile` is null when creating. */
+  const [editing, setEditing] = useState<{ profile: Profile | null } | null>(null);
   const [loading, setLoading] = useState(true);
   const [pendingDelete, setPendingDelete] = useState<Profile | null>(null);
   const tableQuery = useDataTableQuery();
@@ -131,7 +112,7 @@ export function SendingProfilesClient() {
     [],
   );
 
-  const { status, error: liveError } = useLiveTopic<ProfilesPayload>({
+  const { status } = useLiveTopic<ProfilesPayload>({
     channel,
     onPayload,
   });
@@ -171,69 +152,22 @@ export function SendingProfilesClient() {
     tableQuery.debounced,
   ]);
 
-  const statusLabel = liveStatusLabel(status);
+  const liveLabels = useLiveStatusLabels();
+  const statusLabel = liveStatusLabel(status, liveLabels);
 
-  function startEdit(profile: Profile) {
-    setEditingId(profile.id);
-    setName(profile.name);
-    setFromName(profile.from_name);
-    setFromEmail(profile.from_email);
-    
-  }
-
-  function resetForm() {
-    setEditingId(null);
-    setName("Default SMTP");
-    setFromName("HRNECK");
-    setFromEmail("noreply@hrneck.com");
-  }
-
-  async function onSubmit(event: FormEvent) {
-    event.preventDefault();
-    
-    try {
-      await ensureCsrf();
-      const payload = {
-        name,
-        from_name: fromName,
-        from_email: fromEmail,
-        mailer: "smtp",
-        is_default: true,
-      };
-      if (editingId !== null) {
-        await api(`/api/v1/org/sending-profiles/${editingId}`, {
-          method: "PATCH",
-          tenant: resolveTenant(),
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-      } else {
-        await api("/api/v1/org/sending-profiles", {
-          method: "POST",
-          tenant: resolveTenant(),
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-      }
-      setLiveProfiles(null);
-      await refreshFromApi(page, perPage, filters);
-      resetForm();
-      toastSuccess(t("profileSaved"));
-    } catch (err) {
-      toastError(err instanceof Error ? err.message : t("saveFailedSignIn"));
-    }
+  async function reloadProfiles() {
+    setLiveProfiles(null);
+    await refreshFromApi(page, perPage, filters);
   }
 
   async function deleteProfile(profile: Profile) {
-    
     try {
       await ensureCsrf();
       await api(`/api/v1/org/sending-profiles/${profile.id}`, {
         method: "DELETE",
         tenant: resolveTenant(),
       });
-      setLiveProfiles(null);
-      await refreshFromApi(page, perPage, filters);
+      await reloadProfiles();
       toastSuccess(t("profileDeleted"));
     } catch (err) {
       toastError(err instanceof Error ? err.message : tCommon("deleteFailed"));
@@ -284,7 +218,7 @@ export function SendingProfilesClient() {
             type="button"
             variant="outline"
             size="compact"
-            onClick={() => startEdit(profile)}
+            onClick={() => setEditing({ profile })}
           >
             {tCommon("edit")}
           </Button>
@@ -311,54 +245,18 @@ export function SendingProfilesClient() {
         title={t("sendingProfilesTitle")}
         description={statusLabel ?? tCommon("live")}
         actions={
-          <LinkButton href="/org/settings" variant="secondary">
-            {t("title")}
-          </LinkButton>
+          <>
+            <LinkButton href="/org/settings" variant="secondary">
+              {t("title")}
+            </LinkButton>
+            <Button type="button" onClick={() => setEditing({ profile: null })}>
+              {t("newProfile")}
+            </Button>
+          </>
         }
       />
-      <form onSubmit={onSubmit} className="mt-8 space-y-4">
-        <div className="space-y-1">
-          <Label htmlFor="sp-name" className="text-[var(--muted-foreground)]">
-            {tCommon("name")}
-          </Label>
-          <Input id="sp-name" value={name} onChange={(e) => setName(e.target.value)} />
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="sp-from-name" className="text-[var(--muted-foreground)]">
-            {t("fromName")}
-          </Label>
-          <Input
-            id="sp-from-name"
-            value={fromName}
-            onChange={(e) => setFromName(e.target.value)}
-          />
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="sp-from-email" className="text-[var(--muted-foreground)]">
-            {t("fromEmail")}
-          </Label>
-          <Input
-            id="sp-from-email"
-            type="email"
-            value={fromEmail}
-            onChange={(e) => setFromEmail(e.target.value)}
-          />
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button type="submit">
-            {editingId !== null ? t("updateProfile") : t("saveProfile")}
-          </Button>
-          {editingId !== null ? (
-            <Button type="button" variant="secondary" onClick={resetForm}>
-              {tCommon("cancel")}
-            </Button>
-          ) : null}
-        </div>
-      </form>
-      
-      
       <DataTable
-        className="mt-10"
+        className="mt-8"
         mode="server"
         caption={t("sendingProfilesTitle")}
         columns={columns}
@@ -398,6 +296,13 @@ export function SendingProfilesClient() {
           await deleteProfile(pendingDelete);
         }}
       />
+      {editing ? (
+        <SendingProfileDialog
+          profile={editing.profile}
+          onClose={() => setEditing(null)}
+          onSaved={reloadProfiles}
+        />
+      ) : null}
     </div>
   );
 }

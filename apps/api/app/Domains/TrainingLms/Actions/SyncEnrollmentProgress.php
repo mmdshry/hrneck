@@ -12,6 +12,7 @@ use App\Domains\TargetsGroups\Models\Target;
 use App\Domains\TrainingLms\Models\Enrollment;
 use App\Domains\TrainingLms\Models\LessonProgress;
 use App\Domains\TrainingLms\Models\QuizAttempt;
+use Illuminate\Database\Eloquent\Builder;
 
 class SyncEnrollmentProgress
 {
@@ -40,6 +41,7 @@ class SyncEnrollmentProgress
     public function recompute(Enrollment $enrollment, ?int $assignmentId = null): Enrollment
     {
         $enrollment->loadMissing(['course.lessons', 'course.quizzes']);
+        $wasCompleted = $enrollment->status === 'completed';
 
         $lessonIds = $enrollment->course?->lessons->pluck('id') ?? collect();
         $totalLessons = max(1, $lessonIds->count());
@@ -77,7 +79,10 @@ class SyncEnrollmentProgress
         }
 
         $allLessonsDone = $completedLessons >= $lessonIds->count();
-        $completed = $allLessonsDone && $requiredQuizzesPassed;
+        $finished = $allLessonsDone && $requiredQuizzesPassed;
+        // Completion requires the learner's attestation. Enrollments already completed
+        // before the attestation feature existed keep their status.
+        $completed = $finished && ($enrollment->attested_at !== null || $wasCompleted);
         $failedCourse = $allLessonsDone
             && $requiredQuizzes->isNotEmpty()
             && $allAttempted
@@ -88,6 +93,7 @@ class SyncEnrollmentProgress
             'status' => $completed ? 'completed' : ($enrollment->opened_at || $completedLessons > 0 ? 'in_progress' : $enrollment->status),
             'completed_at' => $completed ? ($enrollment->completed_at ?? now()) : null,
             'opened_at' => $enrollment->opened_at ?? ($completedLessons > 0 ? now() : $enrollment->opened_at),
+            'attestation_pending' => $finished && ! $completed,
         ])->save();
 
         $this->mirrorCampaignRecipients($enrollment, opened: $enrollment->opened_at !== null, completed: $completed);
@@ -133,23 +139,31 @@ class SyncEnrollmentProgress
 
     private function mirrorCampaignRecipients(Enrollment $enrollment, bool $opened, bool $completed): void
     {
-        $campaignIds = Campaign::query()
+        $campaigns = Campaign::query()
             ->where('type', 'training')
-            ->where('course_id', $enrollment->course_id)
-            ->pluck('id');
+            ->whereHas('courses', fn (Builder $query) => $query->where('courses.id', $enrollment->course_id))
+            ->with('courses')
+            ->get()
+            ->keyBy('id');
 
-        if ($campaignIds->isEmpty()) {
+        if ($campaigns->isEmpty()) {
             return;
         }
 
         $recipients = CampaignRecipient::query()
-            ->whereIn('campaign_id', $campaignIds)
+            ->whereIn('campaign_id', $campaigns->keys())
             ->where('target_id', $enrollment->target_id)
             ->get();
 
         $touchedCampaignIds = [];
 
         foreach ($recipients as $recipient) {
+            $campaign = $campaigns->get($recipient->campaign_id);
+            // A learner finishes a multi-course campaign only after every course in it is complete.
+            $recipientCompleted = $completed
+                && $campaign !== null
+                && $this->allCampaignCoursesCompleted($campaign, $enrollment->target_id);
+
             $updates = [];
             if ($opened && $recipient->opened_at === null) {
                 $updates['opened_at'] = now();
@@ -157,7 +171,7 @@ class SyncEnrollmentProgress
                     $updates['status'] = 'opened';
                 }
             }
-            if ($completed) {
+            if ($recipientCompleted) {
                 $updates['status'] = 'completed';
                 $updates['opened_at'] = $recipient->opened_at ?? now();
             }
@@ -173,5 +187,21 @@ class SyncEnrollmentProgress
                 $completer->handle($campaignId);
             }
         }
+    }
+
+    private function allCampaignCoursesCompleted(Campaign $campaign, int $targetId): bool
+    {
+        $courseIds = $campaign->courses->pluck('id')->map(fn ($id): int => (int) $id)->all();
+        if ($courseIds === []) {
+            return true;
+        }
+
+        $completedCount = Enrollment::query()
+            ->where('target_id', $targetId)
+            ->whereIn('course_id', $courseIds)
+            ->where('status', 'completed')
+            ->count();
+
+        return $completedCount >= count($courseIds);
     }
 }

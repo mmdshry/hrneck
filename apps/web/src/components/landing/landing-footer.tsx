@@ -30,8 +30,8 @@ export function LandingFooter() {
   const links: { href: string; label: string; icon: LucideIcon }[] = useMemo(
     () => [
       { href: "/docs", label: t("guides"), icon: BookOpen },
-      { href: "/learn", label: tNav("learnerPortal"), icon: Presentation },
-      { href: "/portal", label: tNav("servicePortal"), icon: Headphones },
+      { href: "/portal", label: tNav("learnerPortal"), icon: Presentation },
+      { href: "/portal/tickets", label: tNav("servicePortal"), icon: Headphones },
       { href: "/login", label: t("signIn"), icon: LogIn },
       { href: "#demo", label: t("requestDemo"), icon: Mail },
     ],

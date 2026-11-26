@@ -1,24 +1,17 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EmptyState } from "@/components/ui/empty-state";
-import { toastSuccess, toastError } from "@/lib/toast";
+import { toastError } from "@/lib/toast";
 import { useTranslations } from "next-intl";
-import {
-  AudiencePicker,
-  type AudienceGroup,
-  type AudienceTarget,
-} from "@/app/org/training/audience-picker";
+import type { AudienceGroup, AudienceTarget } from "@/app/org/training/audience-picker";
 import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
-import { Label } from "@/components/ui/label";
 import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
-import { Panel } from "@/components/ui/panel";
-import { Select } from "@/components/ui/select";
 import { useDataTableQuery } from "@/hooks/use-data-table-query";
-import { liveStatusLabel, useLiveTopic } from "@/hooks/use-live-topic";
+import { liveStatusLabel, useLiveStatusLabels, useLiveTopic } from "@/hooks/use-live-topic";
 import { api, apiOptional, ensureCsrf, fetchSessionUser } from "@/lib/api";
 import { serializeDataTableQuery } from "@/lib/data-table-query";
 import { orgLiveChannel } from "@/lib/live-topics";
@@ -31,35 +24,20 @@ import {
   type PageSize,
   type PaginationMeta,
 } from "@/lib/pagination";
-import { hasPermission, type SessionUser } from "@/lib/session";
+import { hasAnyPermission, hasPermission, type SessionUser } from "@/lib/session";
+import { matchesCells } from "@/lib/table-filter";
 import { resolveTenant } from "@/lib/tenant";
 import type {
   ChecklistInstance,
   ChecklistPack,
   ChecklistTemplate,
 } from "../checklist-types";
+import { ConnectChecklistWizard } from "./connect-checklist-wizard";
 
 type InstancesPayload = {
   data: ChecklistInstance[];
 };
 
-
-function matchesCells(
-  q: string,
-  columnFilters: Record<string, string>,
-  cells: Record<string, string>,
-): boolean {
-  const needle = q.trim().toLowerCase();
-  if (needle && !Object.values(cells).join(" ").toLowerCase().includes(needle)) {
-    return false;
-  }
-  for (const [key, raw] of Object.entries(columnFilters)) {
-    const value = raw.trim().toLowerCase();
-    if (!value) continue;
-    if (!String(cells[key] ?? "").toLowerCase().includes(value)) return false;
-  }
-  return true;
-}
 
 function instanceCells(row: ChecklistInstance): Record<string, string> {
   return {
@@ -90,11 +68,7 @@ export function ChecklistInstancesClient() {
   const [perPage, setPerPage] = useState<PageSize>(DEFAULT_PAGE_SIZE);
   const [targets, setTargets] = useState<AudienceTarget[]>([]);
   const [groups, setGroups] = useState<AudienceGroup[]>([]);
-  const [assignMode, setAssignMode] = useState<"template" | "pack">("template");
-  const [templateId, setTemplateId] = useState<number | "">("");
-  const [packId, setPackId] = useState<number | "">("");
-  const [selectedTargetIds, setSelectedTargetIds] = useState<number[]>([]);
-  const [selectedGroupIds, setSelectedGroupIds] = useState<number[]>([]);
+  const [connectOpen, setConnectOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const tableQuery = useDataTableQuery();
   const filters = useMemo(
@@ -169,8 +143,6 @@ export function ChecklistInstancesClient() {
     } else {
       setGroups([]);
     }
-    setTemplateId((current) => current || tpl?.data?.[0]?.id || "");
-    setPackId((current) => current || nextPacks[0]?.id || "");
   }, []);
 
   const refreshFromApi = useCallback(
@@ -240,47 +212,13 @@ export function ChecklistInstancesClient() {
     tableQuery.debounced,
   ]);
 
-  const statusLabel = liveStatusLabel(status);
+  const liveLabels = useLiveStatusLabels();
+  const statusLabel = liveStatusLabel(status, liveLabels);
 
-  async function onAssign(event: FormEvent) {
-    event.preventDefault();
-    if (assignMode === "template" && !templateId) return;
-    if (assignMode === "pack" && !packId) return;
-    
-    try {
-      await ensureCsrf();
-      if (assignMode === "pack") {
-        await api(`/api/v1/org/checklists/packs/${packId}/assign`, {
-          method: "POST",
-          tenant: resolveTenant(),
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            target_ids: selectedTargetIds,
-            group_ids: selectedGroupIds,
-          }),
-        });
-        toastSuccess(t("packConnected"));
-      } else {
-        await api("/api/v1/org/checklists/instances", {
-          method: "POST",
-          tenant: resolveTenant(),
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            template_id: templateId,
-            target_ids: selectedTargetIds,
-            group_ids: selectedGroupIds,
-          }),
-        });
-        toastSuccess(t("checklistsConnected"));
-      }
-      setSelectedTargetIds([]);
-      setSelectedGroupIds([]);
-      setPage(1);
-      if (liveInstances === null) {
-        await refreshFromApi(1, perPage, filters);
-      }
-    } catch (err) {
-      toastError(err instanceof Error ? err.message : t("assignFailed"));
+  async function handleConnected() {
+    setPage(1);
+    if (liveInstances === null) {
+      await refreshFromApi(1, perPage, filters);
     }
   }
 
@@ -303,10 +241,10 @@ export function ChecklistInstancesClient() {
             variant="link"
             className="h-auto min-h-0 px-0 py-0 text-sm"
           >
-            {row.target?.email ?? `Employee #${row.target_id}`}
+            {row.target?.email ?? t("employeeFallback", { id: String(row.target_id) })}
           </LinkButton>
         ) : (
-          "—"
+          tCommon("emDash")
         ),
     },
     {
@@ -336,7 +274,7 @@ export function ChecklistInstancesClient() {
           variant="outline"
           size="compact"
         >
-          Fill / review
+          {tCommon("fillReview")}
         </LinkButton>
       ),
     },
@@ -346,14 +284,23 @@ export function ChecklistInstancesClient() {
     return <PageSkeleton className="max-w-5xl" />;
   }
 
-  if (session && !hasPermission(session, "org.checklists.manage")) {
+  if (
+    session &&
+    !hasAnyPermission(session, [
+      "org.checklists.view",
+      "org.checklists.fill",
+      "org.checklists.manage",
+    ])
+  ) {
     return (
       <div className="mx-auto w-full max-w-5xl flex-1 space-y-4 px-4 py-8 sm:px-6">
         <PageHeader title={t("instancesTitle")} description={t("instancesDescription")} />
-        <EmptyState title={"You need org.checklists.manage to manage checklist instances."} />
+        <EmptyState title={t("needChecklistAccess")} />
       </div>
     );
   }
+
+  const canManageChecklists = hasPermission(session, "org.checklists.manage");
 
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 space-y-6 px-4 py-8 sm:px-6">
@@ -372,73 +319,25 @@ export function ChecklistInstancesClient() {
             <LinkButton href="/org/checklists" variant="secondary">
               {t("templates")}
             </LinkButton>
+            {canManageChecklists ? (
+              <Button type="button" onClick={() => setConnectOpen(true)}>
+                {t("connectChecklist")}
+              </Button>
+            ) : null}
           </div>
         }
       />
 
-      
-      
-
-      <Panel className="space-y-4 p-4">
-        <h2 className="text-sm font-semibold">Connect checklist to employees</h2>
-        <form onSubmit={onAssign} className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="instance-assign-mode">Assign</Label>
-            <Select
-              id="instance-assign-mode"
-              value={assignMode}
-              onChange={(e) => setAssignMode(e.target.value as "template" | "pack")}
-            >
-              <option value="template">Single template</option>
-              <option value="pack">Checklist pack</option>
-            </Select>
-          </div>
-          {assignMode === "pack" ? (
-            <div className="space-y-1.5">
-              <Label htmlFor="instance-pack">Pack</Label>
-              <Select
-                id="instance-pack"
-                value={packId === "" ? "" : String(packId)}
-                onChange={(e) => setPackId(e.target.value ? Number(e.target.value) : "")}
-                required
-              >
-                <option value="">Select pack</option>
-                {packs.map((pack) => (
-                  <option key={pack.id} value={pack.id}>
-                    {pack.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          ) : (
-            <div className="space-y-1.5">
-              <Label htmlFor="instance-template">Template</Label>
-              <Select
-                id="instance-template"
-                value={templateId === "" ? "" : String(templateId)}
-                onChange={(e) => setTemplateId(e.target.value ? Number(e.target.value) : "")}
-                required
-              >
-                <option value="">Select template</option>
-                {templates.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          )}
-          <AudiencePicker
-            targets={targets}
-            groups={groups}
-            selectedTargetIds={selectedTargetIds}
-            selectedGroupIds={selectedGroupIds}
-            onChangeTargets={setSelectedTargetIds}
-            onChangeGroups={setSelectedGroupIds}
-          />
-          <Button type="submit">Connect</Button>
-        </form>
-      </Panel>
+      {connectOpen ? (
+        <ConnectChecklistWizard
+          templates={templates}
+          packs={packs}
+          targets={targets}
+          groups={groups}
+          onConnected={handleConnected}
+          onClose={() => setConnectOpen(false)}
+        />
+      ) : null}
 
       <DataTable
         mode="server"

@@ -22,7 +22,7 @@ export const ticketingGuide: GuideModule = {
   ],
   openInAppHref: "/org/ticketing",
   overview:
-    "The ticketing module covers ITIL service-desk basics for operators in /org/ticketing: desks, tickets with notes/tasks/attachments, bulk actions, procedures and escalation, SLA policies, IMAP email readers, KB articles (including ticket→KB convert), Search All, preferences, and CSV/PDF/JSON reporting. Employees submit and track work in the separate service portal (/portal)—see that guide for end-user steps. Permissions split across org.ticketing.tickets, .admin, .kb, .reports, and .portal, with seeded sd_* / kb_admin roles.",
+    "The ticketing module covers ITIL service-desk basics for operators in /org/ticketing: desks, tickets with notes/tasks/attachments, bulk actions, procedures and escalation, SLA policies, IMAP email readers, Search All, preferences, and CSV/PDF/JSON reporting. Knowledge base articles live in their own section (/org/kb) with separate view and manage permissions, and tickets can be converted into articles from there. Employees submit and track work in the separate service portal (/portal)—see that guide for end-user steps. Ticketing permissions are org.ticketing.tickets, .admin, .reports, .view_all, and .portal, with seeded sd_* roles and the kb_admin role.",
   example: {
     title: "Phishing report becomes KB article",
     narrative:
@@ -46,7 +46,7 @@ export const ticketingGuide: GuideModule = {
     {
       title: "Publish knowledge and export",
       body: "Convert resolved tickets to KB, verify Search All / portal visibility, then export CSV/PDF or JSON packages.",
-      href: "/org/ticketing/kb",
+      href: "/org/kb",
     },
   ],
   sections: [
@@ -125,7 +125,7 @@ export const ticketingGuide: GuideModule = {
         {
           title: "Author and publish articles",
           body: "Create, edit, publish/unpublish, or delete KB articles. Unpublished drafts stay off the employee portal.",
-          href: "/org/ticketing/kb",
+          href: "/org/kb",
         },
         {
           title: "Convert ticket → KB",

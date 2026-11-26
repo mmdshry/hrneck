@@ -15,7 +15,7 @@ const AXE_ROUTES = [
   "/org/ticketing",
   "/org/checklists",
   "/portal/tickets",
-  "/learn",
+  "/portal",
 ] as const;
 
 test.describe("HRNECK smoke", () => {
@@ -66,12 +66,12 @@ test.describe("HRNECK smoke", () => {
     await expect(page).toHaveURL(/\/login/);
   });
 
-  test("training and learn pages have no Refresh buttons", async ({ page }) => {
+  test("training and portal pages have no Refresh buttons", async ({ page }) => {
     await page.goto("/org/training");
     await expect(page.getByRole("button", { name: /^Refresh$/i })).toHaveCount(0);
     await page.goto("/org/courses");
     await expect(page.getByRole("button", { name: /^Refresh$/i })).toHaveCount(0);
-    await page.goto("/learn");
+    await page.goto("/portal");
     await expect(
       page.getByRole("button", { name: /Refresh assignments/i }),
     ).toHaveCount(0);

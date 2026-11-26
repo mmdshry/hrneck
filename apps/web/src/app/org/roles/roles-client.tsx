@@ -1,17 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
 import { useDataTableQuery } from "@/hooks/use-data-table-query";
-import { liveStatusLabel, useLiveTopic } from "@/hooks/use-live-topic";
+import { liveStatusLabel, useLiveStatusLabels, useLiveTopic } from "@/hooks/use-live-topic";
 import { api, ensureCsrf, fetchSessionUser } from "@/lib/api";
 import { serializeDataTableQuery } from "@/lib/data-table-query";
 import { orgLiveChannel } from "@/lib/live-topics";
@@ -25,36 +23,20 @@ import {
   type PaginationMeta,
 } from "@/lib/pagination";
 import { hasPermission, type SessionUser } from "@/lib/session";
+import { matchesCells } from "@/lib/table-filter";
 import { resolveTenant } from "@/lib/tenant";
-import { toastError, toastSuccess } from "@/lib/toast";
-
-type OrgRole = {
-  id: number;
-  name: string;
-  permissions: string[];
-};
+import { toastError } from "@/lib/toast";
+import { CreateRoleDialog } from "./create-role-dialog";
+import { EditRolePermissionsDialog } from "./edit-role-permissions-dialog";
+import type { OrgRole } from "./role-types";
 
 type RolesPayload = {
   data: OrgRole[];
   permissions?: string[];
 };
 
-function matchesCells(
-  q: string,
-  columnFilters: Record<string, string>,
-  cells: Record<string, string>,
-): boolean {
-  const needle = q.trim().toLowerCase();
-  if (needle && !Object.values(cells).join(" ").toLowerCase().includes(needle)) {
-    return false;
-  }
-  for (const [key, raw] of Object.entries(columnFilters)) {
-    const value = raw.trim().toLowerCase();
-    if (!value) continue;
-    if (!String(cells[key] ?? "").toLowerCase().includes(value)) return false;
-  }
-  return true;
-}
+/** Built-in owner role: its grants are managed by the system, not edited here. */
+const LOCKED_ROLE_NAME = "org_admin";
 
 export function RolesClient() {
   const t = useTranslations("org.roles");
@@ -68,9 +50,9 @@ export function RolesClient() {
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState<PageSize>(DEFAULT_PAGE_SIZE);
   const [catalog, setCatalog] = useState<string[]>([]);
-  const [name, setName] = useState("");
-  const [selected, setSelected] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editingRole, setEditingRole] = useState<OrgRole | null>(null);
   const tableQuery = useDataTableQuery();
   const filters = useMemo(
     () => serializeDataTableQuery(tableQuery.debounced),
@@ -130,7 +112,7 @@ export function RolesClient() {
     [],
   );
 
-  const { status, error: liveError } = useLiveTopic<RolesPayload>({
+  const { status } = useLiveTopic<RolesPayload>({
     channel,
     onPayload,
   });
@@ -176,13 +158,8 @@ export function RolesClient() {
     tableQuery.debounced,
   ]);
 
-  const statusLabel = liveStatusLabel(status);
-
-  function togglePermission(permission: string) {
-    setSelected((prev) =>
-      prev.includes(permission) ? prev.filter((p) => p !== permission) : [...prev, permission],
-    );
-  }
+  const liveLabels = useLiveStatusLabels();
+  const statusLabel = liveStatusLabel(status, liveLabels);
 
   function updateRolePermissions(roleId: number, permissions: string[]) {
     setRoles((prev) => prev.map((r) => (r.id === roleId ? { ...r, permissions } : r)));
@@ -197,41 +174,15 @@ export function RolesClient() {
     }
   }
 
-  async function onCreate(event: FormEvent) {
-    event.preventDefault();
-    
-    try {
-      await ensureCsrf();
-      await api("/api/v1/org/roles", {
-        method: "POST",
-        tenant: resolveTenant(),
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, permissions: selected }),
-      });
-      setName("");
-      setSelected([]);
-      toastSuccess(t("roleCreated"));
-      await afterMutation();
-    } catch (err) {
-      toastError(err instanceof Error ? err.message : tCommon("createFailed"));
-    }
+  async function onRoleCreated() {
+    setCreateOpen(false);
+    await afterMutation();
   }
 
-  async function saveRole(role: OrgRole, permissions: string[]) {
-    
-    try {
-      await ensureCsrf();
-      await api(`/api/v1/org/roles/${role.id}`, {
-        method: "PUT",
-        tenant: resolveTenant(),
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ permissions }),
-      });
-      toastSuccess(`Updated ${role.name}.`);
-      await afterMutation();
-    } catch (err) {
-      toastError(err instanceof Error ? err.message : tCommon("updateFailed"));
-    }
+  async function onPermissionsSaved(roleId: number, permissions: string[]) {
+    setEditingRole(null);
+    updateRolePermissions(roleId, permissions);
+    await afterMutation();
   }
 
   const columns: Array<DataTableColumn<OrgRole>> = [
@@ -248,33 +199,7 @@ export function RolesClient() {
       filter: "none",
       filterValue: (role) => role.permissions.join(" "),
       enableSorting: false,
-      cell: (role) => (
-        <details>
-          <summary className="cursor-pointer text-sm">
-            {role.permissions.length} selected
-          </summary>
-          <div className="mt-2 grid gap-2 sm:grid-cols-2">
-            {catalog.map((permission) => {
-              const checked = role.permissions.includes(permission);
-              return (
-                <label key={`${role.id}-${permission}`} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => {
-                      const next = checked
-                        ? role.permissions.filter((p) => p !== permission)
-                        : [...role.permissions, permission];
-                      updateRolePermissions(role.id, next);
-                    }}
-                  />
-                  {permission}
-                </label>
-              );
-            })}
-          </div>
-        </details>
-      ),
+      cell: (role) => t("permissionsSelected", { count: role.permissions.length }),
     },
     {
       id: "actions",
@@ -283,13 +208,8 @@ export function RolesClient() {
       enableSorting: false,
       enableGlobalFilter: false,
       cell: (role) => (
-        <Button
-          type="button"
-          variant="outline"
-          size="compact"
-          onClick={() => void saveRole(role, role.permissions)}
-        >
-          Save permissions
+        <Button type="button" variant="outline" size="compact" onClick={() => setEditingRole(role)}>
+          {role.name === LOCKED_ROLE_NAME ? t("viewPermissions") : t("editPermissions")}
         </Button>
       ),
     },
@@ -307,7 +227,7 @@ export function RolesClient() {
           description={t("description")}
         />
         <EmptyState
-          title="Sign in required. Use Sign in in the sidebar."
+          title={t("signInRequired")}
           action={
             <Link
               href="/login?next=%2Forg%2Froles"
@@ -324,7 +244,7 @@ export function RolesClient() {
   if (!hasPermission(session, "org.roles.manage")) {
     return (
       <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">
-        <EmptyState title={"You do not have permission to manage roles."} />
+        <EmptyState title={t("noPermission")} />
       </div>
     );
   }
@@ -336,33 +256,12 @@ export function RolesClient() {
         description={
           statusLabel ? `${t("description")} · ${statusLabel}` : t("description")
         }
+        actions={
+          <Button type="button" onClick={() => setCreateOpen(true)}>
+            {t("createRole")}
+          </Button>
+        }
       />
-      
-      
-
-      <form onSubmit={onCreate} className="mt-8 space-y-3 rounded-2xl border border-[var(--border)] p-4">
-        <p className="text-sm font-medium">{t("createRole")}</p>
-        <div className="space-y-1">
-          <Label htmlFor="role-name">{tCommon("name")}</Label>
-          <Input id="role-name" value={name} onChange={(e) => setName(e.target.value)} required />
-        </div>
-        <fieldset className="space-y-2">
-          <legend className="text-sm text-[var(--muted-foreground)]">Permissions</legend>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {catalog.map((permission) => (
-              <label key={permission} className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={selected.includes(permission)}
-                  onChange={() => togglePermission(permission)}
-                />
-                {permission}
-              </label>
-            ))}
-          </div>
-        </fieldset>
-        <Button type="submit">{t("createRole")}</Button>
-      </form>
 
       <DataTable
         className="mt-8"
@@ -386,6 +285,24 @@ export function RolesClient() {
           },
         }}
       />
+
+      {createOpen ? (
+        <CreateRoleDialog
+          catalog={catalog}
+          onClose={() => setCreateOpen(false)}
+          onCreated={onRoleCreated}
+        />
+      ) : null}
+
+      {editingRole ? (
+        <EditRolePermissionsDialog
+          role={editingRole}
+          catalog={catalog}
+          readOnly={editingRole.name === LOCKED_ROLE_NAME}
+          onClose={() => setEditingRole(null)}
+          onSaved={onPermissionsSaved}
+        />
+      ) : null}
     </div>
   );
 }

@@ -13,7 +13,7 @@ import { PageSkeleton } from "@/components/ui/page-skeleton";
 import { Panel } from "@/components/ui/panel";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { liveStatusLabel, useLiveTopic } from "@/hooks/use-live-topic";
+import { liveStatusLabel, useLiveStatusLabels, useLiveTopic } from "@/hooks/use-live-topic";
 import { api, ensureCsrf } from "@/lib/api";
 import { orgLiveChannel } from "@/lib/live-topics";
 import { resolveTenant } from "@/lib/tenant";
@@ -83,7 +83,8 @@ export function ChecklistBuilderClient({ templateId }: { templateId: number }) {
       .finally(() => setLoading(false));
   }, [templateId, liveEpoch, load]);
 
-  const statusLabel = liveStatusLabel(liveStatus);
+  const liveLabels = useLiveStatusLabels();
+  const statusLabel = liveStatusLabel(liveStatus, liveLabels);
 
   const selected = useMemo(
     () => items.find((i) => i.key === selectedKey) ?? null,
@@ -223,17 +224,21 @@ export function ChecklistBuilderClient({ templateId }: { templateId: number }) {
     <div className="mx-auto w-full max-w-5xl flex-1 space-y-4 px-4 py-8 sm:px-6">
       <PageHeader
         title={t("builderTitle")}
-        description={`${template.slug} · version ${template.current_version}${statusLabel ? ` · ${statusLabel}` : " · Live"}`}
+        description={t("builderMeta", {
+          slug: template.slug,
+          version: String(template.current_version),
+          status: statusLabel || tCommon("live"),
+        })}
         actions={
           <>
             <LinkButton href="/org/checklists" variant="secondary" size="sm">
-              Library
+              {t("library")}
             </LinkButton>
             <LinkButton href="/org/checklists/instances" variant="secondary" size="sm">
-              Instances
+              {t("instances")}
             </LinkButton>
             <Button type="button" size="sm" onClick={() => setShowApplyDialog(true)} disabled={saving}>
-              Save
+              {tCommon("save")}
             </Button>
           </>
         }
@@ -243,28 +248,28 @@ export function ChecklistBuilderClient({ templateId }: { templateId: number }) {
 
       <Panel className="grid gap-3 p-4 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label>Name</Label>
+          <Label>{tCommon("name")}</Label>
           <Input value={name} onChange={(e) => setName(e.target.value)} />
         </div>
         <div className="space-y-1.5">
-          <Label>Status</Label>
+          <Label>{tCommon("status")}</Label>
           <Select value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="draft">Draft</option>
-            <option value="published">Published</option>
-            <option value="archived">Archived</option>
+            <option value="draft">{tCommon("draft")}</option>
+            <option value="published">{tCommon("published")}</option>
+            <option value="archived">{tCommon("archived")}</option>
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label>Category</Label>
+          <Label>{tCommon("category")}</Label>
           <Select value={category} onChange={(e) => setCategory(e.target.value)}>
-            <option value="onboarding">Onboarding</option>
-            <option value="offboarding">Offboarding</option>
-            <option value="hr_ops">HR ops</option>
-            <option value="custom">Custom</option>
+            <option value="onboarding">{t("onboarding")}</option>
+            <option value="offboarding">{t("offboarding")}</option>
+            <option value="hr_ops">{t("hrOps")}</option>
+            <option value="custom">{t("custom")}</option>
           </Select>
         </div>
         <div className="space-y-1.5 sm:col-span-2">
-          <Label>Description</Label>
+          <Label>{tCommon("descriptionLabel")}</Label>
           <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
         </div>
       </Panel>
@@ -272,9 +277,9 @@ export function ChecklistBuilderClient({ templateId }: { templateId: number }) {
       <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
         <Panel className="p-3">
           <div className="mb-2 flex items-center justify-between gap-2">
-            <p className="text-sm font-medium">Items</p>
+            <p className="text-sm font-medium">{tCommon("items")}</p>
             <Button type="button" size="sm" variant="secondary" onClick={() => addItem()}>
-              Add
+              {tCommon("add")}
             </Button>
           </div>
           <ul className="max-h-[28rem] space-y-1 overflow-y-auto">
@@ -292,7 +297,7 @@ export function ChecklistBuilderClient({ templateId }: { templateId: number }) {
                   <span className="block truncate font-medium">{item.label}</span>
                   <span className="block text-xs opacity-80">
                     {item.type}
-                    {item.required ? " · required" : ""}
+                    {item.required ? ` · ${t("requiredBadge")}` : ""}
                   </span>
                 </button>
               </li>
@@ -302,52 +307,52 @@ export function ChecklistBuilderClient({ templateId }: { templateId: number }) {
 
         <Panel className="space-y-3 p-4">
           {!selected ? (
-            <p className="text-sm text-[var(--muted-foreground)]">Select an item to edit.</p>
+            <p className="text-sm text-[var(--muted-foreground)]">{t("selectItemToEdit")}</p>
           ) : (
             <>
               <div className="flex flex-wrap gap-2">
                 <Button type="button" size="sm" variant="secondary" onClick={() => moveSelected(-1)}>
-                  Up
+                  {t("moveUp")}
                 </Button>
                 <Button type="button" size="sm" variant="secondary" onClick={() => moveSelected(1)}>
-                  Down
+                  {t("moveDown")}
                 </Button>
                 <Button type="button" size="sm" variant="destructive" onClick={removeSelected}>
-                  Delete
+                  {tCommon("delete")}
                 </Button>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <Label>Key</Label>
+                  <Label>{tCommon("key")}</Label>
                   <Input
                     value={selected.key}
                     onChange={(e) => updateSelected({ key: e.target.value.replace(/\s+/g, "_") })}
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Type</Label>
+                  <Label>{tCommon("type")}</Label>
                   <Select
                     value={selected.type}
                     onChange={(e) =>
                       updateSelected({ type: e.target.value as ChecklistItemType })
                     }
                   >
-                    {ITEM_TYPES.map((t) => (
-                      <option key={t.value} value={t.value}>
-                        {t.label}
+                    {ITEM_TYPES.map((itemType) => (
+                      <option key={itemType.value} value={itemType.value}>
+                        {t(itemType.labelKey)}
                       </option>
                     ))}
                   </Select>
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
-                  <Label>Label</Label>
+                  <Label>{tCommon("label")}</Label>
                   <Input
                     value={selected.label}
                     onChange={(e) => updateSelected({ label: e.target.value })}
                   />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
-                  <Label>Help</Label>
+                  <Label>{tCommon("help")}</Label>
                   <Input
                     value={selected.help ?? ""}
                     onChange={(e) => updateSelected({ help: e.target.value })}
@@ -360,12 +365,12 @@ export function ChecklistBuilderClient({ templateId }: { templateId: number }) {
                       checked={Boolean(selected.required)}
                       onChange={(e) => updateSelected({ required: e.target.checked })}
                     />
-                    Required
+                    {t("requiredLabel")}
                   </label>
                 ) : null}
                 {(selected.type === "single_select" || selected.type === "multi_select") && (
                   <div className="space-y-1.5 sm:col-span-2">
-                    <Label>Options (value:label per line)</Label>
+                    <Label>{t("optionsPerLine")}</Label>
                     <Textarea
                       rows={4}
                       value={(selected.options ?? [])
@@ -388,7 +393,7 @@ export function ChecklistBuilderClient({ templateId }: { templateId: number }) {
                   </div>
                 )}
                 <div className="space-y-1.5">
-                  <Label>Visible when item</Label>
+                  <Label>{t("visibleWhenItem")}</Label>
                   <Select
                     value={selected.visible_when?.item_key ?? ""}
                     onChange={(e) =>
@@ -403,7 +408,7 @@ export function ChecklistBuilderClient({ templateId }: { templateId: number }) {
                       })
                     }
                   >
-                    <option value="">Always visible</option>
+                    <option value="">{tCommon("alwaysVisible")}</option>
                     {items
                       .filter((i) => i.key !== selected.key)
                       .map((i) => (
@@ -414,7 +419,7 @@ export function ChecklistBuilderClient({ templateId }: { templateId: number }) {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Operator</Label>
+                  <Label>{tCommon("operator")}</Label>
                   <Select
                     value={selected.visible_when?.op ?? "eq"}
                     disabled={!selected.visible_when?.item_key}
@@ -429,13 +434,13 @@ export function ChecklistBuilderClient({ templateId }: { templateId: number }) {
                       })
                     }
                   >
-                    <option value="eq">equals</option>
-                    <option value="neq">not equals</option>
-                    <option value="not_empty">not empty</option>
+                    <option value="eq">{t("operatorEquals")}</option>
+                    <option value="neq">{t("operatorNotEquals")}</option>
+                    <option value="not_empty">{t("operatorNotEmpty")}</option>
                   </Select>
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
-                  <Label>Compare value</Label>
+                  <Label>{t("compareValue")}</Label>
                   <Input
                     disabled={!selected.visible_when?.item_key}
                     value={String(selected.visible_when?.value ?? "")}
@@ -452,7 +457,7 @@ export function ChecklistBuilderClient({ templateId }: { templateId: number }) {
                   />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
-                  <Label>Requires (comma-separated keys)</Label>
+                  <Label>{t("requiresKeys")}</Label>
                   <Input
                     value={(selected.requires ?? []).join(", ")}
                     onChange={(e) =>
@@ -475,7 +480,7 @@ export function ChecklistBuilderClient({ templateId }: { templateId: number }) {
         open={showApplyDialog}
         onOpenChange={setShowApplyDialog}
         title={t("applyTemplateChanges")}
-        description="Saving creates a new version. Choose whether open (not completed) employee instances should receive this schema now. Existing answers are kept by item key."
+        description={t("applyTemplateChangesBody")}
         dismissible={!saving}
       >
         <div className="flex flex-col gap-2">
@@ -485,10 +490,10 @@ export function ChecklistBuilderClient({ templateId }: { templateId: number }) {
             onClick={() => void persist(false)}
             variant="secondary"
           >
-            Only new instances
+            {t("applyOnlyNewInstances")}
           </Button>
           <Button type="button" disabled={saving} onClick={() => void persist(true)}>
-            Apply to open instances too
+            {t("applyToOpenInstances")}
           </Button>
           <Button
             type="button"
@@ -496,7 +501,7 @@ export function ChecklistBuilderClient({ templateId }: { templateId: number }) {
             disabled={saving}
             onClick={() => setShowApplyDialog(false)}
           >
-            Cancel
+            {tCommon("cancel")}
           </Button>
         </div>
       </Dialog>

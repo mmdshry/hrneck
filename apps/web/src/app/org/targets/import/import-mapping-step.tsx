@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import {
-  FIELD_LABELS,
   PLATFORM_FIELDS,
   type ColumnMap,
   type ImportMappingTemplate,
@@ -43,6 +42,21 @@ export function ImportMappingStep({
 }: ImportMappingStepProps) {
   const t = useTranslations("org.employees");
   const tCommon = useTranslations("common");
+  const fieldLabels: Record<PlatformField, string> = {
+    email: tCommon("email"),
+    first_name: tCommon("firstName"),
+    last_name: tCommon("lastName"),
+    department: tCommon("department"),
+    job_title: t("importFieldJobTitle"),
+    employee_number: t("importFieldEmployeeNumber"),
+    phone: tCommon("phone"),
+    location: tCommon("location"),
+    employment_type: t("employmentType"),
+    hire_date: tCommon("hireDate"),
+    manager_email: t("importFieldManagerEmail"),
+    preferred_language: t("preferredLanguage"),
+    external_id: tCommon("externalId"),
+  };
 
   function setField(field: PlatformField, value: string) {
     onColumnMapChange({
@@ -86,7 +100,7 @@ export function ImportMappingStep({
             id="import-template-name"
             value={templateName}
             disabled={busy}
-            placeholder="e.g. BambooHR export"
+            placeholder={t("templateNamePlaceholder")}
             onChange={(event) => onTemplateNameChange(event.target.value)}
           />
         </div>
@@ -109,7 +123,7 @@ export function ImportMappingStep({
             className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[160px_1fr]"
           >
             <Label htmlFor={`map-${field}`} className="text-sm">
-              {FIELD_LABELS[field]}
+              {fieldLabels[field]}
               {field === "email" ? " *" : ""}
             </Label>
             <Select

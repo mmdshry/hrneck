@@ -5,7 +5,10 @@ namespace App\Http\Controllers\Api\V1\Org;
 use App\Domains\Audit\Actions\LogOrgActivity;
 use App\Domains\Campaigns\Actions\LaunchTrainingCampaign;
 use App\Domains\Campaigns\Actions\ResolveCampaignAudience;
+use App\Domains\Campaigns\Actions\ScheduleTrainingLaunch;
+use App\Domains\Campaigns\Actions\SyncCampaignCourses;
 use App\Domains\Campaigns\Models\Campaign;
+use App\Domains\Campaigns\Support\CampaignWindow;
 use App\Domains\Realtime\Support\PublishLive;
 use App\Domains\TrainingLms\Models\Course;
 use App\Domains\TrainingLms\Models\Enrollment;
@@ -20,7 +23,7 @@ class CampaignController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $query = Campaign::query()->with(['course', 'recipients']);
+        $query = Campaign::query()->with(['courses', 'recipients']);
         if ($request->filled('type')) {
             $query->where('type', $request->string('type'));
         } else {
@@ -50,10 +53,13 @@ class CampaignController extends Controller
     public function dashboard(Request $request): JsonResponse
     {
         $type = $request->input('type', 'training');
-        $campaigns = Campaign::query()->where('type', $type)->with('recipients')->get();
+        $campaigns = Campaign::query()->where('type', $type)->with(['recipients', 'courses'])->get();
         $recipients = $campaigns->flatMap->recipients;
 
-        $courseIds = $campaigns->pluck('course_id')->filter()->unique()->values();
+        $courseIds = $campaigns
+            ->flatMap(fn (Campaign $campaign) => $campaign->courses->pluck('id'))
+            ->unique()
+            ->values();
         $enrollments = $courseIds->isEmpty()
             ? collect()
             : Enrollment::query()->whereIn('course_id', $courseIds)->get();
@@ -89,43 +95,71 @@ class CampaignController extends Controller
     public function store(
         Request $request,
         LaunchTrainingCampaign $train,
+        ScheduleTrainingLaunch $schedule,
         ResolveCampaignAudience $audience,
+        SyncCampaignCourses $sync,
         LogOrgActivity $audit,
     ): JsonResponse {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:160'],
             'type' => ['sometimes', 'in:training'],
             'course_id' => ['nullable', 'integer'],
+            'course_ids' => ['sometimes', 'array'],
+            'course_ids.*' => ['integer', 'exists:courses,id'],
             'is_remedial' => ['sometimes', 'boolean'],
             'target_ids' => ['required_without:group_ids', 'array'],
             'target_ids.*' => ['integer'],
             'group_ids' => ['required_without:target_ids', 'array'],
             'group_ids.*' => ['integer'],
             'scheduled_at' => ['nullable', 'date'],
+            'starts_at' => ['nullable', 'date'],
+            'expires_at' => ['nullable', 'date'],
             'launch' => ['sometimes', 'boolean'],
         ]);
 
-        $targetIds = $audience->handle($data['target_ids'] ?? [], $data['group_ids'] ?? []);
+        $launch = $request->boolean('launch', true);
+        $startsAt = CampaignWindow::parse($data['starts_at'] ?? null);
+        $expiresAt = CampaignWindow::parse($data['expires_at'] ?? null);
+        CampaignWindow::assertOrdered($startsAt, $expiresAt);
+        $deferred = $launch && CampaignWindow::startsLater($startsAt);
 
-        $status = ! empty($data['scheduled_at']) && ! $request->boolean('launch', true)
-            ? 'scheduled'
-            : 'draft';
+        $targetIds = $audience->handle($data['target_ids'] ?? [], $data['group_ids'] ?? []);
+        $groupIds = array_map(intval(...), $data['group_ids'] ?? []);
+
+        $status = ! empty($data['scheduled_at']) && ! $launch ? 'scheduled' : 'draft';
+
+        $courseIds = collect($data['course_ids'] ?? [])
+            ->when(isset($data['course_id']), fn ($ids) => $ids->push((int) $data['course_id']))
+            ->map(intval(...))
+            ->unique()
+            ->values()
+            ->all();
+        if ($courseIds === []) {
+            $defaultCourseId = Course::query()->value('id');
+            $courseIds = $defaultCourseId !== null ? [(int) $defaultCourseId] : [];
+        }
+        if ($launch && $courseIds === []) {
+            throw ValidationException::withMessages([
+                'course_ids' => ['Add at least one course before launching this campaign.'],
+            ]);
+        }
 
         $campaign = Campaign::query()->create([
             'name' => $data['name'],
             'type' => 'training',
             'status' => $status,
             'is_remedial' => $request->boolean('is_remedial'),
-            'course_id' => $data['course_id'] ?? Course::query()->value('id'),
             'scheduled_at' => $data['scheduled_at'] ?? null,
+            'starts_at' => $startsAt,
+            'expires_at' => $expiresAt,
         ]);
+        $campaign = $sync->handle($campaign, $courseIds);
 
-        if ($request->boolean('launch', true)) {
-            $campaign = $train->handle(
-                $campaign,
-                $targetIds,
-                array_map(intval(...), $data['group_ids'] ?? []),
-            );
+        if ($deferred) {
+            $campaign = $schedule->handle($campaign, $targetIds, $groupIds);
+            PublishLive::metricsBundle();
+        } elseif ($launch) {
+            $campaign = $train->handle($campaign, $targetIds, $groupIds);
         } else {
             PublishLive::metricsBundle();
         }
@@ -135,7 +169,7 @@ class CampaignController extends Controller
             'status' => $campaign->status,
         ]);
 
-        return response()->json(['data' => $campaign->load(['recipients', 'course'])], 201);
+        return response()->json(['data' => $campaign->load(['recipients', 'courses'])], 201);
     }
 
     public function update(Request $request, Campaign $campaign, LogOrgActivity $audit): JsonResponse
@@ -174,7 +208,7 @@ class CampaignController extends Controller
 
         PublishLive::metricsBundle();
 
-        return response()->json(['data' => $campaign->load(['recipients', 'course'])]);
+        return response()->json(['data' => $campaign->load(['recipients', 'courses'])]);
     }
 
     public function destroy(Campaign $campaign, LogOrgActivity $audit): JsonResponse
@@ -189,7 +223,7 @@ class CampaignController extends Controller
 
             PublishLive::metricsBundle();
 
-            return response()->json(['data' => $campaign->fresh(['recipients', 'course'])]);
+            return response()->json(['data' => $campaign->fresh(['recipients', 'courses'])]);
         }
 
         $snapshot = ['id' => $campaign->id, 'name' => $campaign->name, 'status' => $campaign->status];

@@ -1,6 +1,7 @@
 "use client";
 
 import type { KeyboardEvent } from "react";
+import { useTranslations } from "next-intl";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Label } from "@/components/ui/label";
 
@@ -45,10 +46,12 @@ export function AudiencePicker({
   onChangeTargets,
   onChangeGroups,
 }: AudiencePickerProps) {
+  const t = useTranslations("org.training");
+  const tCommon = useTranslations("common");
   const targetColumns: Array<DataTableColumn<AudienceTarget>> = [
     {
       id: "selected",
-      header: "Select",
+      header: tCommon("select"),
       filter: "none",
       enableSorting: false,
       enableGlobalFilter: false,
@@ -56,7 +59,7 @@ export function AudiencePicker({
       cell: (target) => (
         <input
           type="checkbox"
-          aria-label={`Select ${target.email}`}
+          aria-label={t("pickerSelectItem", { name: target.email })}
           checked={selectedTargetIds.includes(target.id)}
           onChange={() => onChangeTargets(toggleId(selectedTargetIds, target.id))}
         />
@@ -64,14 +67,14 @@ export function AudiencePicker({
     },
     {
       id: "email",
-      header: "Email",
+      header: tCommon("email"),
       accessorKey: "email",
       sticky: true,
       cell: (target) => target.email,
     },
     {
       id: "first_name",
-      header: "First name",
+      header: tCommon("firstName"),
       accessorKey: "first_name",
       cell: (target) => target.first_name || "—",
     },
@@ -80,7 +83,7 @@ export function AudiencePicker({
   const groupColumns: Array<DataTableColumn<AudienceGroup>> = [
     {
       id: "selected",
-      header: "Select",
+      header: tCommon("select"),
       filter: "none",
       enableSorting: false,
       enableGlobalFilter: false,
@@ -88,7 +91,7 @@ export function AudiencePicker({
       cell: (group) => (
         <input
           type="checkbox"
-          aria-label={`Select ${group.name}`}
+          aria-label={t("pickerSelectItem", { name: group.name })}
           checked={selectedGroupIds.includes(group.id)}
           onChange={() => onChangeGroups(toggleId(selectedGroupIds, group.id))}
         />
@@ -96,14 +99,14 @@ export function AudiencePicker({
     },
     {
       id: "name",
-      header: "Name",
+      header: tCommon("name"),
       accessorKey: "name",
       sticky: true,
       cell: (group) => group.name,
     },
     {
       id: "targets_count",
-      header: "Targets",
+      header: t("pickerTargets"),
       accessorKey: "targets_count",
       cell: (group) =>
         typeof group.targets_count === "number" ? group.targets_count : "—",
@@ -113,39 +116,39 @@ export function AudiencePicker({
   return (
     <div className="grid gap-4 sm:grid-cols-2" onKeyDown={preventFormSubmitOnEnter}>
       <div className="space-y-2">
-        <Label className="text-[var(--muted-foreground)]">Targets</Label>
+        <Label className="text-[var(--muted-foreground)]">{t("pickerTargets")}</Label>
         <DataTable
           mode="client"
-          caption="Targets"
+          caption={t("pickerTargets")}
           columns={targetColumns}
           rows={targets}
           getRowId={(row) => row.id}
-          emptyTitle="No targets"
+          emptyTitle={t("pickerNoTargets")}
           toolbarExtra={
             <button
               type="button"
               className="text-xs text-[var(--muted-foreground)] underline-offset-2 hover:underline"
               onClick={() =>
                 onChangeTargets(
-                  selectedTargetIds.length === targets.length ? [] : targets.map((t) => t.id),
+                  selectedTargetIds.length === targets.length ? [] : targets.map((row) => row.id),
                 )
               }
             >
-              {selectedTargetIds.length === targets.length ? "Clear" : "Select all"}
+              {selectedTargetIds.length === targets.length ? tCommon("clear") : tCommon("selectAll")}
             </button>
           }
         />
       </div>
 
       <div className="space-y-2">
-        <Label className="text-[var(--muted-foreground)]">Groups</Label>
+        <Label className="text-[var(--muted-foreground)]">{tCommon("groups")}</Label>
         <DataTable
           mode="client"
-          caption="Groups"
+          caption={tCommon("groups")}
           columns={groupColumns}
           rows={groups}
           getRowId={(row) => row.id}
-          emptyTitle="No groups"
+          emptyTitle={t("pickerNoGroups")}
           toolbarExtra={
             <button
               type="button"
@@ -157,8 +160,8 @@ export function AudiencePicker({
               }
             >
               {selectedGroupIds.length === groups.length && groups.length > 0
-                ? "Clear"
-                : "Select all"}
+                ? tCommon("clear")
+                : tCommon("selectAll")}
             </button>
           }
         />

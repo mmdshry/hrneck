@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toastSuccess, toastError, toastInfo } from "@/lib/toast";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,8 +14,8 @@ import { PageSkeleton } from "@/components/ui/page-skeleton";
 import { Panel } from "@/components/ui/panel";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { liveStatusLabel, useLiveTopic } from "@/hooks/use-live-topic";
-import { api, ensureCsrf } from "@/lib/api";
+import { liveStatusLabel, useLiveStatusLabels, useLiveTopic } from "@/hooks/use-live-topic";
+import { api, apiOptional, ensureCsrf } from "@/lib/api";
 import { orgLiveChannel } from "@/lib/live-topics";
 import { resolveTenant } from "@/lib/tenant";
 import {
@@ -79,6 +80,7 @@ export function ChecklistFillClient({ instanceId }: { instanceId: number }) {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [liveEpoch, setLiveEpoch] = useState(0);
+  const [cancelOpen, setCancelOpen] = useState(false);
 
   const channel = useMemo(
     () => (tenant ? orgLiveChannel(tenant, "checklist-instances") : null),
@@ -97,11 +99,12 @@ export function ChecklistFillClient({ instanceId }: { instanceId: number }) {
   const load = useCallback(async () => {
     await ensureCsrf();
     const t = resolveTenant();
+    // Filling does not imply audit-log access; a 403 here must not block the form.
     const [inst, log] = await Promise.all([
       api<{ data: ChecklistInstance }>(`/api/v1/org/checklists/instances/${instanceId}`, {
         tenant: t,
       }),
-      api<{ data: AuditEvent[] }>(`/api/v1/org/checklists/instances/${instanceId}/audit`, {
+      apiOptional<{ data: AuditEvent[] }>(`/api/v1/org/checklists/instances/${instanceId}/audit`, {
         tenant: t,
       }),
     ]);
@@ -114,7 +117,7 @@ export function ChecklistFillClient({ instanceId }: { instanceId: number }) {
     }
     setAnswers(map);
     setFiles(fileMap);
-    setAudit(log.data ?? []);
+    setAudit(log?.data ?? []);
   }, [instanceId]);
 
   useEffect(() => {
@@ -126,7 +129,8 @@ export function ChecklistFillClient({ instanceId }: { instanceId: number }) {
       .finally(() => setLoading(false));
   }, [instanceId, liveEpoch, load]);
 
-  const statusLabel = liveStatusLabel(liveStatus);
+  const liveLabels = useLiveStatusLabels();
+  const statusLabel = liveStatusLabel(liveStatus, liveLabels);
 
   const visibleItems = useMemo(() => {
     const items = instance?.schema_snapshot?.items ?? [];
@@ -135,7 +139,7 @@ export function ChecklistFillClient({ instanceId }: { instanceId: number }) {
       .filter((item) => isVisible(item, answers));
   }, [instance, answers]);
 
-  async function saveAnswers(nextStatus?: string) {
+  async function saveAnswers(nextStatus?: "completed" | "cancelled") {
     if (!instance) return;
     setSaving(true);
     
@@ -166,15 +170,17 @@ export function ChecklistFillClient({ instanceId }: { instanceId: number }) {
       );
       setInstance(res.data);
       toastSuccess(
-        nextStatus
-          ? t("savedAndMarked", { status: nextStatus })
-          : t("answersSaved"),
+        nextStatus === "completed"
+          ? t("savedAndCompleted")
+          : nextStatus === "cancelled"
+            ? t("savedAndCancelled")
+            : t("answersSaved"),
       );
-      const log = await api<{ data: AuditEvent[] }>(
+      const log = await apiOptional<{ data: AuditEvent[] }>(
         `/api/v1/org/checklists/instances/${instanceId}/audit`,
         { tenant: resolveTenant() },
       );
-      setAudit(log.data ?? []);
+      setAudit(log?.data ?? []);
     } catch (err) {
       toastError(err instanceof Error ? err.message : tCommon("saveFailed"));
     } finally {
@@ -197,7 +203,7 @@ export function ChecklistFillClient({ instanceId }: { instanceId: number }) {
       });
       setFiles((prev) => ({ ...prev, [itemKey]: res.data.file_disk_path }));
       setAnswers((prev) => ({ ...prev, [itemKey]: file.name }));
-      toastInfo(`Uploaded ${file.name}`);
+      toastInfo(t("uploadedFile", { name: file.name }));
     } catch (err) {
       toastError(err instanceof Error ? err.message : tCommon("uploadFailed"));
     }
@@ -251,7 +257,7 @@ export function ChecklistFillClient({ instanceId }: { instanceId: number }) {
                 setAnswers((prev) => ({ ...prev, [item.key]: e.target.checked }))
               }
             />
-            Done
+            {tCommon("done")}
           </label>
         ) : null}
         {item.type === "short_text" ? (
@@ -331,7 +337,9 @@ export function ChecklistFillClient({ instanceId }: { instanceId: number }) {
               }}
             />
             {files[item.key] ? (
-              <p className="text-xs text-[var(--muted-foreground)]">Stored: {files[item.key]}</p>
+              <p className="text-xs text-[var(--muted-foreground)]">
+                {t("storedFile", { path: files[item.key] ?? "" })}
+              </p>
             ) : null}
           </div>
         ) : null}
@@ -356,10 +364,15 @@ export function ChecklistFillClient({ instanceId }: { instanceId: number }) {
     <div className="mx-auto w-full max-w-5xl flex-1 space-y-4 px-4 py-8 sm:px-6">
       <PageHeader
         title={instance.title}
-        description={`${instance.target?.email ?? `Target #${instance.target_id}`} · ${instance.status} · ${instance.progress_pct}%${statusLabel ? ` · ${statusLabel}` : " · Live"}`}
+        description={t("fillMeta", {
+          target: instance.target?.email ?? t("targetFallback", { id: String(instance.target_id) }),
+          status: instance.status,
+          progress: String(instance.progress_pct),
+          live: statusLabel || tCommon("live"),
+        })}
         actions={
           <LinkButton href="/org/checklists/instances" variant="secondary" size="sm">
-            Back
+            {tCommon("back")}
           </LinkButton>
         }
       />
@@ -390,7 +403,7 @@ export function ChecklistFillClient({ instanceId }: { instanceId: number }) {
           {visibleItems.map((item) => renderField(item))}
           <div className="flex flex-wrap gap-2 pt-2">
             <Button type="button" disabled={saving} onClick={() => void saveAnswers()}>
-              Save progress
+              {t("saveProgress")}
             </Button>
             <Button
               type="button"
@@ -398,15 +411,15 @@ export function ChecklistFillClient({ instanceId }: { instanceId: number }) {
               disabled={saving}
               onClick={() => void saveAnswers("completed")}
             >
-              Mark completed
+              {t("markCompleted")}
             </Button>
             <Button
               type="button"
               variant="ghost"
               disabled={saving}
-              onClick={() => void saveAnswers("cancelled")}
+              onClick={() => setCancelOpen(true)}
             >
-              Cancel checklist
+              {t("cancelChecklist")}
             </Button>
           </div>
         </Panel>
@@ -422,6 +435,18 @@ export function ChecklistFillClient({ instanceId }: { instanceId: number }) {
           />
         </Panel>
       )}
+
+      <ConfirmDialog
+        open={cancelOpen}
+        onOpenChange={setCancelOpen}
+        title={t("cancelChecklistTitle")}
+        description={t("cancelChecklistDescription")}
+        confirmLabel={t("cancelChecklist")}
+        cancelLabel={t("keepChecklist")}
+        workingLabel={tCommon("working")}
+        variant="destructive"
+        onConfirm={() => saveAnswers("cancelled")}
+      />
     </div>
   );
 }

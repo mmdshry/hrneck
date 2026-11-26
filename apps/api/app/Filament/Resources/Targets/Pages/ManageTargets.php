@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\Targets\Pages;
 
+use App\Domains\Subscriptions\Exceptions\PlanLimitReached;
+use App\Domains\Subscriptions\Support\TenantEntitlements;
 use App\Domains\TargetsGroups\Actions\RecalculateTargetRisk;
 use App\Domains\TargetsGroups\Models\Target;
 use App\Filament\Resources\Pages\ManageTenantRecords;
@@ -23,6 +25,12 @@ class ManageTargets extends ManageTenantRecords
         return [
             CreateAction::make()
                 ->visible(fn (): bool => FilamentTenant::has())
+                ->before(function (): void {
+                    $this->checkPlan(
+                        fn (TenantEntitlements $entitlements) => $entitlements->assertCanCreateTargets((string) FilamentTenant::id()),
+                        'email',
+                    );
+                })
                 ->mutateFormDataUsing(function (array $data): array {
                     unset($data['risk_score'], $data['risk_tier'], $data['risk_source'], $data['risk_updated_at']);
 
@@ -53,17 +61,15 @@ class ManageTargets extends ManageTenantRecords
                 ->action(function (array $data): void {
                     /** @var TemporaryUploadedFile $file */
                     $file = $data['file'];
-                    $handle = fopen($file->getRealPath(), 'r');
-                    $header = fgetcsv($handle) ?: [];
-                    $count = 0;
-                    while (($row = fgetcsv($handle)) !== false) {
-                        if (count($header) !== count($row)) {
-                            continue;
-                        }
-                        $item = array_combine($header, $row);
-                        if (empty($item['email'])) {
-                            continue;
-                        }
+                    $rows = $this->readCsvRows($file->getRealPath());
+
+                    $emails = array_map(fn (array $item): string => (string) $item['email'], $rows);
+                    $this->checkPlan(
+                        fn (TenantEntitlements $entitlements) => $entitlements->assertCanCreateTargetsForEmails((string) FilamentTenant::id(), $emails),
+                        'file',
+                    );
+
+                    foreach ($rows as $item) {
                         Target::query()->updateOrCreate(
                             ['email' => trim((string) $item['email'])],
                             [
@@ -73,10 +79,9 @@ class ManageTargets extends ManageTenantRecords
                                 'status' => 'active',
                             ],
                         );
-                        $count++;
                     }
-                    fclose($handle);
-                    Notification::make()->title(__('filament.imported_rows', ['count' => $count]))->success()->send();
+
+                    Notification::make()->title(__('filament.imported_rows', ['count' => count($rows)]))->success()->send();
                 }),
         ];
     }
@@ -86,5 +91,48 @@ class ManageTargets extends ManageTenantRecords
         return FilamentTenant::has()
             ? __('filament.employees')
             : __('filament.employees_select_organization');
+    }
+
+    /**
+     * Reads CSV rows that have a matching column count and a non-empty email.
+     *
+     * @return list<array<string, string|null>>
+     */
+    private function readCsvRows(string $path): array
+    {
+        $handle = fopen($path, 'r');
+        $header = fgetcsv($handle) ?: [];
+        $rows = [];
+
+        while (($row = fgetcsv($handle)) !== false) {
+            if (count($header) !== count($row)) {
+                continue;
+            }
+
+            $item = array_combine($header, $row);
+            if (empty($item['email'])) {
+                continue;
+            }
+
+            $rows[] = $item;
+        }
+
+        fclose($handle);
+
+        return $rows;
+    }
+
+    /**
+     * @param  callable(TenantEntitlements): void  $check
+     */
+    private function checkPlan(callable $check, string $field): void
+    {
+        try {
+            $check(app(TenantEntitlements::class));
+        } catch (PlanLimitReached $e) {
+            Notification::make()->danger()->title($e->getMessage())->send();
+
+            throw $e->toValidationException($field);
+        }
     }
 }

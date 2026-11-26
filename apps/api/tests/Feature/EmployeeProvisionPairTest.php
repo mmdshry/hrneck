@@ -7,7 +7,9 @@ use App\Domains\TargetsGroups\Models\Target;
 use App\Filament\Resources\Targets\TargetResource;
 use App\Models\Tenant;
 use App\Models\User;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Queue;
+use Spatie\Activitylog\Models\Activity;
 use Stancl\Tenancy\Facades\Tenancy;
 
 test('creating a target provisions a learner user and queues invite', function () {
@@ -21,7 +23,6 @@ test('creating a target provisions a learner user and queues invite', function (
             'email' => 'New.Hire@Example.TEST',
             'first_name' => 'New',
             'last_name' => 'Hire',
-            'timezone' => 'UTC',
         ])
         ->assertCreated()
         ->assertJsonPath('meta.login_invited', true);
@@ -64,8 +65,8 @@ test('creating a learner org user creates a matching target', function () {
     Tenancy::end();
 });
 
-test('creating org admin does not create a target', function () {
-    app(CreateOrgUser::class)->handle(
+test('creating an org admin also creates its linked employee target', function () {
+    $user = app(CreateOrgUser::class)->handle(
         'itneck',
         'Ops Only',
         'ops.only@itneck.test',
@@ -74,7 +75,10 @@ test('creating org admin does not create a target', function () {
     );
 
     Tenancy::initialize(Tenant::query()->findOrFail('itneck'));
-    expect(Target::query()->whereRaw('LOWER(email) = ?', ['ops.only@itneck.test'])->exists())->toBeFalse();
+    $target = Target::query()->whereRaw('LOWER(email) = ?', ['ops.only@itneck.test'])->first();
+    expect($target)->not->toBeNull()
+        ->and($target->user_id)->toBe($user->id)
+        ->and($target->joined_via)->toBe('account');
     Tenancy::end();
 });
 
@@ -88,7 +92,6 @@ test('inactive target blocks learn assignments', function () {
             'email' => 'inactive.learn@itneck.test',
             'first_name' => 'In',
             'last_name' => 'Active',
-            'timezone' => 'UTC',
         ])
         ->assertCreated();
 
@@ -140,7 +143,6 @@ test('deleting an employee hides the paired login without removing an operator',
             'email' => 'gone.employee@itneck.test',
             'first_name' => 'Gone',
             'last_name' => 'Employee',
-            'timezone' => 'UTC',
         ])
         ->assertCreated();
 
@@ -198,7 +200,6 @@ test('employee department is copied onto the paired user', function () {
             'first_name' => 'Desk',
             'last_name' => 'Person',
             'department_id' => $deptId,
-            'timezone' => 'UTC',
         ])
         ->assertCreated();
 
@@ -225,4 +226,143 @@ test('employee department is copied onto the paired user', function () {
 test('filament employee resource uses employee labels', function () {
     expect(TargetResource::getModelLabel())->toBe('Employee')
         ->and(TargetResource::getPluralModelLabel())->toBe('Employees');
+});
+
+test('creating an employee with a password makes the login usable immediately without an invite', function () {
+    Queue::fake();
+
+    $this->actingAs(orgAdmin())
+        ->withHeader('X-Tenant', 'itneck')
+        ->postJson('/api/v1/org/targets', [
+            'email' => 'pw.created@itneck.test',
+            'first_name' => 'Pw',
+            'last_name' => 'Created',
+            'password' => 'EmployeePass!234',
+        ])
+        ->assertCreated()
+        ->assertJsonPath('meta.login_invited', false);
+
+    Queue::assertNotPushed(SendEmployeeInviteJob::class);
+
+    $user = User::query()->where('email', 'pw.created@itneck.test')->firstOrFail();
+    expect($user->must_set_password)->toBeFalse();
+
+    $this->postJson('/api/v1/auth/login', [
+        'email' => 'pw.created@itneck.test',
+        'password' => 'EmployeePass!234',
+    ])->assertOk();
+});
+
+test('creating an employee with a password is rejected when a login already exists for the email', function () {
+    Queue::fake();
+
+    $this->actingAs(orgAdmin())
+        ->withHeader('X-Tenant', 'itneck')
+        ->postJson('/api/v1/org/targets', [
+            'email' => 'admin@itneck.test',
+            'first_name' => 'Dup',
+            'last_name' => 'Login',
+            'password' => 'EmployeePass!234',
+        ])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['email']);
+
+    Tenancy::initialize(Tenant::query()->findOrFail('itneck'));
+    expect(Target::query()->where('email', 'admin@itneck.test')->exists())->toBeFalse();
+    Tenancy::end();
+});
+
+test('admin sets an employee password from the list and the login clears the invite state', function () {
+    Queue::fake();
+    $admin = orgAdmin();
+
+    $created = $this->actingAs($admin)
+        ->withHeader('X-Tenant', 'itneck')
+        ->postJson('/api/v1/org/targets', [
+            'email' => 'set.pw@itneck.test',
+            'first_name' => 'Set',
+            'last_name' => 'Pw',
+        ])
+        ->assertCreated();
+
+    $user = User::query()->where('email', 'set.pw@itneck.test')->firstOrFail();
+    expect($user->must_set_password)->toBeTrue();
+
+    $this->actingAs($admin)
+        ->withHeader('X-Tenant', 'itneck')
+        ->postJson('/api/v1/org/targets/'.$created->json('data.id').'/password', [
+            'password' => 'NewEmployee!234',
+            'password_confirmation' => 'NewEmployee!234',
+        ])
+        ->assertOk();
+
+    $user->refresh();
+    expect($user->must_set_password)->toBeFalse()
+        ->and(Hash::check('NewEmployee!234', $user->getAuthPassword()))->toBeTrue();
+
+    $this->postJson('/api/v1/auth/login', [
+        'email' => 'set.pw@itneck.test',
+        'password' => 'NewEmployee!234',
+    ])->assertOk();
+
+    $activity = Activity::query()->inLog('targets')->where('event', 'password_set')->latest('id')->first();
+    expect($activity)->not->toBeNull()
+        ->and(json_encode($activity->properties))->not->toContain('NewEmployee!234');
+});
+
+test('setting an employee password requires the targets permission', function () {
+    app(CreateOrgUser::class)->handle(
+        'itneck',
+        'Pw Learner',
+        'pw.learner@itneck.test',
+        'DemoPass!234',
+        [OrgPermissionCatalog::LEARNER],
+    );
+
+    Tenancy::initialize(Tenant::query()->findOrFail('itneck'));
+    $targetId = Target::query()->where('email', 'pw.learner@itneck.test')->value('id');
+    Tenancy::end();
+
+    $this->actingAs(User::query()->where('email', 'pw.learner@itneck.test')->firstOrFail())
+        ->withHeader('X-Tenant', 'itneck')
+        ->postJson('/api/v1/org/targets/'.$targetId.'/password', [
+            'password' => 'NewEmployee!234',
+            'password_confirmation' => 'NewEmployee!234',
+        ])
+        ->assertForbidden();
+});
+
+test('setting an employee password only changes the login of that organization', function () {
+    app(CreateOrgUser::class)->handle(
+        'company',
+        'Other Org',
+        'other.org@company.test',
+        'DemoPass!234',
+        [OrgPermissionCatalog::LEARNER],
+    );
+
+    Tenancy::initialize(Tenant::query()->findOrFail('itneck'));
+    $targetId = Target::query()->create([
+        'email' => 'other.org@company.test',
+        'first_name' => 'Other',
+        'last_name' => 'Org',
+        'status' => 'active',
+        'joined_via' => 'manual',
+    ])->id;
+    Tenancy::end();
+
+    $this->actingAs(orgAdmin())
+        ->withHeader('X-Tenant', 'itneck')
+        ->postJson('/api/v1/org/targets/'.$targetId.'/password', [
+            'password' => 'NewEmployee!234',
+            'password_confirmation' => 'NewEmployee!234',
+        ])
+        ->assertOk();
+
+    $companyLogin = User::query()->withEmail('other.org@company.test')->where('tenant_id', 'company')->firstOrFail();
+    $itneckLogin = User::query()->withEmail('other.org@company.test')->where('tenant_id', 'itneck')->firstOrFail();
+
+    expect($itneckLogin->id)->not->toBe($companyLogin->id);
+    expect(Hash::check('DemoPass!234', $companyLogin->getAuthPassword()))->toBeTrue();
+    expect(Hash::check('NewEmployee!234', $itneckLogin->getAuthPassword()))->toBeTrue();
 });

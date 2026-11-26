@@ -28,6 +28,13 @@ http://hrneck.test, http://app.hrneck.test, http://itneck.hrneck.test, http://te
 	import next_proxy
 }
 
+# HTTPS for the web app. Passkeys (WebAuthn) only work in a secure context (https or localhost).
+# Local CA: run `caddy trust` once so browsers accept the certificates.
+https://hrneck.test, https://app.hrneck.test, https://itneck.hrneck.test, https://test.hrneck.test, https://company.hrneck.test, https://*.hrneck.test {
+	tls internal
+	import next_proxy
+}
+
 # Legacy *.itp.test aliases (same apps) so old bookmarks / HMR sockets still work
 http://app.itp.test, http://itneck.itp.test, http://test.itp.test, http://company.itp.test {
 	import next_proxy

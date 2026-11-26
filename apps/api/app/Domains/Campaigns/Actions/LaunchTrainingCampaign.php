@@ -5,17 +5,18 @@ namespace App\Domains\Campaigns\Actions;
 use App\Domains\Campaigns\Jobs\SendTrainingReminderJob;
 use App\Domains\Campaigns\Models\Campaign;
 use App\Domains\Campaigns\Models\CampaignRecipient;
-use App\Domains\Campaigns\Models\TrainingAssignment;
 use App\Domains\Notifications\Actions\CreateUserNotification;
 use App\Domains\Notifications\Models\UserNotification;
 use App\Domains\Notifications\Support\ResolveUsersFromTargets;
 use App\Domains\Realtime\Support\PublishLive;
-use App\Domains\TargetsGroups\Models\Group;
 use App\Domains\TargetsGroups\Models\Target;
-use App\Domains\TrainingLms\Models\Enrollment;
+use Carbon\CarbonInterface;
+use Illuminate\Validation\ValidationException;
 
 class LaunchTrainingCampaign
 {
+    public function __construct(private CreateTrainingAssignments $assignments) {}
+
     /**
      * @param  list<int>  $targetIds
      * @param  list<int>  $groupIds  Groups the campaign was sent to, in request order.
@@ -27,59 +28,35 @@ class LaunchTrainingCampaign
             fn (int $id): bool => $id > 0,
         ));
 
+        $courses = $campaign->courses()->get();
+        if ($courses->isEmpty()) {
+            throw ValidationException::withMessages([
+                'course_ids' => ['Add at least one course to this campaign before launching it.'],
+            ]);
+        }
+        $courseLabel = $courses->pluck('title')->implode(', ');
+
         $targets = Target::query()->with('groups')->whereIn('id', $targetIds)->get();
-        $courseId = (int) $campaign->course_id;
-        $campaign->loadMissing('course');
-        $courseTitle = (string) ($campaign->course?->title ?? 'Training');
 
         foreach ($targets as $target) {
-            $enrollment = Enrollment::query()->firstOrCreate(
-                [
-                    'course_id' => $courseId,
-                    'target_id' => $target->id,
-                ],
-                [
-                    'status' => 'assigned',
-                    'progress' => 0,
-                    'opened_at' => null,
-                ],
-            );
-
+            // One recipient per learner: a single reminder covers every course in the campaign.
             $recipient = CampaignRecipient::query()->create([
                 'campaign_id' => $campaign->id,
                 'target_id' => $target->id,
                 'status' => 'pending',
             ]);
 
-            $group = $this->attributeGroup($target, $groupIds);
-            $assignment = TrainingAssignment::query()->firstOrCreate(
-                [
-                    'campaign_id' => $campaign->id,
-                    'course_id' => $courseId > 0 ? $courseId : null,
-                    'target_id' => $target->id,
-                    'group_id' => $group['id'],
-                ],
-                [
-                    'campaign_name' => (string) $campaign->name,
-                    'course_title' => $courseTitle,
-                    'target_name' => $this->targetName($target),
-                    'target_email' => (string) $target->email,
-                    'group_name' => $group['name'],
-                    'enrollment_id' => $enrollment->id,
-                    'recipient_id' => $recipient->id,
-                    'is_remedial' => (bool) $campaign->is_remedial,
-                    'status' => 'no_action',
-                ],
-            );
+            $this->assignments->handle($campaign, $courses, $target, $groupIds, $recipient);
 
-            SendTrainingReminderJob::dispatch($recipient->id, $enrollment->id, $assignment->id);
+            SendTrainingReminderJob::dispatch($recipient->id);
         }
 
         $campaign->forceFill([
             'status' => 'running',
-            'starts_at' => $campaign->starts_at ?? now(),
+            'starts_at' => $this->effectiveStartsAt($campaign),
         ])->save();
 
+        $courseIds = $courses->pluck('id')->map(intval(...))->all();
         $userIds = app(ResolveUsersFromTargets::class)->handle($targetIds);
         $notify = app(CreateUserNotification::class);
         foreach ($userIds as $userId) {
@@ -87,11 +64,12 @@ class LaunchTrainingCampaign
                 $userId,
                 UserNotification::TYPE_TRAINING_ASSIGNED,
                 'Training assigned',
-                $courseTitle,
+                $courseLabel,
                 [
-                    'link' => '/learn',
-                    'entity_id' => $courseId,
-                    'course_id' => $courseId,
+                    'link' => '/portal',
+                    'entity_id' => $courseIds[0],
+                    'course_id' => $courseIds[0],
+                    'course_ids' => $courseIds,
                     'campaign_id' => $campaign->id,
                 ],
             );
@@ -99,39 +77,16 @@ class LaunchTrainingCampaign
 
         PublishLive::metricsBundle();
 
-        return $campaign->fresh(['recipients', 'course']) ?? $campaign;
+        return $campaign->fresh(['recipients', 'courses']) ?? $campaign;
     }
 
     /**
-     * The group the send is attributed to: the first requested group the
-     * person belonged to, otherwise their first group, otherwise Direct.
-     *
-     * @param  list<int>  $groupIds
-     * @return array{id: int|null, name: string}
+     * A launch before the scheduled start (for example a manual launch from Filament) starts the campaign now.
      */
-    private function attributeGroup(Target $target, array $groupIds): array
+    private function effectiveStartsAt(Campaign $campaign): CarbonInterface
     {
-        $memberships = $target->groups->keyBy(fn (Group $group): int => (int) $group->id);
+        $startsAt = $campaign->starts_at;
 
-        foreach ($groupIds as $groupId) {
-            $group = $memberships->get($groupId);
-            if ($group instanceof Group) {
-                return ['id' => (int) $group->id, 'name' => (string) $group->name];
-            }
-        }
-
-        $fallback = $target->groups->sortBy('name')->first();
-        if ($fallback instanceof Group) {
-            return ['id' => (int) $fallback->id, 'name' => (string) $fallback->name];
-        }
-
-        return ['id' => null, 'name' => 'Direct'];
-    }
-
-    private function targetName(Target $target): string
-    {
-        $name = trim(((string) $target->first_name).' '.((string) $target->last_name));
-
-        return $name !== '' ? $name : (string) $target->email;
+        return $startsAt === null || $startsAt->isFuture() ? now() : $startsAt;
     }
 }

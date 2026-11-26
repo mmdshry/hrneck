@@ -24,7 +24,8 @@ Track implementation status for HRNECK.
 - [x] Realtime WebSocket (Laravel Reverb + Echo): MSP + org Refresh-live pages use private channel snapshot/updated (no manual refresh)
 - [x] Org shell sidebar (Dashboard, Organizations/MSP, Training, Courses, Checklists, Ticketing, Employees, Departments, Groups, Users, Roles, Reporting, Export, Announcements, Settings, Guides)
 - [x] Filament full admin (`admin.hrneck.test/admin`): Tenant Switcher (`filament_tenant_id`) + central directory + full tenant ops/settings/reporting
-- [ ] SSO admin Entra OIDC (deferred)
+- [x] SSO sign-in with Google and Microsoft (Entra and personal accounts), global OAuth credentials, link-only to pre-provisioned users; see [auth.md](auth.md#single-sign-on-google-and-microsoft)
+- [ ] SSO admin per organization: own Entra/OIDC settings in Settings → Integrations (deferred)
 - [ ] Active/Purchased license cards (deferred to Billing)
 
 ### UI split
@@ -106,15 +107,35 @@ Track implementation status for HRNECK.
 ### Ticketing smoke (manual)
 
 1. Login org admin → `/org/ticketing` → create incident → add note/task → change stage
-2. Convert ticket to KB → confirm in `/org/ticketing/kb` and `/portal/kb`
+2. Convert ticket to KB → confirm in `/org/kb` and `/portal/kb`
 3. Configure email reader → Ingest test mail → ticket appears
 4. Force escalation (set `escalation_due_at` past) → run escalations job → level++
 5. `/portal/tickets` submit as portal user → add note
 6. Reports CSV download; export/import selected tickets
 
+## Subscription plans
+
+- [x] Plan catalog in the central DB (`subscription_plans`): employee and user limits (empty = unlimited), feature toggles, informational monthly price, active and default flags — Filament Directory → Subscription plans (platform staff only, audited)
+- [x] One subscription per organization (`tenant_subscriptions`): plan, status (`trial` / `active` / `suspended` / `expired`), `trial_ends_at`, `ends_at` — Filament Organizations → Plan & status (audited, realtime refresh)
+- [x] New organizations get the default plan; existing organizations were backfilled to it as `active`
+- [x] Organizations without a subscription row use the default plan; with no default plan nothing is restricted
+- [x] Employee seats (`max_employees`) enforced for new targets (`POST /org/targets`, CSV import, Filament Employees create and import) and for learner logins that create a new employee
+- [x] User seats (`max_users`) enforced for non-learner org users (`POST /org/users`, Filament Users); a user is counted as active memberships not linked to an employee
+- [x] Feature gates return HTTP 403 `plan_feature_disabled`: `learner_portal` (learner training routes), `training` (course management), `checklists`, `ticketing` (all ticketing groups including portal), `advanced_reporting` (detailed reports and exports), `white_label` (logo upload), `custom_domains` (domain settings; `enabled` flag reflects the plan)
+- [x] Limit breaches return HTTP 403 `plan_limit_reached` (message includes limit and usage)
+- [x] Read-only subscriptions (`suspended`, `expired`, a trial past `trial_ends_at`, or an active subscription past `ends_at`) keep every read working. Any other org API write (every method except GET/HEAD/OPTIONS under `/api/v1/org/*`) returns HTTP 403 `subscription_read_only` with the effective status; tenant data is unchanged. Filament and platform staff are not affected
+- [x] Trials expire automatically: `hrneck:expire-trial-subscriptions` runs hourly and moves trials past `trial_ends_at` to `expired` (audited as `tenant_subscription_expired`, source `schedule`). Platform staff can still change any status manually; the job does not expire active subscriptions
+- [x] Pennant feature flags resolve per organization from its plan; enforcement itself goes through `TenantEntitlements`
+- [x] `automation_rules` removed from the plan catalog because nothing implements it; add it back with a gate when an automation feature ships
+- [x] Plan usage in `/auth/me` (`subscription`: plan, status, effective status, read-only flag, `ends_at`, `over_limit`, and used/limit for employees and users) and in the org app: a read-only banner, an over-limit warning, and a usage card in Settings. `/msp` does not show plan usage yet
+- [ ] Disabled features are not shown in the org app yet (gated routes return 403 `plan_feature_disabled` only)
+- [ ] Confirm the read-only write scope with product: it currently blocks every org write, including learner progress, notification mark-read, exports, and chat messages
+- [x] Downgrade policy: lowering a limit below current usage keeps all rows, blocks new seats, and shows an over-limit warning in the org app
+- [ ] Payment gateway and self-service plan change (out of scope; platform staff assign plans manually)
+
 ## Platform
 
-- [x] Feature flags (Pennant) — informational / stored; not used as hard enforcement gates
+- [x] Feature flags (Pennant) — per-organization resolvers driven by the subscription plan; hard enforcement via `TenantEntitlements` (see Subscription plans)
 - [x] Audit log package installed
 - [x] Fleet-wide org CRUD activity logging (Spatie `activity_log` in tenant DB via `LogOrgActivity`)
 - [x] Filament Activity log resource (read-only; HRneck platform staff + tenant switcher; not exposed to customers)

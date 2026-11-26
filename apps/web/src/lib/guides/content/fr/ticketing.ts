@@ -22,7 +22,7 @@ export const ticketingGuide: GuideModule = {
   ],
   openInAppHref: "/org/ticketing",
   overview:
-    "Le module ticketing couvre les bases du service desk ITIL pour les opérateurs dans /org/ticketing : bureaux, tickets avec notes/tâches/pièces jointes, actions en masse, procédures et escalade, politiques SLA, lecteurs e-mail IMAP, articles KB (y compris la conversion ticket→KB), Tout rechercher, préférences et rapports CSV/PDF/JSON. Les employés soumettent et suivent le travail dans le portail de service séparé (/portal)—voir ce guide pour les étapes utilisateur final. Les permissions se répartissent entre org.ticketing.tickets, .admin, .kb, .reports et .portal, avec les rôles seed sd_* / kb_admin.",
+    "Le module ticketing couvre les bases du service desk ITIL pour les opérateurs dans /org/ticketing : bureaux, tickets avec notes/tâches/pièces jointes, actions en masse, procédures et escalade, politiques SLA, lecteurs e-mail IMAP, articles KB (y compris la conversion ticket→KB), Tout rechercher, préférences et rapports CSV/PDF/JSON. Les employés soumettent et suivent le travail dans le portail de service séparé (/portal)—voir ce guide pour les étapes utilisateur final. Les permissions se répartissent entre org.ticketing.tickets, .admin, .reports et .portal, avec les rôles seed sd_* / kb_admin. Les articles KB ont leur propre section (/org/kb) avec les permissions org.kb.view et org.kb.manage.",
   example: {
     title: "Un signalement de phishing devient un article KB",
     narrative:
@@ -46,7 +46,7 @@ export const ticketingGuide: GuideModule = {
     {
       title: "Publiez la connaissance et exportez",
       body: "Convertissez les tickets résolus en KB, vérifiez Tout rechercher / la visibilité portail, puis exportez des packages CSV/PDF ou JSON.",
-      href: "/org/ticketing/kb",
+      href: "/org/kb",
     },
   ],
   sections: [
@@ -125,7 +125,7 @@ export const ticketingGuide: GuideModule = {
         {
           title: "Rédigez et publiez des articles",
           body: "Créez, modifiez, publiez/dépubliez ou supprimez des articles KB. Les brouillons non publiés restent hors du portail employé.",
-          href: "/org/ticketing/kb",
+          href: "/org/kb",
         },
         {
           title: "Convertissez ticket → KB",

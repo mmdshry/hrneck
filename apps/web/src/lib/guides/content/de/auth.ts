@@ -15,10 +15,14 @@ export const authGuide: GuideModule = {
     "verifizierung",
     "sitzung",
     "totp",
+    "sso",
+    "google",
+    "microsoft",
+    "passkey",
   ],
   openInAppHref: "/login",
   overview:
-    "HRNECK nutzt Cookie-Sitzungen auf Tenant-Hosts ({slug}.hrneck.test) und dem App-Alias. Die Anmeldung unterstützt Angemeldet bleiben, eine E-Mail-Verifizierungsschranke (von Admins erstellte Benutzer sind typischerweise bereits verifiziert), TOTP-MFA mit einmaligen Wiederherstellungscodes sowie Vergessen-/Zurücksetzen-/Ändern-Flows für Passwörter. MFA-Einrichtung und -Deaktivierung liegen unter Einstellungen → MFA für angemeldete Operatoren. Plattform-Mitarbeiter und Org-Benutzer teilen dieselben Login-Seiten, landen aber je nach Rolle auf /msp oder /org. Eine Passwortänderung löscht jeden Staff-Tenant-Kontext.",
+    "HRNECK nutzt Cookie-Sitzungen auf Tenant-Hosts ({slug}.hrneck.test) und dem App-Alias. Die Anmeldung unterstützt Angemeldet bleiben, eine E-Mail-Verifizierungsschranke (von Admins erstellte Benutzer sind typischerweise bereits verifiziert), Mit Google oder Microsoft fortfahren für Konten, die ein Administrator bereits angelegt hat, TOTP-MFA oder Passkeys als zweiten Faktor mit einmaligen Wiederherstellungscodes sowie Vergessen-/Zurücksetzen-/Ändern-Flows für Passwörter. Einrichtung, Passkeys und Deaktivierung von MFA liegen unter Einstellungen → MFA für angemeldete Operatoren. Plattform-Mitarbeiter und Org-Benutzer teilen dieselben Login-Seiten, landen aber je nach Rolle auf /msp oder /org. Eine Passwortänderung löscht jeden Staff-Tenant-Kontext.",
   example: {
     title: "Org-Admin stellt Zugang vor dem Launch wieder her",
     narrative:
@@ -32,11 +36,11 @@ export const authGuide: GuideModule = {
     },
     {
       title: "Anmelden",
-      body: "E-Mail und Passwort mit optionalem Angemeldet bleiben. Nicht verifizierte E-Mails werden blockiert, bis die Verifizierung abgeschlossen ist.",
+      body: "Nutzen Sie E-Mail und Passwort mit optionalem Angemeldet bleiben oder Mit Google fortfahren bzw. Mit Microsoft fortfahren, sobald diese Schaltfläche erscheint. Nicht verifizierte E-Mails werden blockiert, bis die Verifizierung abgeschlossen ist.",
     },
     {
       title: "MFA bei Aufforderung abschließen",
-      body: "Geben Sie den TOTP-Code unter /login/mfa ein. Wenn Sie den Authenticator verlieren, nutzen Sie einen einmaligen Wiederherstellungscode und melden Sie MFA erneut an.",
+      body: "Geben Sie auf /login/mfa den Code aus Ihrer Authenticator-App ein oder wählen Sie Mit Passkey anmelden, wenn Sie einen Passkey hinzugefügt haben. Wenn Sie beides verlieren, nutzen Sie einen einmaligen Wiederherstellungscode und richten Sie MFA erneut ein.",
       href: "/login/mfa",
     },
     {
@@ -46,7 +50,7 @@ export const authGuide: GuideModule = {
     },
     {
       title: "MFA in den Einstellungen verwalten",
-      body: "Angemeldete Operatoren richten MFA ein, bestätigen oder deaktivieren es und sehen Wiederherstellungscodes unter Einstellungen → MFA.",
+      body: "Angemeldete Operatoren richten MFA ein, bestätigen oder deaktivieren es, fügen Passkeys hinzu oder entfernen sie und sehen Wiederherstellungscodes unter Einstellungen → MFA. Das Entfernen eines Passkeys verlangt Ihr Kontopasswort. Das Deaktivieren von MFA verlangt Ihr Passwort und einen Code oder Passkey und entfernt alle Passkeys.",
       href: "/org/settings/mfa",
     },
   ],
@@ -60,11 +64,24 @@ export const authGuide: GuideModule = {
         },
         {
           title: "Plattform-Mitarbeiter",
-          body: "platform_super_admin / platform_agent nutzen /msp und betreten optional einen Tenant. Filament-MFA verwendet dieselben Authenticator-Spalten auf admin.hrneck.test.",
+          body: "platform_super_admin / platform_agent nutzen /msp und betreten optional einen Tenant. Filament-MFA auf admin.hrneck.test unterstützt nur eine Authenticator-App. Passkeys werden dort noch nicht angeboten.",
         },
         {
           title: "Lernende und Portalnutzer",
-          body: "Dieselben Login-Seiten; nach der Sitzungserstellung öffnen sie /learn oder /portal basierend auf Berechtigungen und Einschreibung.",
+          body: "Dieselben Login-Seiten; nach der Sitzungserstellung öffnen sie /org (Org-Admins) oder /portal (Mitarbeiter-Dashboard) je nach Berechtigungen.",
+        },
+      ],
+    },
+    {
+      title: "Anmeldeoptionen",
+      steps: [
+        {
+          title: "Google oder Microsoft (SSO)",
+          body: "Die Login-Seite zeigt Mit Google fortfahren oder Mit Microsoft fortfahren nur, wenn Ihre Organisation diesen Anbieter eingerichtet hat. SSO funktioniert nur für Konten, die ein Administrator bereits angelegt hat: Es erstellt nie einen Benutzer und verknüpft ein bestehendes Konto über die E-Mail-Adresse nur, wenn der Anbieter diese bestätigt. Ihr Identitätsanbieter übernimmt das MFA, daher erscheint nach SSO keine MFA-Abfrage von HRNECK. Die Anmeldung mit Passwort bleibt neben SSO verfügbar.",
+        },
+        {
+          title: "Passkeys",
+          body: "Ein Passkey, etwa auf diesem Gerät oder als Sicherheitsschlüssel, kann Ihr zweiter Faktor auf /login/mfa neben der Authenticator-App sein. Fügen Sie Passkeys unter Einstellungen → MFA hinzu. Der erste hinzugefügte Faktor aktiviert MFA und zeigt Wiederherstellungscodes nur einmal an, bewahren Sie diese sicher auf. Passkeys benötigen eine sichere Verbindung (https:// oder localhost) und funktionieren nicht auf einer benutzerdefinierten Domain eines Tenants.",
         },
       ],
     },
@@ -100,7 +117,7 @@ export const authGuide: GuideModule = {
     },
     rows: [
       { title: "/login", meta: "E-Mail + Passwort" },
-      { title: "/login/mfa", meta: "TOTP · Wiederherstellungscodes" },
+      { title: "/login/mfa", meta: "TOTP · Passkey · Wiederherstellungscodes" },
       { title: "/login/forgot", meta: "Zurücksetzen-E-Mail" },
     ],
     annotations: [

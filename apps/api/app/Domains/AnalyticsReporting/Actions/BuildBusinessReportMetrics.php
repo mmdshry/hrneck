@@ -4,6 +4,7 @@ namespace App\Domains\AnalyticsReporting\Actions;
 
 use App\Domains\Campaigns\Models\TrainingAssignment;
 use App\Domains\Campaigns\Models\TrainingAssignmentEvent;
+use App\Support\OrgTimezone;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -22,9 +23,9 @@ class BuildBusinessReportMetrics
     /**
      * @return array<string, mixed>
      */
-    public function handle(string $periodKey, string $timezone = 'UTC', bool $includeTraining = true): array
+    public function handle(string $periodKey, ?string $timezone = null, bool $includeTraining = true): array
     {
-        $period = $this->periods->parse($periodKey, $timezone);
+        $period = $this->periods->parse($periodKey, $timezone ?? OrgTimezone::current());
         $organization = $this->organizationName();
         $assignments = $includeTraining
             ? $this->loadAssignments($period['previous_start'], $period['end'])
@@ -87,7 +88,7 @@ class BuildBusinessReportMetrics
             'timezone' => $period['timezone'],
             'brand' => (string) config('brand.name'),
             'organization' => $organization,
-            'generated_at' => now('UTC')->format('m/d/Y H:i').' UTC',
+            'generated_at' => now($period['timezone'])->format('m/d/Y H:i').' '.$period['timezone'],
             'contents' => [
                 ['number' => '01', 'title' => 'Summary'],
                 ['number' => '02', 'title' => 'Training & Awareness Details'],

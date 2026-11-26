@@ -55,4 +55,13 @@ else
   echo "WARN: pm2 not found; skip process reload" >&2
 fi
 
+echo "==> Health check"
+API_URL="$(grep -E '^APP_URL=' "$ROOT/apps/api/.env" | tail -n 1 | cut -d= -f2- | tr -d '\r"' || true)"
+if [[ -z "$API_URL" ]]; then
+  echo "ERROR: APP_URL is not set in apps/api/.env" >&2
+  exit 1
+fi
+curl --fail --silent --show-error --retry 5 --retry-delay 3 "${API_URL%/}/api/v1/health" > /dev/null
+echo "Health OK: ${API_URL%/}/api/v1/health"
+
 echo "==> Deploy complete"

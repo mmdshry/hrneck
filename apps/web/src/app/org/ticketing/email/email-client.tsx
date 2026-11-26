@@ -1,20 +1,17 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
 import { Panel } from "@/components/ui/panel";
-import { Select } from "@/components/ui/select";
 import { useDataTableQuery } from "@/hooks/use-data-table-query";
-import { liveStatusLabel, useLiveTopic } from "@/hooks/use-live-topic";
+import { liveStatusLabel, useLiveStatusLabels, useLiveTopic } from "@/hooks/use-live-topic";
 import { api, ensureCsrf, fetchSessionUser } from "@/lib/api";
 import { serializeDataTableQuery } from "@/lib/data-table-query";
 import { orgLiveChannel } from "@/lib/live-topics";
@@ -28,41 +25,16 @@ import {
   type PaginationMeta,
 } from "@/lib/pagination";
 import { hasPermission, type SessionUser } from "@/lib/session";
+import { matchesCells } from "@/lib/table-filter";
 import { resolveTenant } from "@/lib/tenant";
 import { toastError, toastSuccess } from "@/lib/toast";
 import type { SdDesk } from "../ticketing-types";
-
-type Reader = {
-  id: number;
-  name: string;
-  desk_id: number;
-  host: string;
-  port?: number;
-  username: string;
-  is_active: boolean;
-  last_polled_at?: string | null;
-};
+import type { Reader, ReaderMode } from "./email-reader-logic";
+import { EmailReaderWizard } from "./email-reader-wizard";
 
 type ReadersPayload = {
   data: Reader[];
 };
-
-function matchesCells(
-  q: string,
-  columnFilters: Record<string, string>,
-  cells: Record<string, string>,
-): boolean {
-  const needle = q.trim().toLowerCase();
-  if (needle && !Object.values(cells).join(" ").toLowerCase().includes(needle)) {
-    return false;
-  }
-  for (const [key, raw] of Object.entries(columnFilters)) {
-    const value = raw.trim().toLowerCase();
-    if (!value) continue;
-    if (!String(cells[key] ?? "").toLowerCase().includes(value)) return false;
-  }
-  return true;
-}
 
 function readerCells(reader: Reader): Record<string, string> {
   return {
@@ -72,16 +44,6 @@ function readerCells(reader: Reader): Record<string, string> {
     active: reader.is_active ? "1" : "0",
   };
 }
-
-const emptyForm = {
-  name: "",
-  desk_id: "",
-  host: "127.0.0.1",
-  port: "993",
-  username: "",
-  password: "",
-  is_active: true,
-};
 
 export function EmailClient() {
   const t = useTranslations("org.ticketing");
@@ -95,9 +57,10 @@ export function EmailClient() {
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState<PageSize>(DEFAULT_PAGE_SIZE);
   const [desks, setDesks] = useState<SdDesk[]>([]);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  /** Open reader wizard: `reader` is the reader being edited, or null for the add flow. */
+  const [editor, setEditor] = useState<{ reader: Reader | null } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Reader | null>(null);
-  const [form, setForm] = useState(emptyForm);
+  const [pendingIngest, setPendingIngest] = useState<Reader | null>(null);
   const [loading, setLoading] = useState(true);
   const tableQuery = useDataTableQuery();
   const filters = useMemo(
@@ -142,13 +105,6 @@ export function EmailClient() {
     const deskParsed = parsePaginatedResponse<SdDesk>(deskList, 100);
     const deskItems = deskParsed.data.filter((d) => d.type !== "kb");
     setDesks(deskItems);
-    setForm((f) => {
-      if (f.desk_id || !deskItems[0]) return f;
-      return {
-        ...f,
-        desk_id: String(deskItems.find((d) => d.type === "incident")?.id ?? deskItems[0].id),
-      };
-    });
   }, []);
 
   const refreshFromApi = useCallback(
@@ -231,7 +187,8 @@ export function EmailClient() {
     tCommon,
   ]);
 
-  const statusLabel = liveStatusLabel(status);
+  const liveLabels = useLiveStatusLabels();
+  const statusLabel = liveStatusLabel(status, liveLabels);
 
   async function afterMutation() {
     if (liveReaders === null) {
@@ -239,77 +196,11 @@ export function EmailClient() {
     }
   }
 
-  function startEdit(reader: Reader) {
-    setEditingId(reader.id);
-    setForm({
-      name: reader.name,
-      desk_id: String(reader.desk_id),
-      host: reader.host,
-      port: String(reader.port ?? 993),
-      username: reader.username,
-      password: "",
-      is_active: reader.is_active,
-    });
-  }
-
-  function resetForm() {
-    setEditingId(null);
-    setForm({
-      ...emptyForm,
-      desk_id: desks[0]
-        ? String(desks.find((d) => d.type === "incident")?.id ?? desks[0].id)
-        : "",
-    });
-  }
-
-  async function onSubmit(event: FormEvent) {
-    event.preventDefault();
-    try {
-      await ensureCsrf();
-      if (editingId !== null) {
-        const payload: Record<string, unknown> = {
-          name: form.name,
-          desk_id: Number(form.desk_id),
-          host: form.host,
-          port: Number(form.port),
-          username: form.username,
-          encryption: "ssl",
-          is_active: form.is_active,
-        };
-        if (form.password.trim()) {
-          payload.password = form.password;
-        }
-        await api(`/api/v1/org/ticketing/email-readers/${editingId}`, {
-          method: "PATCH",
-          tenant: resolveTenant(),
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        toastSuccess(t("readerUpdated"));
-      } else {
-        await api("/api/v1/org/ticketing/email-readers", {
-          method: "POST",
-          tenant: resolveTenant(),
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: form.name,
-            desk_id: Number(form.desk_id),
-            host: form.host,
-            port: Number(form.port),
-            username: form.username,
-            password: form.password,
-            encryption: "ssl",
-            is_active: form.is_active,
-          }),
-        });
-        toastSuccess(t("readerCreated"));
-        setPage(1);
-      }
-      resetForm();
-      await afterMutation();
-    } catch (err) {
-      toastError(err instanceof Error ? err.message : tCommon("saveFailed"));
+  async function handleSaved(mode: ReaderMode) {
+    if (mode === "create") {
+      setPage(1);
     }
+    await afterMutation();
   }
 
   async function deleteReader(reader: Reader) {
@@ -318,7 +209,6 @@ export function EmailClient() {
       method: "DELETE",
       tenant: resolveTenant(),
     });
-    if (editingId === reader.id) resetForm();
     toastSuccess(t("readerDeleted"));
     await afterMutation();
   }
@@ -389,7 +279,7 @@ export function EmailClient() {
             type="button"
             variant="outline"
             size="compact"
-            onClick={() => startEdit(reader)}
+            onClick={() => setEditor({ reader })}
           >
             {tCommon("edit")}
           </Button>
@@ -397,7 +287,7 @@ export function EmailClient() {
             type="button"
             variant="outline"
             size="compact"
-            onClick={() => void ingestTest(reader.id)}
+            onClick={() => setPendingIngest(reader)}
           >
             {t("ingestTestMail")}
           </Button>
@@ -437,101 +327,16 @@ export function EmailClient() {
             : t("emailDescription")
         }
         actions={
-          <LinkButton href="/org/ticketing" variant="outline">
-            {t("queue")}
-          </LinkButton>
+          <>
+            <LinkButton href="/org/ticketing" variant="outline">
+              {t("queue")}
+            </LinkButton>
+            <Button type="button" onClick={() => setEditor({ reader: null })}>
+              {t("addReader")}
+            </Button>
+          </>
         }
       />
-      <Panel title={editingId !== null ? t("editReader") : t("addReader")}>
-        <form className="grid gap-3 md:grid-cols-2" onSubmit={onSubmit}>
-          <div className="space-y-1">
-            <Label htmlFor="email-reader-name">{tCommon("name")}</Label>
-            <Input
-              id="email-reader-name"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              required
-            />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="email-reader-desk">{tCommon("desk")}</Label>
-            <Select
-              id="email-reader-desk"
-              value={form.desk_id}
-              onChange={(e) => setForm({ ...form, desk_id: e.target.value })}
-              required
-            >
-              {desks.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="email-reader-host">{tCommon("host")}</Label>
-            <Input
-              id="email-reader-host"
-              value={form.host}
-              onChange={(e) => setForm({ ...form, host: e.target.value })}
-              required
-            />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="email-reader-port">{tCommon("port")}</Label>
-            <Input
-              id="email-reader-port"
-              value={form.port}
-              onChange={(e) => setForm({ ...form, port: e.target.value })}
-              required
-            />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="email-reader-username">{tCommon("username")}</Label>
-            <Input
-              id="email-reader-username"
-              value={form.username}
-              onChange={(e) => setForm({ ...form, username: e.target.value })}
-              required
-            />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="email-reader-password">
-              {editingId !== null ? t("passwordKeepHint") : t("password")}
-            </Label>
-            <Input
-              id="email-reader-password"
-              type="password"
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-              required={editingId === null}
-            />
-          </div>
-          {editingId !== null ? (
-            <div className="space-y-1">
-              <Label htmlFor="email-reader-active">{tCommon("active")}</Label>
-              <Select
-                id="email-reader-active"
-                value={form.is_active ? "1" : "0"}
-                onChange={(e) => setForm({ ...form, is_active: e.target.value === "1" })}
-              >
-                <option value="1">{tCommon("active")}</option>
-                <option value="0">{tCommon("inactive")}</option>
-              </Select>
-            </div>
-          ) : null}
-          <div className="flex flex-wrap gap-2 md:col-span-2">
-            <Button type="submit">
-              {editingId !== null ? tCommon("saveChanges") : t("saveReader")}
-            </Button>
-            {editingId !== null ? (
-              <Button type="button" variant="outline" onClick={resetForm}>
-                {tCommon("cancel")}
-              </Button>
-            ) : null}
-          </div>
-        </form>
-      </Panel>
       <Panel title={t("configured")}>
         <DataTable
           mode="server"
@@ -562,12 +367,38 @@ export function EmailClient() {
         title={t("deleteEmailReader")}
         description={t("deleteEmailReaderConfirm", { name: pendingDelete?.name ?? "" })}
         confirmLabel={tCommon("delete")}
+        workingLabel={tCommon("working")}
+        errorFallback={tCommon("deleteFailed")}
+        closeLabel={tCommon("close")}
         variant="destructive"
         onConfirm={async () => {
           if (!pendingDelete) return;
           await deleteReader(pendingDelete);
         }}
       />
+      <ConfirmDialog
+        open={pendingIngest !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingIngest(null);
+        }}
+        title={t("ingestTestMail")}
+        description={t("ingestTestMailConfirm", { name: pendingIngest?.name ?? "" })}
+        confirmLabel={t("createTicket")}
+        workingLabel={tCommon("working")}
+        closeLabel={tCommon("close")}
+        onConfirm={async () => {
+          if (!pendingIngest) return;
+          await ingestTest(pendingIngest.id);
+        }}
+      />
+      {editor ? (
+        <EmailReaderWizard
+          reader={editor.reader}
+          desks={desks}
+          onClose={() => setEditor(null)}
+          onSaved={handleSaved}
+        />
+      ) : null}
     </div>
   );
 }

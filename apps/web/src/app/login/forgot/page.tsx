@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Panel } from "@/components/ui/panel";
 import { api, ensureCsrf } from "@/lib/api";
+import { tenantFromHostname } from "@/lib/tenant";
 import { toastError, toastSuccess } from "@/lib/toast";
 
 export default function ForgotPasswordPage() {
@@ -24,7 +25,10 @@ export default function ForgotPasswordPage() {
       const res = await api<{ message?: string }>("/api/v1/auth/password/forgot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({
+          email,
+          tenant: tenantFromHostname(window.location.hostname) ?? undefined,
+        }),
       });
       toastSuccess(res.message ?? t("resetSent"));
     } catch (err) {

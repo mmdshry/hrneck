@@ -34,7 +34,7 @@ describe("guides registry", () => {
       searchGuides("exit tenant").some((guide) => guide.slug === "msp"),
     ).toBe(true);
     expect(
-      searchGuides("/learn").some((guide) => guide.slug === "learner-portal"),
+      searchGuides("/portal").some((guide) => guide.slug === "learner-portal"),
     ).toBe(true);
   });
 
@@ -43,6 +43,15 @@ describe("guides registry", () => {
     expect(getGuide("service-portal")?.title).toMatch(/Service portal/i);
     expect(getGuide("msp")?.title).toMatch(/MSP/i);
     expect(getGuide("auth")?.title).toMatch(/Sign-in|MFA|password/i);
+  });
+
+  it("finds the auth guide by SSO and passkey terms", () => {
+    expect(searchGuides("passkey").some((guide) => guide.slug === "auth")).toBe(
+      true,
+    );
+    expect(searchGuides("microsoft").some((guide) => guide.slug === "auth")).toBe(
+      true,
+    );
   });
 
   it("builds guide hrefs", () => {

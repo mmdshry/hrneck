@@ -1,6 +1,7 @@
 <?php
 
 use App\Domains\AnalyticsReporting\Actions\DispatchDueReportSchedules;
+use App\Domains\Campaigns\Actions\LaunchDueScheduledCampaigns;
 use App\Domains\Ticketing\Jobs\PollTicketingEmailReadersJob;
 use App\Domains\Ticketing\Jobs\ProcessTicketEscalationsJob;
 use App\Domains\Ticketing\Jobs\SendDelayedTicketNotificationsJob;
@@ -24,9 +25,21 @@ Artisan::command('hrneck:dispatch-report-schedules', function (DispatchDueReport
     $this->info("Dispatched {$total} scheduled report(s).");
 })->purpose('Send due tenant report schedules via SMTP');
 
+Artisan::command('hrneck:launch-scheduled-campaigns', function (LaunchDueScheduledCampaigns $launcher) {
+    $total = 0;
+    foreach (Tenant::query()->cursor() as $tenant) {
+        Tenancy::initialize($tenant);
+        $total += $launcher->handle();
+        Tenancy::end();
+    }
+    $this->info("Launched {$total} scheduled training campaign(s).");
+})->purpose('Launch training campaigns whose start time has arrived');
+
+Schedule::command('hrneck:launch-scheduled-campaigns')->everyMinute()->withoutOverlapping();
 Schedule::command('hrneck:dispatch-report-schedules')->hourly();
 Schedule::command('hrneck:prune-report-archives')->daily();
 Schedule::command('hrneck:prune-activity-logs')->daily();
+Schedule::command('hrneck:expire-trial-subscriptions')->hourly()->withoutOverlapping();
 Schedule::job(new ProcessTicketEscalationsJob)->everyMinute();
 Schedule::job(new SendDelayedTicketNotificationsJob)->everyMinute();
 Schedule::job(new PollTicketingEmailReadersJob)->everyMinute();

@@ -15,10 +15,15 @@ export const authGuide: GuideModule = {
     "verificação",
     "sessão",
     "totp",
+    "sso",
+    "google",
+    "microsoft",
+    "passkey",
+    "chave de acesso",
   ],
   openInAppHref: "/login",
   overview:
-    "A HRNECK usa sessões por cookie nos hosts de tenant ({slug}.hrneck.test) e no alias da app. O início de sessão suporta lembrar-me, um filtro de verificação de e-mail (utilizadores criados por admin estão tipicamente já verificados), MFA TOTP com códigos de recuperação de utilização única, e fluxos de esquecer/repor/alterar palavra-passe. A configuração e desativação de MFA estão em Definições → MFA para operadores com sessão iniciada. A equipa da plataforma e os utilizadores da org partilham as mesmas páginas de login, mas chegam a /msp ou /org conforme a função. Alterar a palavra-passe limpa qualquer contexto de tenant de staff.",
+    "A HRNECK usa sessões por cookie nos hosts de tenant ({slug}.hrneck.test) e no alias da app. O início de sessão suporta lembrar-me, um filtro de verificação de e-mail (utilizadores criados por admin estão tipicamente já verificados), Continuar com o Google ou a Microsoft para contas que um administrador já criou, MFA TOTP ou chaves de acesso como segundo fator com códigos de recuperação de utilização única, e fluxos de esquecer/repor/alterar palavra-passe. A configuração, as chaves de acesso e a desativação do MFA estão em Definições → MFA para operadores com sessão iniciada. A equipa da plataforma e os utilizadores da org partilham as mesmas páginas de login, mas chegam a /msp ou /org conforme a função. Alterar a palavra-passe limpa qualquer contexto de tenant de staff.",
   example: {
     title: "Administrador da org recupera o acesso antes do lançamento",
     narrative:
@@ -32,11 +37,11 @@ export const authGuide: GuideModule = {
     },
     {
       title: "Inicie sessão",
-      body: "E-mail e palavra-passe com lembrar-me opcional. E-mails não verificados são bloqueados até a verificação ser concluída.",
+      body: "Use e-mail e palavra-passe com lembrar-me opcional, ou Continuar com o Google ou com a Microsoft quando esse botão aparecer. E-mails não verificados são bloqueados até a verificação ser concluída.",
     },
     {
       title: "Complete o MFA quando solicitado",
-      body: "Introduza o código TOTP em /login/mfa. Se perder o autenticador, use um código de recuperação de utilização única e volte a registar o MFA.",
+      body: "Em /login/mfa, introduza o código da sua app de autenticação ou escolha Entrar com chave de acesso se tiver adicionado uma. Se perder ambas, use um código de recuperação de utilização única e volte a registar o MFA.",
       href: "/login/mfa",
     },
     {
@@ -45,8 +50,8 @@ export const authGuide: GuideModule = {
       href: "/login/forgot",
     },
     {
-      title: "Gira o MFA nas Definições",
-      body: "Operadores com sessão iniciada configuram, confirmam ou desativam o MFA e veem códigos de recuperação em Definições → MFA.",
+      title: "Gerir o MFA nas Definições",
+      body: "Operadores com sessão iniciada configuram, confirmam ou desativam o MFA, adicionam ou removem chaves de acesso e veem os códigos de recuperação. Remover uma chave de acesso pede a sua palavra-passe. Desativar o MFA pede a sua palavra-passe e um código ou uma chave de acesso, e remove todas as chaves de acesso.",
       href: "/org/settings/mfa",
     },
   ],
@@ -60,11 +65,24 @@ export const authGuide: GuideModule = {
         },
         {
           title: "Equipa da plataforma",
-          body: "platform_super_admin / platform_agent usam /msp e opcionalmente entram num tenant. O MFA do Filament usa as mesmas colunas de autenticador em admin.hrneck.test.",
+          body: "platform_super_admin / platform_agent usam /msp e opcionalmente entram num tenant. O MFA do Filament em admin.hrneck.test suporta apenas uma app de autenticação. As chaves de acesso ainda não estão disponíveis aí.",
         },
         {
           title: "Formandos e utilizadores do portal",
-          body: "Mesmas páginas de login; após a criação da sessão abrem /learn ou /portal conforme permissões e inscrição.",
+          body: "Mesmas páginas de login; após a criação da sessão abrem /org (administradores da org) ou /portal (painel do colaborador) conforme as permissões.",
+        },
+      ],
+    },
+    {
+      title: "Opções de início de sessão",
+      steps: [
+        {
+          title: "Google ou Microsoft (SSO)",
+          body: "A página de login só mostra Continuar com o Google ou Continuar com a Microsoft quando a sua organização configurou esse fornecedor. O SSO funciona apenas com contas que um administrador já criou: nunca cria um utilizador e associa uma conta existente pelo e-mail apenas quando o fornecedor confirma esse endereço. O seu fornecedor de identidade trata do MFA, por isso o pedido de MFA do HRNECK não aparece após o SSO. O início de sessão com palavra-passe continua disponível junto ao SSO.",
+        },
+        {
+          title: "Chaves de acesso",
+          body: "Uma chave de acesso, como a deste dispositivo ou uma chave de segurança, pode ser o seu segundo fator em /login/mfa, junto da app de autenticação. Adicione chaves de acesso em Definições → MFA. O primeiro fator que adicionar ativa o MFA e mostra os códigos de recuperação uma única vez, por isso guarde-os. As chaves de acesso precisam de uma ligação segura (https:// ou localhost) e não funcionam num domínio personalizado de tenant.",
         },
       ],
     },
@@ -100,7 +118,7 @@ export const authGuide: GuideModule = {
     },
     rows: [
       { title: "/login", meta: "E-mail + palavra-passe" },
-      { title: "/login/mfa", meta: "TOTP · códigos de recuperação" },
+      { title: "/login/mfa", meta: "TOTP · chave de acesso · códigos de recuperação" },
       { title: "/login/forgot", meta: "E-mail de reposição" },
     ],
     annotations: [

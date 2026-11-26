@@ -35,7 +35,7 @@ export const targetsGroupsGuide: GuideModule = {
     },
     {
       title: "Create or import employees",
-      body: "Add or edit a person with the employee form (title, manager, hire date, phone, location, employment type, language, timezone, risk). Use Import employees for a wizard: upload any company CSV, map columns to platform fields (email required), optionally save a per-tenant mapping template, preview row errors, then commit. Auto-assign packs attach onboarding checklists and prefill role/start/manager from the profile.",
+      body: "Add or edit a person with the employee form (title, manager, hire date, phone, location, employment type, language, risk). Use Import employees for a wizard: upload any company CSV, map columns to platform fields (email required), optionally save a per-tenant mapping template, preview row errors, then commit. Auto-assign packs attach onboarding checklists and prefill role/start/manager from the profile.",
     },
     {
       title: "Open an employee profile",

@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
 import { useDataTableQuery } from "@/hooks/use-data-table-query";
-import { liveStatusLabel, useLiveTopic } from "@/hooks/use-live-topic";
+import { liveStatusLabel, useLiveStatusLabels, useLiveTopic } from "@/hooks/use-live-topic";
 import { api, ensureCsrf, fetchSessionUser } from "@/lib/api";
 import { serializeDataTableQuery } from "@/lib/data-table-query";
 import { orgLiveChannel } from "@/lib/live-topics";
@@ -25,6 +25,7 @@ import {
   type PageSize,
   type PaginationMeta,
 } from "@/lib/pagination";
+import { matchesCells } from "@/lib/table-filter";
 import { resolveTenant } from "@/lib/tenant";
 
 type Target = {
@@ -59,23 +60,6 @@ function groupCells(group: Group): Record<string, string> {
     name: group.name,
     targets_count: String(group.targets_count ?? group.target_ids?.length ?? 0),
   };
-}
-
-function matchesCells(
-  q: string,
-  columnFilters: Record<string, string>,
-  cells: Record<string, string>,
-): boolean {
-  const needle = q.trim().toLowerCase();
-  if (needle && !Object.values(cells).join(" ").toLowerCase().includes(needle)) {
-    return false;
-  }
-  for (const [key, raw] of Object.entries(columnFilters)) {
-    const value = raw.trim().toLowerCase();
-    if (!value) continue;
-    if (!String(cells[key] ?? "").toLowerCase().includes(value)) return false;
-  }
-  return true;
 }
 
 export function GroupsClient() {
@@ -216,7 +200,8 @@ export function GroupsClient() {
     tableQuery.debounced,
   ]);
 
-  const statusLabel = liveStatusLabel(status);
+  const liveLabels = useLiveStatusLabels();
+  const statusLabel = liveStatusLabel(status, liveLabels);
 
   async function afterMutation(nextPage = groupsPage) {
     if (liveGroups === null) {

@@ -1,20 +1,16 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
-import { Panel } from "@/components/ui/panel";
-import { Select } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { useDataTableQuery } from "@/hooks/use-data-table-query";
-import { liveStatusLabel, useLiveTopic } from "@/hooks/use-live-topic";
+import { liveStatusLabel, useLiveStatusLabels, useLiveTopic } from "@/hooks/use-live-topic";
 import { api, ensureCsrf, fetchSessionUser } from "@/lib/api";
 import { serializeDataTableQuery } from "@/lib/data-table-query";
 import { orgLiveChannel } from "@/lib/live-topics";
@@ -27,9 +23,11 @@ import {
   type PageSize,
   type PaginationMeta,
 } from "@/lib/pagination";
-import { hasPermission, type SessionUser } from "@/lib/session";
+import { hasAnyPermission, hasPermission, type SessionUser } from "@/lib/session";
+import { matchesCells } from "@/lib/table-filter";
 import { resolveTenant } from "@/lib/tenant";
-import { toastError, toastSuccess, toastInfo } from "@/lib/toast";
+import { toastError, toastInfo } from "@/lib/toast";
+import { CreateTemplateDialog } from "./create-template-dialog";
 import type { ChecklistTemplate } from "./checklist-types";
 
 type LiveTemplate = ChecklistTemplate & {
@@ -50,23 +48,6 @@ function normalizeTemplate(row: LiveTemplate): ChecklistTemplate {
       row.versions?.[0]?.version ??
       1,
   };
-}
-
-function matchesCells(
-  q: string,
-  columnFilters: Record<string, string>,
-  cells: Record<string, string>,
-): boolean {
-  const needle = q.trim().toLowerCase();
-  if (needle && !Object.values(cells).join(" ").toLowerCase().includes(needle)) {
-    return false;
-  }
-  for (const [key, raw] of Object.entries(columnFilters)) {
-    const value = raw.trim().toLowerCase();
-    if (!value) continue;
-    if (!String(cells[key] ?? "").toLowerCase().includes(value)) return false;
-  }
-  return true;
 }
 
 function templateCells(template: ChecklistTemplate): Record<string, string> {
@@ -95,6 +76,7 @@ export function ChecklistsClient() {
   const tenant = resolveTenant();
   const channel = tenant ? orgLiveChannel(tenant, "checklists") : null;
   const [session, setSession] = useState<SessionUser | null>(null);
+  const canManageChecklists = hasPermission(session, "org.checklists.manage");
   const [custom, setCustom] = useState<ChecklistTemplate[]>([]);
   const [liveAll, setLiveAll] = useState<ChecklistTemplate[] | null>(null);
   const [customMeta, setCustomMeta] = useState<PaginationMeta>(emptyMeta());
@@ -104,9 +86,8 @@ export function ChecklistsClient() {
   const [systemMeta, setSystemMeta] = useState<PaginationMeta>(emptyMeta());
   const [systemPage, setSystemPage] = useState(1);
   const [systemPerPage, setSystemPerPage] = useState<PageSize>(DEFAULT_PAGE_SIZE);
-  const [name, setName] = useState("");
-  const [category, setCategory] = useState("custom");
-  const [description, setDescription] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [copyTarget, setCopyTarget] = useState<ChecklistTemplate | null>(null);
   const [loading, setLoading] = useState(true);
   const customQuery = useDataTableQuery();
   const systemQuery = useDataTableQuery();
@@ -272,36 +253,10 @@ export function ChecklistsClient() {
     systemQuery.debounced,
   ]);
 
-  const statusLabel = liveStatusLabel(status);
-
-  async function onCreate(event: FormEvent) {
-    event.preventDefault();
-    
-    try {
-      await ensureCsrf();
-      const created = await api<{ data: ChecklistTemplate }>("/api/v1/org/checklists/templates", {
-        method: "POST",
-        tenant: resolveTenant(),
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          category,
-          description: description || null,
-          status: "draft",
-          schema_json: { items: [] },
-        }),
-      });
-      setName("");
-      setDescription("");
-      toastSuccess(t("templateCreated"));
-      window.location.href = `/org/checklists/${created.data.id}`;
-    } catch (err) {
-      toastError(err instanceof Error ? err.message : tCommon("createFailed"));
-    }
-  }
+  const liveLabels = useLiveStatusLabels();
+  const statusLabel = liveStatusLabel(status, liveLabels);
 
   async function copySystem(id: number) {
-    
     try {
       await ensureCsrf();
       const copied = await api<{ data: ChecklistTemplate }>(
@@ -389,7 +344,8 @@ export function ChecklistsClient() {
           type="button"
           variant="outline"
           size="compact"
-          onClick={() => void copySystem(template.id)}
+          disabled={!canManageChecklists}
+          onClick={() => setCopyTarget(template)}
         >
           {t("useTemplate")}
         </Button>
@@ -401,7 +357,7 @@ export function ChecklistsClient() {
     return <PageSkeleton className="max-w-5xl" />;
   }
 
-  if (session && !hasPermission(session, "org.checklists.manage")) {
+  if (session && !hasAnyPermission(session, ["org.checklists.view", "org.checklists.manage"])) {
     return (
       <div className="mx-auto w-full max-w-5xl flex-1 space-y-4 px-4 py-8 sm:px-6">
         <PageHeader title={t("title")} description={t("description")} />
@@ -425,43 +381,31 @@ export function ChecklistsClient() {
             <LinkButton href="/org/checklists/instances" variant="secondary">
               {t("openInstances")}
             </LinkButton>
+            {canManageChecklists ? (
+              <Button type="button" onClick={() => setCreateOpen(true)}>
+                {t("newTemplate")}
+              </Button>
+            ) : null}
           </div>
         }
       />
 
-      
-      
+      {createOpen ? <CreateTemplateDialog onClose={() => setCreateOpen(false)} /> : null}
 
-      <Panel className="p-4">
-        <h2 className="mb-3 text-sm font-semibold">{t("newTemplate")}</h2>
-        <form onSubmit={onCreate} className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label htmlFor="cl-name">{tCommon("name")}</Label>
-            <Input id="cl-name" value={name} onChange={(e) => setName(e.target.value)} required />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="cl-cat">{tCommon("category")}</Label>
-            <Select id="cl-cat" value={category} onChange={(e) => setCategory(e.target.value)}>
-              <option value="onboarding">{t("onboarding")}</option>
-              <option value="offboarding">{t("offboarding")}</option>
-              <option value="hr_ops">{t("hrOps")}</option>
-              <option value="custom">{t("custom")}</option>
-            </Select>
-          </div>
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label htmlFor="cl-desc">{tCommon("descriptionLabel")}</Label>
-            <Textarea
-              id="cl-desc"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={2}
-            />
-          </div>
-          <div>
-            <Button type="submit">{t("createAndDesign")}</Button>
-          </div>
-        </form>
-      </Panel>
+      {copyTarget ? (
+        <ConfirmDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setCopyTarget(null);
+          }}
+          title={t("copyTemplateTitle")}
+          description={t("copyTemplateDescription", { name: copyTarget.name })}
+          confirmLabel={t("useTemplate")}
+          cancelLabel={tCommon("cancel")}
+          workingLabel={tCommon("working")}
+          onConfirm={() => copySystem(copyTarget.id)}
+        />
+      ) : null}
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold">{t("yourTemplates")}</h2>

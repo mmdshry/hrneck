@@ -1,6 +1,7 @@
 <?php
 
 return [
+    'page_of' => 'Page :current of :total',
     'prepared_for' => ':brand Report prepared for :organization.',
     'confidential' => 'This report contains confidential information, unauthorized use is strictly prohibited.',
     'generated_at' => 'Report is generated at :datetime.',
@@ -105,6 +106,7 @@ return [
     'col_quiz' => 'Quiz',
     'no_enrollment_rows' => 'No enrollment rows for the current filters.',
     'truncated_footer' => 'Showing the first :max rows. Download CSV for the full export.',
+    'row_cap_reached' => 'Only the first :max rows are included. Narrow the period or desk to see the rest.',
 
     'icon_no_action' => 'No action',
     'icon_incomplete' => 'Incomplete',

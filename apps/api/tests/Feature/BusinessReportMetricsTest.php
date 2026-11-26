@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Models\TrainingAssignment;
 use App\Domains\Campaigns\Models\TrainingAssignmentEvent;
 use App\Domains\TargetsGroups\Models\Group;
 use App\Domains\TargetsGroups\Models\Target;
+use App\Domains\TrainingLms\Actions\RecordTrainingAttestation;
 use App\Domains\TrainingLms\Actions\SyncEnrollmentProgress;
 use App\Domains\TrainingLms\Models\Course;
 use App\Domains\TrainingLms\Models\Enrollment;
@@ -371,8 +372,8 @@ test('launch freezes the group and name from the moment of send', function () {
         'name' => 'Component Surfaces - January',
         'type' => 'training',
         'status' => 'draft',
-        'course_id' => $course->id,
     ]);
+    $campaign->courses()->attach($course->id, ['sort_order' => 0]);
     app(LaunchTrainingCampaign::class)->handle($campaign, [$target->id], [$group->id]);
 
     $course->update(['title' => 'Renamed course']);
@@ -421,8 +422,8 @@ test('a second campaign for the same course keeps its own outcome', function () 
             'name' => $name,
             'type' => 'training',
             'status' => 'draft',
-            'course_id' => $course->id,
         ]);
+        $campaign->courses()->attach($course->id, ['sort_order' => 0]);
         app(LaunchTrainingCampaign::class)->handle($campaign, [$target->id]);
     }
 
@@ -434,12 +435,14 @@ test('a second campaign for the same course keeps its own outcome', function () 
         'progress_pct' => 100,
         'completed_at' => now(),
     ]);
+    // Finishing the lessons leaves the course awaiting attestation; accepting it passes it.
     app(SyncEnrollmentProgress::class)->recompute($enrollment->fresh(['course.lessons', 'course.quizzes']));
+    app(RecordTrainingAttestation::class)->handle($enrollment->fresh(), null, null);
 
     $assignments = TrainingAssignment::query()->orderBy('id')->get();
     expect($assignments)->toHaveCount(2)
         ->and($assignments[0]->events()->pluck('type')->all())->toBe(['sent'])
-        ->and($assignments[1]->events()->orderBy('occurred_at')->pluck('type')->all())->toBe(['sent', 'passed']);
+        ->and($assignments[1]->events()->orderBy('id')->pluck('type')->all())->toBe(['sent', 'started', 'passed']);
 });
 
 test('a january failure stays failed after a february pass', function () {
@@ -475,8 +478,8 @@ test('a january failure stays failed after a february pass', function () {
         'name' => 'Quiz wave',
         'type' => 'training',
         'status' => 'draft',
-        'course_id' => $course->id,
     ]);
+    $campaign->courses()->attach($course->id, ['sort_order' => 0]);
     app(LaunchTrainingCampaign::class)->handle($campaign, [$target->id]);
 
     $enrollment = Enrollment::query()->where('target_id', $target->id)->where('course_id', $course->id)->firstOrFail();
@@ -507,12 +510,13 @@ test('a january failure stays failed after a february pass', function () {
         'answers' => [0],
     ]);
     app(SyncEnrollmentProgress::class)->recompute($enrollment->fresh(['course.lessons', 'course.quizzes']));
+    app(RecordTrainingAttestation::class)->handle($enrollment->fresh(), null, null);
 
     $january = app(BuildBusinessReportMetrics::class)->handle('2026-01', 'UTC');
     $february = app(BuildBusinessReportMetrics::class)->handle('2026-02', 'UTC');
-    $types = TrainingAssignmentEvent::query()->orderBy('occurred_at')->pluck('type')->all();
+    $types = TrainingAssignmentEvent::query()->orderBy('id')->pluck('type')->all();
 
-    expect($types)->toBe(['sent', 'failed', 'passed'])
+    expect($types)->toBe(['sent', 'failed', 'started', 'passed'])
         ->and($january['training']['statuses']['failed']['current'])->toBe(100)
         ->and($january['training']['statuses']['passed']['current'])->toBe(0)
         ->and($january['training']['risk']['users'][0]['status'])->toBe('failed')

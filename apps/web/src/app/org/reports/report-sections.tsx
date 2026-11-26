@@ -6,7 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import { useDataTableQuery } from "@/hooks/use-data-table-query";
 import { useLiveTopic } from "@/hooks/use-live-topic";
+import { useOrgTimezone } from "@/hooks/use-org-timezone";
 import { api, ensureCsrf } from "@/lib/api";
+import { formatDateTime } from "@/lib/format-datetime";
 import { serializeDataTableQuery } from "@/lib/data-table-query";
 import { orgLiveChannel } from "@/lib/live-topics";
 import {
@@ -15,8 +17,8 @@ import {
   paginationQuery,
 } from "@/lib/pagination";
 import { resolveTenant } from "@/lib/tenant";
-import { toastError } from "@/lib/toast";
-import { downloadReportCsv } from "./download-report-csv";
+import { toastError, toastWarning } from "@/lib/toast";
+import { downloadReportCsv, REPORT_CSV_ROW_CAP } from "./download-report-csv";
 import { ReportTable, type ReportColumn } from "./report-table";
 import type {
   CompanyPayload,
@@ -131,9 +133,12 @@ function useReportSection<T>(
         string,
         string | number | undefined
       >;
-      await downloadReportCsv(section, parsed);
-    } catch (err) {
-      toastError(err instanceof Error ? err.message : t("csvExportFailed"));
+      const result = await downloadReportCsv(section, parsed);
+      if (result.truncated) {
+        toastWarning(t("csvTruncated", { limit: REPORT_CSV_ROW_CAP }));
+      }
+    } catch {
+      toastError(t("csvExportFailed"));
     }
   }
 
@@ -147,6 +152,33 @@ function useReportSection<T>(
     onCsv,
     reload: load,
   };
+}
+
+/** Label for an organization profile field; unknown fields fall back to their raw key. */
+function profileFieldLabel(key: string, translate: (id: string) => string): string {
+  switch (key) {
+    case "display_name":
+      return translate("profileLabels.displayName");
+    case "primary_color":
+      return translate("profileLabels.primaryColor");
+    case "timezone":
+      return translate("profileLabels.timezone");
+    case "logo_path":
+      return translate("profileLabels.logoPath");
+    case "sending_domain":
+      return translate("profileLabels.sendingDomain");
+    case "webhook_url":
+      return translate("profileLabels.webhookUrl");
+    case "updated_at":
+      return translate("profileLabels.updatedAt");
+    default:
+      return key.replaceAll("_", " ");
+  }
+}
+
+/** Timestamp in the organization timezone, or the dash when the event has not happened. */
+function dateCell(value: string | null | undefined, timeZone: string, dash: string): string {
+  return value ? formatDateTime(value, timeZone) || dash : dash;
 }
 
 function useServerTableFilters() {
@@ -174,6 +206,7 @@ export function CompanySection({
 }) {
   const t = useTranslations("org.reports");
   const tCommon = useTranslations("common");
+  const orgTimeZone = useOrgTimezone();
   const [company, setCompany] = useState<CompanyPayload | null>(null);
   const [liveEpoch, setLiveEpoch] = useState(0);
   const tenant = resolveTenant();
@@ -216,7 +249,8 @@ export function CompanySection({
     return <p className="text-sm text-[var(--muted-foreground)]">{t("loadingCompany")}</p>;
   }
 
-  const profileEntries = Object.entries(company.profile).filter(([, v]) => v != null && v !== "");
+  // Every profile field is listed so an unset value is visible as a dash, not silently missing.
+  const profileEntries = Object.entries(company.profile);
 
   return (
     <div className="space-y-6">
@@ -225,9 +259,8 @@ export function CompanySection({
           type="button"
           variant="outline"
           onClick={() => {
-            void downloadReportCsv("company", withSharedFilters({}, sharedFilters)).catch(
-              (err: unknown) =>
-                toastError(err instanceof Error ? err.message : t("csvExportFailed")),
+            void downloadReportCsv("company", withSharedFilters({}, sharedFilters)).catch(() =>
+              toastError(t("csvExportFailed")),
             );
           }}
         >
@@ -240,14 +273,15 @@ export function CompanySection({
           {profileEntries.map(([key, value]) => (
             <div key={key}>
               <dt className="text-xs uppercase tracking-wide text-[var(--muted-foreground)]">
-                {key.replaceAll("_", " ")}
+                {profileFieldLabel(key, t)}
               </dt>
-              <dd className="mt-1 text-sm">{String(value)}</dd>
+              <dd className="mt-1 text-sm">
+                {key === "updated_at"
+                  ? dateCell(value, orgTimeZone, tCommon("emDash"))
+                  : value || tCommon("emDash")}
+              </dd>
             </div>
           ))}
-          {profileEntries.length === 0 ? (
-            <p className="text-sm text-[var(--muted-foreground)]">{t("noProfileFields")}</p>
-          ) : null}
         </dl>
       </Panel>
 
@@ -261,6 +295,7 @@ export function CompanySection({
             { key: "sent", header: t("sent"), cell: (r) => r.sent },
             { key: "opened", header: t("opened"), cell: (r) => r.opened },
             { key: "completed", header: tCommon("completed"), cell: (r) => r.completed },
+            { key: "no_action", header: t("noActionCount"), cell: (r) => r.no_action },
             { key: "opened_pct", header: t("openPct"), cell: (r) => r.opened_pct },
             { key: "completed_pct", header: t("completePct"), cell: (r) => r.completed_pct },
             { key: "no_action_pct", header: t("noActionPct"), cell: (r) => r.no_action_pct },
@@ -474,6 +509,7 @@ export function CampaignsSection({
 }) {
   const t = useTranslations("org.reports");
   const tCommon = useTranslations("common");
+  const orgTimeZone = useOrgTimezone();
   const { tableQuery, filters } = useServerTableFilters();
   const recipientsQuery = useServerTableFilters();
   const [campaignId, setCampaignId] = useState<number | null>(null);
@@ -502,6 +538,12 @@ export function CampaignsSection({
       filterValue: (r) => r.name,
     },
     { key: "type", header: tCommon("type"), cell: (r) => r.type, accessorKey: "type" },
+    {
+      key: "course",
+      header: tCommon("course"),
+      cell: (r) => r.course ?? tCommon("emDash"),
+      filterValue: (r) => r.course ?? "",
+    },
     {
       key: "status",
       header: tCommon("status"),
@@ -541,6 +583,13 @@ export function CampaignsSection({
       key: "completed_pct",
       header: t("completePct"),
       cell: (r) => r.completed_pct,
+      filter: "none",
+      enableSorting: true,
+    },
+    {
+      key: "no_action",
+      header: t("noActionCount"),
+      cell: (r) => r.no_action,
       filter: "none",
       enableSorting: true,
     },
@@ -638,14 +687,14 @@ export function CampaignsSection({
                 },
                 {
                   key: "sent_at",
-                  header: t("sent"),
-                  cell: (r) => (r.sent_at ? tCommon("yes") : tCommon("emDash")),
+                  header: t("sentAt"),
+                  cell: (r) => dateCell(r.sent_at, orgTimeZone, tCommon("emDash")),
                   filter: "none",
                 },
                 {
                   key: "opened_at",
-                  header: t("opened"),
-                  cell: (r) => (r.opened_at ? tCommon("yes") : tCommon("emDash")),
+                  header: t("openedAt"),
+                  cell: (r) => dateCell(r.opened_at, orgTimeZone, tCommon("emDash")),
                   filter: "none",
                 },
                 {
@@ -681,7 +730,9 @@ export function TrainingSection({
 }: {
   sharedFilters?: ReportSharedFilters;
 }) {
+  const t = useTranslations("org.reports");
   const tCommon = useTranslations("common");
+  const orgTimeZone = useOrgTimezone();
   const { tableQuery, filters } = useServerTableFilters();
   const list = useReportSection<TrainingRow>(
     "training",
@@ -690,6 +741,7 @@ export function TrainingSection({
 
   return (
     <SectionShell list={list}>
+      <p className="text-xs text-[var(--muted-foreground)]">{t("trainingDefinition")}</p>
       <ReportTable
         mode="server"
         filterState={tableQuery.state}
@@ -745,6 +797,18 @@ export function TrainingSection({
             filterValue: (r) => r.progress,
           },
           {
+            key: "opened_at",
+            header: t("openedAt"),
+            cell: (r) => dateCell(r.opened_at, orgTimeZone, tCommon("emDash")),
+            filter: "none",
+          },
+          {
+            key: "completed_at",
+            header: t("completedAt"),
+            cell: (r) => dateCell(r.completed_at, orgTimeZone, tCommon("emDash")),
+            filter: "none",
+          },
+          {
             key: "source",
             header: tCommon("source"),
             cell: (r) => r.source,
@@ -765,6 +829,8 @@ type ChecklistRow = {
   name: string;
   status: string;
   progress_pct: number;
+  started_at: string | null;
+  completed_at: string | null;
 };
 
 function humanizeKey(key: string): string {
@@ -832,6 +898,7 @@ function BreakdownPanel({
   labelFor: (key: string) => string;
   barColorFor: (key: string) => string;
 }) {
+  const t = useTranslations("org.reports");
   const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
   const total = entries.reduce((sum, [, value]) => sum + value, 0);
 
@@ -857,7 +924,7 @@ function BreakdownPanel({
                   aria-valuenow={pct}
                   aria-valuemin={0}
                   aria-valuemax={100}
-                  aria-label={`${label}: ${value} of ${total}`}
+                  aria-label={t("breakdownValueOfTotal", { label, value, total })}
                 >
                   <div
                     className="h-full rounded-full"
@@ -884,6 +951,7 @@ export function ChecklistsSection({
   const t = useTranslations("org.reports");
   const tCommon = useTranslations("common");
   const tChecklists = useTranslations("org.checklists");
+  const orgTimeZone = useOrgTimezone();
   const { tableQuery, filters } = useServerTableFilters();
   const list = useReportSection<ChecklistRow>(
     "checklists",
@@ -954,6 +1022,12 @@ export function ChecklistsSection({
               filterValue: (r) => r.email,
             },
             {
+              key: "name",
+              header: tCommon("name"),
+              cell: (r) => r.name || tCommon("emDash"),
+              accessorKey: "name",
+            },
+            {
               key: "status",
               header: tCommon("status"),
               cell: (r) => r.status,
@@ -964,6 +1038,18 @@ export function ChecklistsSection({
               header: tCommon("progress"),
               cell: (r) => `${r.progress_pct}%`,
               filterValue: (r) => r.progress_pct,
+            },
+            {
+              key: "started_at",
+              header: t("startedAt"),
+              cell: (r) => dateCell(r.started_at, orgTimeZone, tCommon("emDash")),
+              filter: "none",
+            },
+            {
+              key: "completed_at",
+              header: t("completedAt"),
+              cell: (r) => dateCell(r.completed_at, orgTimeZone, tCommon("emDash")),
+              filter: "none",
             },
           ]}
         />
@@ -982,6 +1068,8 @@ type TicketRow = {
   status: string | null;
   sla_response_breached: boolean;
   sla_resolve_breached: boolean;
+  created_at: string | null;
+  resolved_at: string | null;
 };
 
 export function TicketingSection({
@@ -992,6 +1080,7 @@ export function TicketingSection({
   const t = useTranslations("org.reports");
   const tCommon = useTranslations("common");
   const tTicketing = useTranslations("org.ticketing");
+  const orgTimeZone = useOrgTimezone();
   const { tableQuery, filters } = useServerTableFilters();
   const list = useReportSection<TicketRow>(
     "ticketing",
@@ -1121,6 +1210,18 @@ export function TicketingSection({
                   .join(", ") || tCommon("ok"),
               filterValue: (r) =>
                 r.sla_response_breached || r.sla_resolve_breached ? "breach" : "ok",
+            },
+            {
+              key: "created_at",
+              header: t("createdAt"),
+              cell: (r) => dateCell(r.created_at, orgTimeZone, tCommon("emDash")),
+              filter: "none",
+            },
+            {
+              key: "resolved_at",
+              header: t("resolvedAt"),
+              cell: (r) => dateCell(r.resolved_at, orgTimeZone, tCommon("emDash")),
+              filter: "none",
             },
           ]}
         />

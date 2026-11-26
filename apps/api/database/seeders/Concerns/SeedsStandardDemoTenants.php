@@ -116,7 +116,7 @@ trait SeedsStandardDemoTenants
             $rbac->ensureOrgAdminRole($org['id']);
 
             $orgEmail = 'admin@'.$org['id'].'.test';
-            if (! User::query()->where('email', $orgEmail)->exists()) {
+            if (! User::query()->where('email', $orgEmail)->where('tenant_id', $org['id'])->exists()) {
                 app(CreateOrgUser::class)->handle(
                     $org['id'],
                     $org['name'].' Admin',

@@ -1,6 +1,7 @@
 <?php
 
 return [
+    'page_of' => 'Seite :current von :total',
     'prepared_for' => ':brand-Bericht erstellt für :organization.',
     'confidential' => 'Dieser Bericht enthält vertrauliche Informationen; unbefugte Nutzung ist strengstens untersagt.',
     'generated_at' => 'Bericht erstellt am :datetime.',
@@ -105,6 +106,7 @@ return [
     'col_quiz' => 'Quiz',
     'no_enrollment_rows' => 'Keine Einschreibungszeilen für die aktuellen Filter.',
     'truncated_footer' => 'Die ersten :max Zeilen werden angezeigt. CSV für den vollständigen Export herunterladen.',
+    'row_cap_reached' => 'Es sind nur die ersten :max Zeilen enthalten. Grenzen Sie Zeitraum oder Abteilung ein, um den Rest zu sehen.',
 
     'icon_no_action' => 'Keine Aktion',
     'icon_incomplete' => 'Unvollständig',

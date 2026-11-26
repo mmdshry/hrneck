@@ -24,7 +24,7 @@ describe("notificationHref", () => {
   it("maps types to default routes", () => {
     expect(
       notificationHref(item({ id: 2, type: "training_assigned", title: "T" })),
-    ).toBe("/learn");
+    ).toBe("/portal");
     expect(
       notificationHref(item({ id: 3, type: "checklist_assigned", title: "C" })),
     ).toBe("/org/checklists/instances");

@@ -99,6 +99,14 @@ return [
             'expire' => 60,
             'throttle' => 60,
         ],
+        // Set-password links for newly created employees. Kept in their own table so issuing an
+        // invite never invalidates a pending reset token, and valid for seven days (in minutes).
+        'employee_invites' => [
+            'provider' => 'users',
+            'table' => 'employee_invite_tokens',
+            'expire' => 10080,
+            'throttle' => 60,
+        ],
     ],
 
     /*

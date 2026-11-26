@@ -1,0 +1,447 @@
+{
+    "swagger":  "2.0",
+    "info":  {
+                 "title":  "HRNECK Assistant Tools v2",
+                 "description":  "Tools the HRNECK assistant uses to read and write ticketing and training data for the signed-in user. The server checks the user\u0027s permissions for every call and ignores any user or tenant identifiers sent in the request.",
+                 "version":  "1.0.0"
+             },
+    "host": "ynfuk-185-194-188-15.free.pinggy.net",
+    "basePath":  "/api/v1/assistant/tools",
+    "schemes":  [
+                    "https"
+                ],
+    "consumes":  [
+                     "application/json"
+                 ],
+    "produces":  [
+                     "application/json"
+                 ],
+    "securityDefinitions":  {
+                                "api_key":  {
+                                                "type":  "apiKey",
+                                                "in":  "header",
+                                                "name":  "X-Assistant-Api-Key"
+                                            }
+                            },
+    "security":  [
+                     {
+                         "api_key":  [
+
+                                     ]
+                     }
+                 ],
+    "paths":  {
+                  "/tickets_search":  {
+                                          "post":  {
+                                                       "operationId":  "TicketsSearch",
+                                                       "summary":  "Search tickets",
+                                                       "description":  "Search tickets the signed-in user can see. Pass q for free text and limit (1 to 20). Do not pass user or tenant identifiers.",
+                                                       "parameters":  [
+                                                                          {
+                                                                              "name":  "body",
+                                                                              "in":  "body",
+                                                                              "required":  true,
+                                                                              "schema":  {
+                                                                                             "type":  "object",
+                                                                                             "required":  [
+                                                                                                              "conversation_ref"
+                                                                                                          ],
+                                                                                             "properties":  {
+                                                                                                                "q":  {
+                                                                                                                          "type":  "string",
+                                                                                                                          "maxLength":  200,
+                                                                                                                          "description":  "Free text to search for."
+                                                                                                                      },
+                                                                                                                "limit":  {
+                                                                                                                              "type":  "integer",
+                                                                                                                              "minimum":  1,
+                                                                                                                              "maximum":  20,
+                                                                                                                              "description":  "Maximum number of results."
+                                                                                                                          },
+                                                                                                                "conversation_ref":  {
+                                                                                                                                         "type":  "string",
+                                                                                                                                         "description":  "Session reference from the HRNECK chat. The topic sets it from channel data."
+                                                                                                                                     }
+                                                                                                            }
+                                                                                         }
+                                                                          }
+                                                                      ],
+                                                       "responses":  {
+                                                                         "200":  {
+                                                                                     "$ref":  "#/responses/ToolOk"
+                                                                                 },
+                                                                         "401":  {
+                                                                                     "$ref":  "#/responses/Unauthorized"
+                                                                                 },
+                                                                         "403":  {
+                                                                                     "$ref":  "#/responses/Forbidden"
+                                                                                 },
+                                                                         "404":  {
+                                                                                     "$ref":  "#/responses/NotFound"
+                                                                                 },
+                                                                         "422":  {
+                                                                                     "$ref":  "#/responses/Invalid"
+                                                                                 },
+                                                                         "503":  {
+                                                                                     "$ref":  "#/responses/Unavailable"
+                                                                                 }
+                                                                     }
+                                                   }
+                                      },
+                  "/ticket_show":  {
+                                       "post":  {
+                                                    "operationId":  "TicketShow",
+                                                    "summary":  "Show a ticket",
+                                                    "description":  "Return one ticket the signed-in user can see. ticket_id comes from the user\u0027s message.",
+                                                    "parameters":  [
+                                                                       {
+                                                                           "name":  "body",
+                                                                           "in":  "body",
+                                                                           "required":  true,
+                                                                           "schema":  {
+                                                                                          "type":  "object",
+                                                                                          "required":  [
+                                                                                                           "conversation_ref",
+                                                                                                           "ticket_id"
+                                                                                                       ],
+                                                                                          "properties":  {
+                                                                                                             "ticket_id":  {
+                                                                                                                               "type":  "integer",
+                                                                                                                               "minimum":  1,
+                                                                                                                               "description":  "The ticket number the user mentioned."
+                                                                                                                           },
+                                                                                                             "conversation_ref":  {
+                                                                                                                                      "type":  "string",
+                                                                                                                                      "description":  "Session reference from the HRNECK chat. The topic sets it from channel data."
+                                                                                                                                  }
+                                                                                                         }
+                                                                                      }
+                                                                       }
+                                                                   ],
+                                                    "responses":  {
+                                                                      "200":  {
+                                                                                  "$ref":  "#/responses/ToolOk"
+                                                                              },
+                                                                      "401":  {
+                                                                                  "$ref":  "#/responses/Unauthorized"
+                                                                              },
+                                                                      "403":  {
+                                                                                  "$ref":  "#/responses/Forbidden"
+                                                                              },
+                                                                      "404":  {
+                                                                                  "$ref":  "#/responses/NotFound"
+                                                                              },
+                                                                      "422":  {
+                                                                                  "$ref":  "#/responses/Invalid"
+                                                                              },
+                                                                      "503":  {
+                                                                                  "$ref":  "#/responses/Unavailable"
+                                                                              }
+                                                                  }
+                                                }
+                                   },
+                  "/ticket_desks":  {
+                                        "post":  {
+                                                     "operationId":  "TicketDesks",
+                                                     "summary":  "List ticketing desks",
+                                                     "description":  "List the ticketing desks the signed-in user can use. No input besides the conversation token.",
+                                                     "parameters":  [
+                                                                        {
+                                                                            "name":  "body",
+                                                                            "in":  "body",
+                                                                            "required":  true,
+                                                                            "schema":  {
+                                                                                           "type":  "object",
+                                                                                           "required":  [
+                                                                                                            "conversation_ref"
+                                                                                                        ],
+                                                                                           "properties":  {
+                                                                                                              "conversation_ref":  {
+                                                                                                                                       "type":  "string",
+                                                                                                                                       "description":  "Session reference from the HRNECK chat. The topic sets it from channel data."
+                                                                                                                                   }
+                                                                                                          }
+                                                                                       }
+                                                                        }
+                                                                    ],
+                                                     "responses":  {
+                                                                       "200":  {
+                                                                                   "$ref":  "#/responses/ToolOk"
+                                                                               },
+                                                                       "401":  {
+                                                                                   "$ref":  "#/responses/Unauthorized"
+                                                                               },
+                                                                       "403":  {
+                                                                                   "$ref":  "#/responses/Forbidden"
+                                                                               },
+                                                                       "404":  {
+                                                                                   "$ref":  "#/responses/NotFound"
+                                                                               },
+                                                                       "422":  {
+                                                                                   "$ref":  "#/responses/Invalid"
+                                                                               },
+                                                                       "503":  {
+                                                                                   "$ref":  "#/responses/Unavailable"
+                                                                               }
+                                                                   }
+                                                 }
+                                    },
+                  "/kb_search":  {
+                                     "post":  {
+                                                  "operationId":  "KbSearch",
+                                                  "summary":  "Search knowledge base articles",
+                                                  "description":  "Search knowledge base articles the signed-in user can read. Pass q for free text and limit (1 to 10).",
+                                                  "parameters":  [
+                                                                     {
+                                                                         "name":  "body",
+                                                                         "in":  "body",
+                                                                         "required":  true,
+                                                                         "schema":  {
+                                                                                        "type":  "object",
+                                                                                        "required":  [
+                                                                                                         "conversation_ref"
+                                                                                                     ],
+                                                                                        "properties":  {
+                                                                                                           "q":  {
+                                                                                                                     "type":  "string",
+                                                                                                                     "maxLength":  200,
+                                                                                                                     "description":  "Free text to search for."
+                                                                                                                 },
+                                                                                                           "limit":  {
+                                                                                                                         "type":  "integer",
+                                                                                                                         "minimum":  1,
+                                                                                                                         "maximum":  10,
+                                                                                                                         "description":  "Maximum number of results."
+                                                                                                                     },
+                                                                                                           "conversation_ref":  {
+                                                                                                                                    "type":  "string",
+                                                                                                                                    "description":  "Session reference from the HRNECK chat. The topic sets it from channel data."
+                                                                                                                                }
+                                                                                                       }
+                                                                                    }
+                                                                     }
+                                                                 ],
+                                                  "responses":  {
+                                                                    "200":  {
+                                                                                "$ref":  "#/responses/ToolOk"
+                                                                            },
+                                                                    "401":  {
+                                                                                "$ref":  "#/responses/Unauthorized"
+                                                                            },
+                                                                    "403":  {
+                                                                                "$ref":  "#/responses/Forbidden"
+                                                                            },
+                                                                    "404":  {
+                                                                                "$ref":  "#/responses/NotFound"
+                                                                            },
+                                                                    "422":  {
+                                                                                "$ref":  "#/responses/Invalid"
+                                                                            },
+                                                                    "503":  {
+                                                                                "$ref":  "#/responses/Unavailable"
+                                                                            }
+                                                                }
+                                              }
+                                 },
+                  "/training_campaign_summary":  {
+                                                     "post":  {
+                                                                  "operationId":  "TrainingCampaignSummary",
+                                                                  "summary":  "Summarize training campaigns",
+                                                                  "description":  "Return a summary of training campaigns the signed-in user can see. No input besides the conversation token.",
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "body",
+                                                                                         "in":  "body",
+                                                                                         "required":  true,
+                                                                                         "schema":  {
+                                                                                                        "type":  "object",
+                                                                                                        "required":  [
+                                                                                                                         "conversation_ref"
+                                                                                                                     ],
+                                                                                                        "properties":  {
+                                                                                                                           "conversation_ref":  {
+                                                                                                                                                    "type":  "string",
+                                                                                                                                                    "description":  "Session reference from the HRNECK chat. The topic sets it from channel data."
+                                                                                                                                                }
+                                                                                                                       }
+                                                                                                    }
+                                                                                     }
+                                                                                 ],
+                                                                  "responses":  {
+                                                                                    "200":  {
+                                                                                                "$ref":  "#/responses/ToolOk"
+                                                                                            },
+                                                                                    "401":  {
+                                                                                                "$ref":  "#/responses/Unauthorized"
+                                                                                            },
+                                                                                    "403":  {
+                                                                                                "$ref":  "#/responses/Forbidden"
+                                                                                            },
+                                                                                    "404":  {
+                                                                                                "$ref":  "#/responses/NotFound"
+                                                                                            },
+                                                                                    "422":  {
+                                                                                                "$ref":  "#/responses/Invalid"
+                                                                                            },
+                                                                                    "503":  {
+                                                                                                "$ref":  "#/responses/Unavailable"
+                                                                                            }
+                                                                                }
+                                                              }
+                                                 },
+                  "/ticket_create":  {
+                                         "post":  {
+                                                      "operationId":  "TicketCreate",
+                                                      "summary":  "Propose a new ticket",
+                                                      "description":  "Propose a new ticket. HRNECK does not create it until the user confirms in the HRNECK chat panel. The response is 202 with pending_confirmation. desk_id must come from the user\u0027s message or from ticket_desks.",
+                                                      "parameters":  [
+                                                                         {
+                                                                             "name":  "body",
+                                                                             "in":  "body",
+                                                                             "required":  true,
+                                                                             "schema":  {
+                                                                                            "type":  "object",
+                                                                                            "required":  [
+                                                                                                             "conversation_ref",
+                                                                                                             "desk_id",
+                                                                                                             "summary"
+                                                                                                         ],
+                                                                                            "properties":  {
+                                                                                                               "desk_id":  {
+                                                                                                                               "type":  "integer",
+                                                                                                                               "minimum":  1,
+                                                                                                                               "description":  "The desk the ticket belongs to."
+                                                                                                                           },
+                                                                                                               "summary":  {
+                                                                                                                               "type":  "string",
+                                                                                                                               "maxLength":  500,
+                                                                                                                               "description":  "Short title of the ticket."
+                                                                                                                           },
+                                                                                                               "description":  {
+                                                                                                                                   "type":  "string",
+                                                                                                                                   "maxLength":  5000,
+                                                                                                                                   "description":  "Details of the ticket."
+                                                                                                                               },
+                                                                                                               "conversation_ref":  {
+                                                                                                                                        "type":  "string",
+                                                                                                                                        "description":  "Session reference from the HRNECK chat. The topic sets it from channel data."
+                                                                                                                                    }
+                                                                                                           }
+                                                                                        }
+                                                                         }
+                                                                     ],
+                                                      "responses":  {
+                                                                        "202":  {
+                                                                                    "$ref":  "#/responses/ToolAccepted"
+                                                                                },
+                                                                        "401":  {
+                                                                                    "$ref":  "#/responses/Unauthorized"
+                                                                                },
+                                                                        "403":  {
+                                                                                    "$ref":  "#/responses/Forbidden"
+                                                                                },
+                                                                        "404":  {
+                                                                                    "$ref":  "#/responses/NotFound"
+                                                                                },
+                                                                        "422":  {
+                                                                                    "$ref":  "#/responses/Invalid"
+                                                                                },
+                                                                        "503":  {
+                                                                                    "$ref":  "#/responses/Unavailable"
+                                                                                }
+                                                                    }
+                                                  }
+                                     },
+                  "/ticket_add_note":  {
+                                           "post":  {
+                                                        "operationId":  "TicketAddNote",
+                                                        "summary":  "Propose a note on a ticket",
+                                                        "description":  "Propose a note on an existing ticket. HRNECK does not add it until the user confirms in the HRNECK chat panel. The response is 202 with pending_confirmation.",
+                                                        "parameters":  [
+                                                                           {
+                                                                               "name":  "body",
+                                                                               "in":  "body",
+                                                                               "required":  true,
+                                                                               "schema":  {
+                                                                                              "type":  "object",
+                                                                                              "required":  [
+                                                                                                               "conversation_ref",
+                                                                                                               "ticket_id",
+                                                                                                               "body"
+                                                                                                           ],
+                                                                                              "properties":  {
+                                                                                                                 "ticket_id":  {
+                                                                                                                                   "type":  "integer",
+                                                                                                                                   "minimum":  1,
+                                                                                                                                   "description":  "The ticket the note belongs to."
+                                                                                                                               },
+                                                                                                                 "body":  {
+                                                                                                                              "type":  "string",
+                                                                                                                              "maxLength":  5000,
+                                                                                                                              "description":  "The note text."
+                                                                                                                          },
+                                                                                                                 "is_public":  {
+                                                                                                                                   "type":  "boolean",
+                                                                                                                                   "description":  "Whether the requester can see the note."
+                                                                                                                               },
+                                                                                                                 "conversation_ref":  {
+                                                                                                                                          "type":  "string",
+                                                                                                                                          "description":  "Session reference from the HRNECK chat. The topic sets it from channel data."
+                                                                                                                                      }
+                                                                                                             }
+                                                                                          }
+                                                                           }
+                                                                       ],
+                                                        "responses":  {
+                                                                          "202":  {
+                                                                                      "$ref":  "#/responses/ToolAccepted"
+                                                                                  },
+                                                                          "401":  {
+                                                                                      "$ref":  "#/responses/Unauthorized"
+                                                                                  },
+                                                                          "403":  {
+                                                                                      "$ref":  "#/responses/Forbidden"
+                                                                                  },
+                                                                          "404":  {
+                                                                                      "$ref":  "#/responses/NotFound"
+                                                                                  },
+                                                                          "422":  {
+                                                                                      "$ref":  "#/responses/Invalid"
+                                                                                  },
+                                                                          "503":  {
+                                                                                      "$ref":  "#/responses/Unavailable"
+                                                                                  }
+                                                                      }
+                                                    }
+                                       }
+              },
+    "responses":  {
+                      "ToolOk":  {
+                                     "description":  "Tool result.",
+                                     "schema":  {
+                                                    "type":  "object"
+                                                }
+                                 },
+                      "ToolAccepted":  {
+                                           "description":  "Write action proposed. The user must confirm it in HRNECK before it runs.",
+                                           "schema":  {
+                                                          "type":  "object"
+                                                      }
+                                       },
+                      "Unauthorized":  {
+                                           "description":  "Missing or invalid connector key or conversation token."
+                                       },
+                      "Forbidden":  {
+                                        "description":  "The user does not have permission for this tool."
+                                    },
+                      "NotFound":  {
+                                       "description":  "Item not found or not visible to the user."
+                                   },
+                      "Invalid":  {
+                                      "description":  "Invalid input."
+                                  },
+                      "Unavailable":  {
+                                          "description":  "HRNECK is temporarily unavailable."
+                                      }
+                  }
+}

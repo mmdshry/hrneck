@@ -5,6 +5,7 @@ namespace App\Domains\IdentityAccess\Actions;
 use App\Domains\IdentityAccess\Jobs\SendEmployeeInviteJob;
 use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
 use App\Domains\TargetsGroups\Models\Target;
+use App\Domains\TargetsGroups\Support\TargetProfileFields;
 use App\Models\Role;
 use App\Models\TenantMembership;
 use App\Models\User;
@@ -23,10 +24,17 @@ class ProvisionEmployeePair
     /**
      * Ensure a login User exists for this Target. New users get learner + invite.
      *
+     * When an explicit password is given for a new login, it is set directly, the
+     * login is usable immediately and no invite is queued.
+     *
      * @return array{user: User, invited: bool, created: bool}
      */
-    public function ensureUserForTarget(Target $target, string $tenantId, bool $queueInvite = true): array
-    {
+    public function ensureUserForTarget(
+        Target $target,
+        string $tenantId,
+        bool $queueInvite = true,
+        ?string $password = null,
+    ): array {
         $email = $this->normalizeEmail((string) $target->email);
         if ($email === '') {
             throw ValidationException::withMessages([
@@ -34,11 +42,18 @@ class ProvisionEmployeePair
             ]);
         }
 
-        $user = $this->findUserByEmail($email);
+        $user = $this->findOrgUserByEmail($email, $tenantId);
         $invited = false;
         $created = false;
 
+        if ($user !== null && $password !== null) {
+            throw ValidationException::withMessages([
+                'email' => ['A login already exists for this employee in this organization. Set the password from the employee list instead.'],
+            ]);
+        }
+
         if ($user === null) {
+            $this->assertNoPlatformAccount($email);
             $this->rbac->ensureLearnerRole($tenantId);
 
             $name = trim(implode(' ', array_filter([
@@ -52,9 +67,9 @@ class ProvisionEmployeePair
             $user = User::query()->create([
                 'name' => $name,
                 'email' => $email,
-                'password' => Hash::make(Str::random(40)),
+                'password' => Hash::make($password ?? Str::random(40)),
                 'tenant_id' => $tenantId,
-                'must_set_password' => true,
+                'must_set_password' => $password === null,
             ]);
             $user->forceFill([
                 'email_verified_at' => now(),
@@ -70,7 +85,7 @@ class ProvisionEmployeePair
 
             $this->assignLearnerRole($user, $tenantId);
 
-            if ($queueInvite) {
+            if ($queueInvite && $password === null) {
                 SendEmployeeInviteJob::dispatch($user->id);
                 $invited = true;
             }
@@ -78,12 +93,6 @@ class ProvisionEmployeePair
             $this->linkTargetToUser($target, $user);
 
             return ['user' => $user, 'invited' => $invited, 'created' => true];
-        }
-
-        if ($user->isPlatformStaff()) {
-            throw ValidationException::withMessages([
-                'email' => ['This email belongs to a platform staff account and cannot be linked to an employee.'],
-            ]);
         }
 
         $hadMembership = $user->belongsToTenant($tenantId, activeOnly: false);
@@ -113,19 +122,16 @@ class ProvisionEmployeePair
     }
 
     /**
-     * When a User is given the learner role, ensure a Target exists in the given tenant.
+     * Every organization account is an employee. Ensure the account has a Target in the given tenant,
+     * linking an existing Target by user id or email before creating a new one.
      */
-    public function ensureTargetForLearner(User $user, ?string $tenantId = null): ?Target
+    public function ensureTargetForAccount(User $user, ?string $tenantId = null): ?Target
     {
         $tenantId = $tenantId ?? (is_string(tenant('id')) ? (string) tenant('id') : null)
             ?? $user->resolvedActiveTenantId()
             ?? (is_string($user->tenant_id) ? (string) $user->tenant_id : null);
 
         if ($tenantId === null || ! $user->belongsToTenant($tenantId)) {
-            return null;
-        }
-
-        if (! $this->userHasLearnerRole($user, $tenantId)) {
             return null;
         }
 
@@ -156,7 +162,7 @@ class ProvisionEmployeePair
             'last_name' => $parts[1] ?? null,
             'status' => 'active',
             'user_id' => $user->id,
-            'joined_via' => 'learner_role',
+            'joined_via' => TargetProfileFields::JOINED_VIA_ACCOUNT,
             'department_id' => $membership?->department_id,
             'department' => $membership?->department,
         ]);
@@ -203,15 +209,18 @@ class ProvisionEmployeePair
         }
 
         $conflict = User::query()
-            ->whereRaw('LOWER(email) = ?', [$to])
+            ->withEmail($to)
+            ->where('tenant_id', $tenantId)
             ->where('id', '!=', $user->id)
             ->exists();
 
         if ($conflict) {
             throw ValidationException::withMessages([
-                'email' => ['Cannot change employee email: another login already uses that address.'],
+                'email' => ['Cannot change employee email: another login in this organization already uses that address.'],
             ]);
         }
+
+        $this->assertNoPlatformAccount($to);
 
         $user->forceFill(['email' => $to])->save();
     }
@@ -264,8 +273,9 @@ class ProvisionEmployeePair
 
         $remaining = $user->memberships()->active()->get();
         if ($remaining->isEmpty()) {
+            // Keep tenant_id: the login stays bound to this organization (disabled), so it can be
+            // re-linked later and never becomes a platform account that could clash with a staff email.
             $user->forceFill([
-                'tenant_id' => null,
                 'department_id' => null,
                 'department' => null,
                 'disabled_at' => now(),
@@ -298,11 +308,41 @@ class ProvisionEmployeePair
         return strtolower(trim($email));
     }
 
-    public function findUserByEmail(string $email): ?User
+    /**
+     * The login this organization uses for an email. Other organizations may have their own login
+     * with the same email, and those are never touched from here.
+     */
+    public function findOrgUserByEmail(string $email, string $tenantId): ?User
     {
         return User::query()
-            ->whereRaw('LOWER(email) = ?', [$this->normalizeEmail($email)])
+            ->withEmail($this->normalizeEmail($email))
+            ->where('tenant_id', $tenantId)
             ->first();
+    }
+
+    /**
+     * Platform staff accounts have no organization. Their email must stay unique across the platform.
+     */
+    public function findPlatformAccountByEmail(string $email): ?User
+    {
+        return User::query()
+            ->withEmail($this->normalizeEmail($email))
+            ->whereNull('tenant_id')
+            ->first();
+    }
+
+    /**
+     * Refuse to create an organization login for an email that belongs to a platform staff account.
+     *
+     * @throws ValidationException
+     */
+    public function assertNoPlatformAccount(string $email): void
+    {
+        if ($this->findPlatformAccountByEmail($email) !== null) {
+            throw ValidationException::withMessages([
+                'email' => ['This email belongs to a platform staff account and cannot be linked to an organization.'],
+            ]);
+        }
     }
 
     public function linkTargetToUser(Target $target, User $user): void
@@ -324,16 +364,6 @@ class ProvisionEmployeePair
             if (! $user->hasRole($role)) {
                 $user->assignRole($role);
             }
-        } finally {
-            setPermissionsTeamId(null);
-        }
-    }
-
-    private function userHasLearnerRole(User $user, string $tenantId): bool
-    {
-        setPermissionsTeamId($tenantId);
-        try {
-            return $user->hasRole(OrgPermissionCatalog::LEARNER);
         } finally {
             setPermissionsTeamId(null);
         }

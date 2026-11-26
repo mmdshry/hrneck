@@ -10,7 +10,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
 import { Panel } from "@/components/ui/panel";
 import { useDataTableQuery } from "@/hooks/use-data-table-query";
-import { liveStatusLabel, useLiveTopic } from "@/hooks/use-live-topic";
+import { liveStatusLabel, useLiveStatusLabels, useLiveTopic } from "@/hooks/use-live-topic";
 import { api, ensureCsrf, fetchSessionUser } from "@/lib/api";
 import { serializeDataTableQuery } from "@/lib/data-table-query";
 import { portalLiveChannel } from "@/lib/live-topics";
@@ -183,7 +183,8 @@ export function PortalKbClient() {
     t,
   ]);
 
-  const statusLabel = liveStatusLabel(status);
+  const liveLabels = useLiveStatusLabels();
+  const statusLabel = liveStatusLabel(status, liveLabels);
   const dash = tCommon("emDash");
 
   const articleColumns: Array<DataTableColumn<Article>> = [

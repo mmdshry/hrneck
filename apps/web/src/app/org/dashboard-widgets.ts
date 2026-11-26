@@ -1,4 +1,37 @@
-import { hasPermission, type SessionUser } from "@/lib/session";
+import {
+  BarChart3,
+  ClipboardList,
+  ContactRound,
+  Download,
+  GraduationCap,
+  KeyRound,
+  Layers,
+  Library,
+  Megaphone,
+  Settings2,
+  Ticket,
+  UsersRound,
+  type LucideIcon,
+} from "lucide-react";
+import { hasAnyPermission, hasPermission, type SessionUser } from "@/lib/session";
+
+/**
+ * Module keys shared by metric widgets and quick-access shortcuts.
+ * Each key doubles as the `nav.*` i18n label key.
+ */
+export type DashboardNavKey =
+  | "training"
+  | "courses"
+  | "checklists"
+  | "ticketing"
+  | "employees"
+  | "departments"
+  | "groups"
+  | "roles"
+  | "reporting"
+  | "export"
+  | "announcements"
+  | "settings";
 
 export type DashboardWidgetId =
   | "training"
@@ -6,68 +39,123 @@ export type DashboardWidgetId =
   | "ticketing"
   | "people";
 
+type DashboardNavEntry = {
+  href: string;
+  icon: LucideIcon;
+  /** Any one of these permissions opens the module (view or manage). */
+  permissions: readonly string[];
+};
+
+/** Employees and login accounts are one list, so either family opens it. */
+const EMPLOYEE_PERMISSIONS = [
+  "org.targets.view",
+  "org.targets.manage",
+  "org.users.view",
+  "org.users.manage",
+] as const;
+
+/**
+ * Mirrors the sidebar NAV in `components/org-shell.tsx` (same href, icon,
+ * and permissions per module). Keep the two in sync when adding modules.
+ */
+const DASHBOARD_NAV: Record<DashboardNavKey, DashboardNavEntry> = {
+  training: {
+    href: "/org/training",
+    icon: GraduationCap,
+    permissions: ["org.training.view", "org.training.manage"],
+  },
+  courses: {
+    href: "/org/courses",
+    icon: Library,
+    permissions: ["org.training.view", "org.training.manage"],
+  },
+  checklists: {
+    href: "/org/checklists",
+    icon: ClipboardList,
+    permissions: ["org.checklists.view", "org.checklists.fill", "org.checklists.manage"],
+  },
+  ticketing: {
+    href: "/org/ticketing",
+    icon: Ticket,
+    permissions: ["org.ticketing.tickets"],
+  },
+  employees: {
+    href: "/org/targets",
+    icon: ContactRound,
+    permissions: EMPLOYEE_PERMISSIONS,
+  },
+  departments: {
+    href: "/org/departments",
+    icon: Layers,
+    permissions: ["org.departments.view", "org.departments.manage"],
+  },
+  groups: {
+    href: "/org/groups",
+    icon: UsersRound,
+    permissions: ["org.groups.view", "org.groups.manage"],
+  },
+  roles: {
+    href: "/org/roles",
+    icon: KeyRound,
+    permissions: ["org.roles.manage"],
+  },
+  reporting: {
+    href: "/org/reports",
+    icon: BarChart3,
+    permissions: ["org.reports.view"],
+  },
+  export: {
+    href: "/org/reports/export",
+    icon: Download,
+    permissions: ["org.reports.export"],
+  },
+  announcements: {
+    href: "/org/announcements",
+    icon: Megaphone,
+    permissions: ["org.announcements.manage"],
+  },
+  settings: {
+    href: "/org/settings",
+    icon: Settings2,
+    permissions: ["org.settings.view", "org.settings.manage"],
+  },
+};
+
+const NAV_KEYS = Object.keys(DASHBOARD_NAV) as DashboardNavKey[];
+
+const WIDGETS: Array<{ id: DashboardWidgetId; navKey: DashboardNavKey }> = [
+  { id: "training", navKey: "training" },
+  { id: "checklists", navKey: "checklists" },
+  { id: "ticketing", navKey: "ticketing" },
+  { id: "people", navKey: "employees" },
+];
+
 export type DashboardWidgetDef = {
   id: DashboardWidgetId;
-  title: string;
+  navKey: DashboardNavKey;
+  icon: LucideIcon;
   href: string;
-  hrefLabel: string;
 };
 
-const WIDGETS: DashboardWidgetDef[] = [
-  {
-    id: "training",
-    title: "Training",
-    href: "/org/training",
-    hrefLabel: "Open training",
-  },
-  {
-    id: "checklists",
-    title: "Checklists",
-    href: "/org/checklists/instances",
-    hrefLabel: "Open checklists",
-  },
-  {
-    id: "ticketing",
-    title: "Ticketing",
-    href: "/org/ticketing",
-    hrefLabel: "Open ticketing",
-  },
-  {
-    id: "people",
-    title: "People",
-    href: "/org/users",
-    hrefLabel: "Open users",
-  },
-];
-
-export type DashboardModuleLink = {
+export type DashboardShortcut = {
+  navKey: DashboardNavKey;
   href: string;
-  label: string;
-  permission: string;
+  icon: LucideIcon;
 };
-
-/** Permission-filtered module deep links for empty / limited dashboards. */
-export const DASHBOARD_MODULE_LINKS: DashboardModuleLink[] = [
-  { href: "/org/training", label: "Training", permission: "org.training.manage" },
-  { href: "/org/courses", label: "Courses", permission: "org.training.manage" },
-  { href: "/org/checklists", label: "Checklists", permission: "org.checklists.manage" },
-  { href: "/org/ticketing", label: "Ticketing", permission: "org.ticketing.tickets" },
-  { href: "/org/targets", label: "Employees", permission: "org.targets.manage" },
-  { href: "/org/users", label: "Users", permission: "org.users.manage" },
-  { href: "/org/reports", label: "Reporting", permission: "org.reports.view" },
-  { href: "/org/reports/export", label: "Export", permission: "org.reports.export" },
-  { href: "/org/settings", label: "Settings", permission: "org.settings.manage" },
-];
 
 export function canShowTrainingWidget(user: SessionUser | null): boolean {
   return (
     hasPermission(user, "org.reports.view") ||
-    hasPermission(user, "org.training.manage")
+    hasAnyPermission(user, ["org.training.view", "org.training.manage"])
   );
 }
 
 export function canShowChecklistsWidget(user: SessionUser | null): boolean {
-  return hasPermission(user, "org.checklists.manage");
+  return hasAnyPermission(user, [
+    "org.checklists.view",
+    "org.checklists.fill",
+    "org.checklists.manage",
+  ]);
 }
 
 export function canShowTicketingWidget(user: SessionUser | null): boolean {
@@ -78,7 +166,7 @@ export function canShowTicketingWidget(user: SessionUser | null): boolean {
 }
 
 export function canShowPeopleWidget(user: SessionUser | null): boolean {
-  return hasPermission(user, "org.users.manage");
+  return hasAnyPermission(user, EMPLOYEE_PERMISSIONS);
 }
 
 export function resolveDashboardWidgets(
@@ -99,13 +187,29 @@ export function resolveDashboardWidgets(
         return _exhaustive;
       }
     }
-  });
+  }).map(({ id, navKey }) => ({
+    id,
+    navKey,
+    icon: DASHBOARD_NAV[navKey].icon,
+    href: DASHBOARD_NAV[navKey].href,
+  }));
 }
 
+/**
+ * Permitted module shortcuts, excluding modules that already render a metric
+ * card (`coveredNavKeys`) so the same destination is never shown twice.
+ */
 export function resolveDashboardModuleLinks(
   user: SessionUser | null,
-): Array<{ href: string; label: string }> {
-  return DASHBOARD_MODULE_LINKS.filter((link) =>
-    hasPermission(user, link.permission),
-  ).map(({ href, label }) => ({ href, label }));
+  coveredNavKeys: ReadonlySet<DashboardNavKey>,
+): DashboardShortcut[] {
+  return NAV_KEYS.filter(
+    (navKey) =>
+      !coveredNavKeys.has(navKey) &&
+      hasAnyPermission(user, DASHBOARD_NAV[navKey].permissions),
+  ).map((navKey) => ({
+    navKey,
+    href: DASHBOARD_NAV[navKey].href,
+    icon: DASHBOARD_NAV[navKey].icon,
+  }));
 }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1\Org;
 use App\Domains\Audit\Actions\LogOrgActivity;
 use App\Domains\IdentityAccess\Actions\CreateOrgUser;
 use App\Domains\IdentityAccess\Actions\EnsureTenantMembership;
+use App\Domains\IdentityAccess\Actions\OrgRoleChangeGuard;
 use App\Domains\IdentityAccess\Actions\ProvisionEmployeePair;
 use App\Domains\IdentityAccess\Actions\SyncOrgUserRoles;
 use App\Domains\Realtime\Support\LiveTopics;
@@ -12,6 +13,7 @@ use App\Domains\Realtime\Support\PublishLive;
 use App\Domains\TargetsGroups\Models\Target;
 use App\Domains\TargetsGroups\Support\ResolveActiveTarget;
 use App\Domains\TargetsGroups\Support\ResolveDepartmentFields;
+use App\Domains\TargetsGroups\Support\TargetProfileFields;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Api\V1\UserResource;
 use App\Models\User;
@@ -53,8 +55,12 @@ class OrgUserController extends Controller
         return UserResource::collection($users);
     }
 
-    public function store(Request $request, CreateOrgUser $createOrgUser, LogOrgActivity $audit): JsonResponse
-    {
+    public function store(
+        Request $request,
+        CreateOrgUser $createOrgUser,
+        OrgRoleChangeGuard $guard,
+        LogOrgActivity $audit,
+    ): JsonResponse {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'email' => ['required', 'email', 'max:255'],
@@ -64,19 +70,26 @@ class OrgUserController extends Controller
             'department_id' => ['sometimes', 'nullable', 'integer', Rule::exists('departments', 'id')],
         ]);
 
+        $tenantId = (string) tenant('id');
+        $roleNames = $data['roles'] ?? ['org_admin'];
+
+        /** @var User $actor */
+        $actor = $request->user();
+        $guard->assertCanGrantRoles($actor, $tenantId, $roleNames);
+
         $user = $createOrgUser->handle(
-            (string) tenant('id'),
+            $tenantId,
             $data['name'],
             $data['email'],
             $data['password'],
-            $data['roles'] ?? ['org_admin'],
+            $roleNames,
             array_key_exists('department_id', $data) ? $data['department_id'] : null,
             array_key_exists('department_id', $data),
         );
 
         $audit->handle('users', 'created', 'Org user created', $user, [
             'email' => $user->email,
-            'roles' => $data['roles'] ?? ['org_admin'],
+            'roles' => $roleNames,
             'department_id' => $user->membershipFor((string) tenant('id'))->department_id ?? $user->department_id,
         ]);
 
@@ -103,7 +116,7 @@ class OrgUserController extends Controller
                 'sometimes',
                 'email',
                 'max:255',
-                Rule::unique('users', 'email')->ignore($user->id),
+                Rule::unique('users', 'email')->where('tenant_id', $tenantId)->ignore($user->id),
             ],
             'department_id' => ['sometimes', 'nullable', 'integer', Rule::exists('departments', 'id')],
         ]);
@@ -148,28 +161,49 @@ class OrgUserController extends Controller
         return new UserResource($user);
     }
 
-    public function syncRoles(Request $request, User $user, SyncOrgUserRoles $syncOrgUserRoles, LogOrgActivity $audit): UserResource
-    {
+    public function syncRoles(
+        Request $request,
+        User $user,
+        SyncOrgUserRoles $syncOrgUserRoles,
+        OrgRoleChangeGuard $guard,
+        LogOrgActivity $audit,
+    ): UserResource {
         $data = $request->validate([
             'roles' => ['required', 'array', 'min:1'],
             'roles.*' => ['string', 'max:80'],
         ]);
 
+        $tenantId = (string) tenant('id');
+
+        /** @var User $actor */
+        $actor = $request->user();
+        $guard->assertCanGrantRoles(
+            $actor,
+            $tenantId,
+            $data['roles'],
+            $guard->currentRoleNames($user, $tenantId),
+        );
+        $guard->assertRolesManagementRemainsForUser($tenantId, $user, $data['roles']);
+
         $before = $user->roles->pluck('name')->all();
-        $updated = $syncOrgUserRoles->handle($user, (string) tenant('id'), $data['roles']);
+        $updated = $syncOrgUserRoles->handle($user, $tenantId, $data['roles']);
 
         $audit->handle('users', 'roles_synced', 'Org user roles updated', $updated, [
             'before' => $before,
             'after' => $data['roles'],
         ]);
 
-        PublishLive::org([LiveTopics::USERS]);
+        PublishLive::org([LiveTopics::USERS, LiveTopics::TARGETS]);
 
         return new UserResource($updated);
     }
 
-    public function destroy(User $user, LogOrgActivity $audit, ProvisionEmployeePair $provision): JsonResponse
-    {
+    public function destroy(
+        User $user,
+        LogOrgActivity $audit,
+        ProvisionEmployeePair $provision,
+        OrgRoleChangeGuard $guard,
+    ): JsonResponse {
         $tenantId = (string) tenant('id');
         if (! $user->belongsToTenant($tenantId, activeOnly: false)) {
             abort(404);
@@ -179,9 +213,11 @@ class OrgUserController extends Controller
             abort(422, 'You cannot delete your own account.');
         }
 
+        $guard->assertRolesManagementRemainsForUser($tenantId, $user, []);
+
         $snapshot = ['id' => $user->id, 'email' => $user->email, 'name' => $user->name];
         Target::query()->where('user_id', $user->id)->each(function (Target $target): void {
-            if ($target->joined_via === 'learner_role') {
+            if (in_array($target->joined_via, TargetProfileFields::AUTO_CREATED_JOINED_VIA, true)) {
                 $target->groups()->detach();
                 $target->delete();
 
@@ -207,7 +243,7 @@ class OrgUserController extends Controller
             'removed_globally' => ! $hadOtherMemberships,
         ]);
 
-        PublishLive::org([LiveTopics::USERS]);
+        PublishLive::org([LiveTopics::USERS, LiveTopics::TARGETS]);
         PublishLive::metricsBundle();
 
         return response()->json(['message' => 'Deleted']);

@@ -6,8 +6,8 @@ use App\Domains\Campaigns\Actions\RecordTrainingAssignmentEvent;
 use App\Domains\Campaigns\Models\CampaignRecipient;
 use App\Domains\Campaigns\Models\TrainingAssignment;
 use App\Domains\Campaigns\Models\TrainingAssignmentEvent;
+use App\Domains\Notifications\Mails\BrandedNotificationMail;
 use App\Domains\Notifications\Support\NotificationEmailGate;
-use App\Domains\TrainingLms\Models\Enrollment;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -16,21 +16,21 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Mail;
 use Throwable;
 
+/**
+ * One reminder per learner. The email lists every course the campaign assigned to them.
+ */
 class SendTrainingReminderJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public function __construct(
         public int $recipientId,
-        public int $enrollmentId,
-        public ?int $assignmentId = null,
     ) {}
 
     public function handle(): void
     {
         $recipient = CampaignRecipient::query()->with(['target', 'campaign'])->find($this->recipientId);
-        $enrollment = Enrollment::query()->with('course')->find($this->enrollmentId);
-        if (! $recipient?->target || ! $enrollment?->course) {
+        if (! $recipient?->target || ! $recipient->campaign) {
             return;
         }
 
@@ -43,26 +43,51 @@ class SendTrainingReminderJob implements ShouldQueue
             return;
         }
 
-        $assignmentId = $this->assignmentId;
+        $assignments = TrainingAssignment::query()
+            ->where('recipient_id', $recipient->id)
+            ->with('course')
+            ->orderBy('id')
+            ->get()
+            ->filter(fn (TrainingAssignment $assignment): bool => $assignment->course !== null)
+            ->values();
+        if ($assignments->isEmpty()) {
+            return;
+        }
+
         $tenantId = is_string(tenant('id')) ? (string) tenant('id') : null;
-        $query = array_filter([
-            'tenant' => $tenantId,
-            'course' => $enrollment->course_id,
-            'enrollment' => $enrollment->id,
-            'target' => $enrollment->target_id,
-            'assignment' => $assignmentId,
-        ], static fn ($value): bool => $value !== null && $value !== '');
-        $learnUrl = rtrim((string) config('brand.frontend_url', config('app.url')), '/')
-            .'/learn?'.http_build_query($query);
-        $body = "Hi {$recipient->target->first_name},\n\n"
-            ."Please complete: {$enrollment->course->title}\n"
-            ."Open: {$learnUrl}\n";
+        $baseUrl = rtrim((string) config('brand.frontend_url', config('app.url')), '/');
+
+        $entries = $assignments->map(function (TrainingAssignment $assignment) use ($recipient, $tenantId, $baseUrl): array {
+            $query = array_filter([
+                'tenant' => $tenantId,
+                'course' => $assignment->course_id,
+                'enrollment' => $assignment->enrollment_id,
+                'target' => $recipient->target_id,
+                'assignment' => $assignment->id,
+            ], static fn ($value): bool => $value !== null && $value !== '');
+
+            return [
+                'title' => (string) $assignment->course->title,
+                'url' => $baseUrl.'/portal?'.http_build_query($query),
+            ];
+        })->all();
+
+        $topic = count($entries) === 1 ? $entries[0]['title'] : count($entries).' courses';
+        $subject = config('brand.short').' training: '.$topic;
 
         try {
-            Mail::raw($body, function ($message) use ($recipient, $enrollment): void {
-                $message->to($recipient->target->email)
-                    ->subject(config('brand.short').' training: '.$enrollment->course->title);
-            });
+            Mail::to($recipient->target->email)->send(new BrandedNotificationMail(
+                subjectLine: $subject,
+                title: 'Training reminder',
+                lines: [
+                    "Hi {$recipient->target->first_name},",
+                    'Please complete the following training:',
+                ],
+                actions: array_map(
+                    static fn (array $entry): array => ['label' => $entry['title'], 'url' => $entry['url']],
+                    $entries,
+                ),
+            ));
         } catch (Throwable $e) {
             report($e);
             $recipient->forceFill([
@@ -78,11 +103,7 @@ class SendTrainingReminderJob implements ShouldQueue
             'sent_at' => now(),
         ])->save();
 
-        $assignment = $this->assignmentId !== null
-            ? TrainingAssignment::query()->find($this->assignmentId)
-            : TrainingAssignment::query()->where('recipient_id', $recipient->id)->first();
-
-        if ($assignment !== null) {
+        foreach ($assignments as $assignment) {
             app(RecordTrainingAssignmentEvent::class)->append($assignment, TrainingAssignmentEvent::SENT);
         }
     }

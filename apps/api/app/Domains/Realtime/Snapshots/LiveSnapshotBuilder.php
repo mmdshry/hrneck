@@ -9,6 +9,7 @@ use App\Domains\AnalyticsReporting\Models\ReportArchive;
 use App\Domains\Campaigns\Models\Campaign;
 use App\Domains\Checklists\Models\ChecklistInstance;
 use App\Domains\Checklists\Models\ChecklistTemplate;
+use App\Domains\IdentityAccess\Actions\AttachAccountRolesToTargets;
 use App\Domains\IdentityAccess\Actions\ManageOrgRole;
 use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
 use App\Domains\MailDelivery\Models\SendingProfile;
@@ -100,7 +101,7 @@ class LiveSnapshotBuilder
             LiveTopics::TRAINING_CAMPAIGNS => $this->trainingCampaigns(),
             LiveTopics::TRAINING => $this->trainingHub(),
             LiveTopics::CAMPAIGNS => [
-                'data' => Campaign::query()->with(['course', 'recipients'])->latest()->limit(self::LIST_CAP)->get()->toArray(),
+                'data' => Campaign::query()->with(['courses', 'recipients'])->latest()->limit(self::LIST_CAP)->get()->toArray(),
             ],
             LiveTopics::INTEGRATIONS => [
                 'data' => $this->integrations(),
@@ -111,12 +112,7 @@ class LiveSnapshotBuilder
             LiveTopics::USERS => $this->users(),
             LiveTopics::ROLES => $this->roles(),
             LiveTopics::TARGETS => [
-                'data' => Target::query()
-                    ->with(['groups', 'manager:id,email,first_name,last_name'])
-                    ->latest()
-                    ->limit(self::LIST_CAP)
-                    ->get()
-                    ->toArray(),
+                'data' => $this->targets(),
             ],
             LiveTopics::DEPARTMENTS => [
                 'data' => Department::query()->withCount('targets')->orderBy('name')->limit(self::LIST_CAP)->get()->toArray(),
@@ -291,7 +287,7 @@ class LiveSnapshotBuilder
     {
         $campaigns = Campaign::query()
             ->where('type', 'training')
-            ->with(['course', 'recipients'])
+            ->with(['courses', 'recipients'])
             ->latest()
             ->limit(self::LIST_CAP)
             ->get();
@@ -360,6 +356,24 @@ class LiveSnapshotBuilder
     }
 
     /**
+     * Employees, each with `account_roles` from its linked login, so live updates keep the role column.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function targets(): array
+    {
+        $targets = Target::query()
+            ->with(['groups', 'manager:id,email,first_name,last_name'])
+            ->latest()
+            ->limit(self::LIST_CAP)
+            ->get();
+
+        app(AttachAccountRolesToTargets::class)->handle($targets, (string) tenant('id'));
+
+        return $targets->toArray();
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function roles(): array
@@ -387,7 +401,7 @@ class LiveSnapshotBuilder
     private function branding(): array
     {
         return [
-            'data' => OrgBrandingCache::payload(includeTimezone: true),
+            'data' => OrgBrandingCache::payload(),
         ];
     }
 
@@ -446,7 +460,10 @@ class LiveSnapshotBuilder
     {
         $recipients = $campaigns->flatMap->recipients;
 
-        $courseIds = $campaigns->pluck('course_id')->filter()->unique()->values();
+        $courseIds = $campaigns
+            ->flatMap(fn (Campaign $campaign) => $campaign->courses->pluck('id'))
+            ->unique()
+            ->values();
         $enrollments = $courseIds->isEmpty()
             ? collect()
             : Enrollment::query()->whereIn('course_id', $courseIds)->get();

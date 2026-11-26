@@ -1,18 +1,17 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { MinimalLoader } from "@/components/ui/minimal-loader";
 import { PageHeader } from "@/components/ui/page-header";
 import { Panel } from "@/components/ui/panel";
 import { useDataTableQuery } from "@/hooks/use-data-table-query";
-import { liveStatusLabel, useLiveTopic } from "@/hooks/use-live-topic";
+import { useOrgTimezone } from "@/hooks/use-org-timezone";
+import { liveStatusLabel, useLiveStatusLabels, useLiveTopic } from "@/hooks/use-live-topic";
 import { api, ensureCsrf } from "@/lib/api";
 import { serializeDataTableQuery } from "@/lib/data-table-query";
 import {
@@ -24,13 +23,23 @@ import {
   type PageSize,
   type PaginationMeta,
 } from "@/lib/pagination";
+import { formatDateTime } from "@/lib/format-datetime";
+import { matchesCells } from "@/lib/table-filter";
 import { resolveTenant } from "@/lib/tenant";
 import { toastError, toastSuccess } from "@/lib/toast";
+import { UserReportWizard } from "./user-report-wizard";
+
+type CalendarPeriod = {
+  key: string;
+  label: string;
+  available: boolean;
+  archive_id: number | null;
+};
 
 type Calendar = {
   year: number;
-  months: { key: string; label: string; available: boolean }[];
-  quarters: { key: string; label: string; available: boolean }[];
+  months: CalendarPeriod[];
+  quarters: CalendarPeriod[];
 };
 
 type Archive = {
@@ -47,23 +56,6 @@ type ExportPayload = {
   logs: Archive[];
 };
 
-function matchesCells(
-  q: string,
-  columnFilters: Record<string, string>,
-  cells: Record<string, string>,
-): boolean {
-  const needle = q.trim().toLowerCase();
-  if (needle && !Object.values(cells).join(" ").toLowerCase().includes(needle)) {
-    return false;
-  }
-  for (const [key, raw] of Object.entries(columnFilters)) {
-    const value = raw.trim().toLowerCase();
-    if (!value) continue;
-    if (!String(cells[key] ?? "").toLowerCase().includes(value)) return false;
-  }
-  return true;
-}
-
 function archiveCells(row: Archive): Record<string, string> {
   return {
     name: row.name,
@@ -76,6 +68,7 @@ function archiveCells(row: Archive): Record<string, string> {
 export function ReportExportClient() {
   const t = useTranslations("org.export");
   const tCommon = useTranslations("common");
+  const orgTimeZone = useOrgTimezone();
   const tenant = resolveTenant();
   const [tab, setTab] = useState<"business" | "user">("business");
   const [calendar, setCalendar] = useState<Calendar | null>(null);
@@ -84,10 +77,8 @@ export function ReportExportClient() {
   const [logsMeta, setLogsMeta] = useState<PaginationMeta>(emptyMeta());
   const [logsPage, setLogsPage] = useState(1);
   const [logsPerPage, setLogsPerPage] = useState<PageSize>(DEFAULT_PAGE_SIZE);
-  const [timezone, setTimezone] = useState("UTC");
-  const [includeTraining, setIncludeTraining] = useState(true);
-  const [periodKey, setPeriodKey] = useState("");
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
+  const [userWizardOpen, setUserWizardOpen] = useState(false);
   const tableQuery = useDataTableQuery();
   const filters = useMemo(
     () => serializeDataTableQuery(tableQuery.debounced),
@@ -95,7 +86,6 @@ export function ReportExportClient() {
   );
   const filtersKey = useMemo(() => JSON.stringify(filters), [filters]);
   const filtersKeyRef = useRef(filtersKey);
-
   const channel = useMemo(() => `org.${tenant}.reports-export`, [tenant]);
 
   const applyLogSlice = useCallback(
@@ -118,10 +108,6 @@ export function ReportExportClient() {
   const applyExportState = useCallback(
     (nextCalendar: Calendar | null, nextLogs: Archive[] | null, fromLive: boolean) => {
       setCalendar(nextCalendar);
-      setPeriodKey((current) => {
-        if (current) return current;
-        return nextCalendar?.quarters?.[0]?.key ?? "";
-      });
       if (fromLive && nextLogs) {
         setAllLogs(nextLogs);
       } else if (!fromLive) {
@@ -202,35 +188,25 @@ export function ReportExportClient() {
     tCommon,
   ]);
 
-  const statusLabel = liveStatusLabel(status);
+  const liveLabels = useLiveStatusLabels();
+  const statusLabel = liveStatusLabel(status, liveLabels);
 
-  async function generate(scope: "business" | "user", key: string, periodType: string) {
+  async function generate(payload: Record<string, unknown>, label: string): Promise<boolean> {
     try {
       await ensureCsrf();
       await api("/api/v1/org/reports/export", {
         method: "POST",
         tenant: resolveTenant(),
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          scope,
-          period_type: periodType,
-          period_key: key,
-          timezone,
-          include_training: includeTraining,
-        }),
+        body: JSON.stringify(payload),
       });
       await refreshFromApi(logsPage, logsPerPage, filters);
-      toastSuccess(`Generated ${scope} report for ${key}`);
+      toastSuccess(t("exportGenerated", { label }));
+      return true;
     } catch (err) {
       toastError(err instanceof Error ? err.message : t("generateFailed"));
+      return false;
     }
-  }
-
-  async function onUserGenerate(event: FormEvent) {
-    event.preventDefault();
-    if (!periodKey) return;
-    const periodType = periodKey.includes("-Q") ? "quarterly" : "monthly";
-    await generate("user", periodKey, periodType);
   }
 
   async function download(id: number, key: string) {
@@ -316,7 +292,7 @@ export function ReportExportClient() {
       header: tCommon("generated"),
       filter: "none",
       cell: (row) =>
-        row.generated_at ? new Date(row.generated_at).toLocaleString() : tCommon("emDash"),
+        row.generated_at ? formatDateTime(row.generated_at, orgTimeZone) : tCommon("emDash"),
     },
     {
       id: "actions",
@@ -346,6 +322,42 @@ export function ReportExportClient() {
       ),
     },
   ];
+
+  function renderPeriodAction(period: CalendarPeriod, periodType: "monthly" | "quarterly") {
+    const archiveId = period.archive_id;
+    if (archiveId !== null) {
+      return (
+        <Button
+          type="button"
+          variant="link"
+          className="min-h-0 px-2 py-1"
+          onClick={() => void download(archiveId, period.key)}
+        >
+          {tCommon("download")}
+        </Button>
+      );
+    }
+    return (
+      <Button
+        type="button"
+        variant="link"
+        className="min-h-0 px-2 py-1"
+        onClick={() =>
+          void generate(
+            {
+              scope: "business",
+              period_type: periodType,
+              period_key: period.key,
+              include_training: true,
+            },
+            period.key,
+          )
+        }
+      >
+        {t("generate")}
+      </Button>
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">
@@ -391,14 +403,7 @@ export function ReportExportClient() {
                         {m.label} {calendar.year}
                       </span>
                       {m.available ? (
-                        <Button
-                          type="button"
-                          variant="link"
-                          className="min-h-0 px-2 py-1"
-                          onClick={() => void generate("business", m.key, "monthly")}
-                        >
-                          {tCommon("download")}
-                        </Button>
+                        renderPeriodAction(m, "monthly")
                       ) : (
                         <span className="text-[var(--muted-foreground)]">
                           {tCommon("unavailable")}
@@ -429,14 +434,7 @@ export function ReportExportClient() {
                         {q.label} {calendar.year}
                       </span>
                       {q.available ? (
-                        <Button
-                          type="button"
-                          variant="link"
-                          className="min-h-0 px-2 py-1"
-                          onClick={() => void generate("business", q.key, "quarterly")}
-                        >
-                          {tCommon("pdf")}
-                        </Button>
+                        renderPeriodAction(q, "quarterly")
                       ) : (
                         <span className="text-[var(--muted-foreground)]">
                           {tCommon("unavailable")}
@@ -454,39 +452,12 @@ export function ReportExportClient() {
         <MinimalLoader className="mt-8" label={statusLabel ?? tCommon("loadingCalendar")} />
       ) : null}
       {tab === "user" ? (
-        <form onSubmit={onUserGenerate} className="mt-8 max-w-lg space-y-4">
-          <div className="space-y-1">
-            <Label htmlFor="export-period-key" className="text-[var(--muted-foreground)]">
-              {t("periodKey")}
-            </Label>
-            <Input
-              id="export-period-key"
-              value={periodKey}
-              onChange={(e) => setPeriodKey(e.target.value)}
-              placeholder="2026-Q3"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="export-timezone" className="text-[var(--muted-foreground)]">
-              {tCommon("timezone")}
-            </Label>
-            <Input
-              id="export-timezone"
-              value={timezone}
-              onChange={(e) => setTimezone(e.target.value)}
-            />
-          </div>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={includeTraining}
-              onChange={(e) => setIncludeTraining(e.target.checked)}
-              className="h-4 w-4 rounded border border-[var(--border)]"
-            />
-            {t("includeTraining")}
-          </label>
-          <Button type="submit">{t("generatePdf")}</Button>
-        </form>
+        <Panel className="mt-8 flex max-w-lg flex-col items-start gap-3 p-4">
+          <p className="text-sm text-[var(--muted-foreground)]">{t("userReportDescription")}</p>
+          <Button type="button" onClick={() => setUserWizardOpen(true)}>
+            {t("newUserReport")}
+          </Button>
+        </Panel>
       ) : null}
       <section className="mt-12">
         <h2 className="text-xl font-medium text-[var(--foreground)]">{t("reportLog")}</h2>
@@ -514,6 +485,14 @@ export function ReportExportClient() {
         />
       </section>
 
+      {userWizardOpen ? (
+        <UserReportWizard
+          defaultPeriodKey={calendar?.quarters[0]?.key ?? ""}
+          onClose={() => setUserWizardOpen(false)}
+          onGenerate={generate}
+        />
+      ) : null}
+
       <ConfirmDialog
         open={pendingDeleteId !== null}
         onOpenChange={(open) => {
@@ -522,6 +501,10 @@ export function ReportExportClient() {
         title={t("deleteArchive")}
         description={t("deleteArchiveConfirm")}
         confirmLabel={tCommon("delete")}
+        cancelLabel={tCommon("cancel")}
+        closeLabel={tCommon("close")}
+        workingLabel={tCommon("working")}
+        errorFallback={tCommon("deleteFailed")}
         variant="destructive"
         onConfirm={async () => {
           if (pendingDeleteId === null) return;

@@ -1,4 +1,10 @@
-import type { SessionUser } from "@/lib/session";
+import type {
+  SessionSubscription,
+  SessionUser,
+  SubscriptionStatus,
+  SubscriptionUsageItem,
+} from "@/lib/session";
+import { resolveTenant } from "@/lib/tenant";
 
 const API_BASE = "";
 
@@ -140,13 +146,18 @@ export async function ensureCsrf(): Promise<void> {
 }
 
 let sessionCache: SessionUser | null = null;
+/** Tenant the cached session was loaded for. Permissions differ per organization. */
+let sessionCacheTenant: string | null = null;
 let sessionFlight: Promise<SessionUser | null> | null = null;
+let sessionFlightTenant: string | null = null;
 let sessionEpoch = 0;
 
 export function invalidateSessionUser(): void {
   sessionEpoch += 1;
   sessionCache = null;
+  sessionCacheTenant = null;
   sessionFlight = null;
+  sessionFlightTenant = null;
 }
 
 /** Keep cached session locale in sync after a successful language switch. */
@@ -215,6 +226,52 @@ export async function apiOptional<T>(
   }
 }
 
+const SUBSCRIPTION_STATUSES: readonly SubscriptionStatus[] = [
+  "trial",
+  "active",
+  "suspended",
+  "expired",
+];
+
+function subscriptionStatus(raw: unknown): SubscriptionStatus | null {
+  return SUBSCRIPTION_STATUSES.find((status) => status === raw) ?? null;
+}
+
+function normalizeSubscriptionUsage(raw: unknown): SubscriptionUsageItem {
+  const item = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const used = Number(item.used);
+  const limit =
+    item.limit === null || item.limit === undefined ? null : Number(item.limit);
+  return {
+    used: Number.isFinite(used) ? used : 0,
+    limit: limit !== null && Number.isFinite(limit) ? limit : null,
+    over_limit: item.over_limit === true,
+  };
+}
+
+/** Spread into the session user only when /auth/me sent a subscription block. */
+function optionalSubscription(raw: unknown): { subscription?: SessionSubscription } {
+  if (!raw || typeof raw !== "object") return {};
+  const item = raw as Record<string, unknown>;
+  const usage = (
+    item.usage && typeof item.usage === "object" ? item.usage : {}
+  ) as Record<string, unknown>;
+  return {
+    subscription: {
+      plan_name: typeof item.plan_name === "string" ? item.plan_name : null,
+      status: subscriptionStatus(item.status),
+      effective_status: subscriptionStatus(item.effective_status),
+      read_only: item.read_only === true,
+      ends_at: typeof item.ends_at === "string" ? item.ends_at : null,
+      over_limit: item.over_limit === true,
+      usage: {
+        employees: normalizeSubscriptionUsage(usage.employees),
+        users: normalizeSubscriptionUsage(usage.users),
+      },
+    },
+  };
+}
+
 const SESSION_LOCALES = new Set(["en", "es", "fr", "pt", "de", "ru"]);
 
 function normalizeSessionUser(raw: Partial<SessionUser> | null | undefined): SessionUser | null {
@@ -258,6 +315,7 @@ function normalizeSessionUser(raw: Partial<SessionUser> | null | undefined): Ses
     permissions: Array.isArray(raw.permissions) ? raw.permissions.map(String) : [],
     is_platform_staff: Boolean(raw.is_platform_staff),
     mfa_enabled: Boolean(raw.mfa_enabled),
+    mfa_totp_enabled: Boolean(raw.mfa_totp_enabled),
     locale: localeRaw && SESSION_LOCALES.has(localeRaw) ? localeRaw : null,
     staff_tenant_id: raw.staff_tenant_id ?? null,
     acting_in_tenant: Boolean(raw.acting_in_tenant),
@@ -287,6 +345,7 @@ function normalizeSessionUser(raw: Partial<SessionUser> | null | undefined): Ses
           .filter((m): m is NonNullable<typeof m> => m !== null)
       : undefined,
     needs_org_selection: Boolean(raw.needs_org_selection),
+    ...optionalSubscription(raw.subscription),
     active_tenant_id:
       typeof raw.active_tenant_id === "string" && raw.active_tenant_id.trim() !== ""
         ? raw.active_tenant_id.trim()
@@ -324,25 +383,33 @@ async function loadSessionUser(): Promise<SessionUser | null> {
   }
 }
 
-function startSessionLoad(epoch: number): Promise<SessionUser | null> {
+function startSessionLoad(epoch: number, tenant: string): Promise<SessionUser | null> {
   const flight = loadSessionUser().then((user) => {
-    if (epoch === sessionEpoch && user) sessionCache = user;
+    if (epoch === sessionEpoch && user) {
+      sessionCache = user;
+      sessionCacheTenant = tenant;
+    }
     return user;
   });
   sessionFlight = flight;
+  sessionFlightTenant = tenant;
   const release = () => {
-    if (sessionFlight === flight) sessionFlight = null;
+    if (sessionFlight === flight) {
+      sessionFlight = null;
+      sessionFlightTenant = null;
+    }
   };
   void flight.then(release, release);
   return flight;
 }
 
 export async function fetchSessionUser(): Promise<SessionUser | null> {
-  if (sessionCache) return sessionCache;
+  const tenant = resolveTenant();
+  if (sessionCache && sessionCacheTenant === tenant) return sessionCache;
 
   const epoch = sessionEpoch;
-  if (!sessionFlight) {
-    return startSessionLoad(epoch);
+  if (!sessionFlight || sessionFlightTenant !== tenant) {
+    return startSessionLoad(epoch, tenant);
   }
 
   return sessionFlight;

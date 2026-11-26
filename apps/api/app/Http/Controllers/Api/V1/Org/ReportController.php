@@ -4,11 +4,15 @@ namespace App\Http\Controllers\Api\V1\Org;
 
 use App\Domains\AnalyticsReporting\Actions\BuildCampaignReport;
 use App\Domains\AnalyticsReporting\Actions\BuildOrgDetailedReport;
+use App\Domains\AnalyticsReporting\Actions\ResolveReportRecipients;
 use App\Domains\AnalyticsReporting\Jobs\SendScheduledReportJob;
+use App\Domains\AnalyticsReporting\Models\ReportSchedule;
 use App\Http\Controllers\Controller;
+use App\Support\OrgTimezone;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Validation\Rule;
 use InvalidArgumentException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -49,18 +53,37 @@ class ReportController extends Controller
     public function detailedSectionCsv(Request $request, string $section, BuildOrgDetailedReport $report): StreamedResponse|JsonResponse
     {
         try {
-            return $report->csv($section, $this->sectionFilters($request));
+            $filters = $this->sectionFilters($request);
+            $response = $report->csv($section, $filters);
+            $response->headers->set('X-Report-Truncated', $report->csvTruncated($section, $filters) ? '1' : '0');
+
+            return $response;
         } catch (InvalidArgumentException $e) {
             return response()->json(['message' => $e->getMessage()], 404);
         }
     }
 
-    public function email(Request $request): JsonResponse
+    public function email(Request $request, ResolveReportRecipients $resolveRecipients): JsonResponse
     {
         $data = $request->validate([
-            'email' => ['required', 'email'],
+            'recipient_user_ids' => ['required', 'array', 'min:1'],
+            'recipient_user_ids.*' => ['integer'],
+            'section' => ['sometimes', 'nullable', Rule::in(ReportSchedule::SECTIONS)],
         ]);
-        SendScheduledReportJob::dispatch($data['email']);
+
+        // Reports leave the organization only as mail to members who may view reports.
+        $recipients = $resolveRecipients->requireEligible((string) tenant('id'), $data['recipient_user_ids']);
+        $section = (string) ($data['section'] ?? ReportSchedule::SUMMARY_SECTION);
+
+        foreach ($recipients as $recipient) {
+            SendScheduledReportJob::dispatch(
+                (string) $recipient->email,
+                'csv',
+                ReportSchedule::ON_DEMAND_CADENCE,
+                null,
+                $section,
+            );
+        }
 
         return response()->json(['queued' => true]);
     }
@@ -72,11 +95,12 @@ class ReportController extends Controller
     {
         $from = $request->input('from');
         $to = $request->input('to');
+        $timezone = OrgTimezone::current();
 
         return [
             'department_id' => $request->filled('department_id') ? (int) $request->input('department_id') : null,
-            'from' => is_string($from) && $from !== '' ? Carbon::parse($from)->startOfDay() : null,
-            'to' => is_string($to) && $to !== '' ? Carbon::parse($to)->endOfDay() : null,
+            'from' => is_string($from) && $from !== '' ? Carbon::parse($from, $timezone)->startOfDay()->utc() : null,
+            'to' => is_string($to) && $to !== '' ? Carbon::parse($to, $timezone)->endOfDay()->utc() : null,
         ];
     }
 

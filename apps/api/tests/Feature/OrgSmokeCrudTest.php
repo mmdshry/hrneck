@@ -51,7 +51,6 @@ test('org admin can perform core CRUD across modules', function () {
         'first_name' => 'QA',
         'last_name' => 'Target',
         'department_id' => $dept['id'],
-        'timezone' => 'UTC',
     ])->assertCreated()->json('data');
 
     $group = $this->actingAs($admin)->withHeaders($headers)->postJson('/api/v1/org/groups', [
@@ -107,7 +106,7 @@ test('org admin can perform core CRUD across modules', function () {
         ->assertSuccessful();
 });
 
-test('staff enter cannot manage roles or settings', function () {
+test('platform super admin entering a tenant can manage roles and settings', function () {
     $platform = platformAdmin();
     $origin = ['Origin' => 'http://hrneck.test'];
 
@@ -118,9 +117,9 @@ test('staff enter cannot manage roles or settings', function () {
 
     $this->actingAs($platform)->withHeaders($origin + ['X-Tenant' => 'itneck'])
         ->getJson('/api/v1/org/roles')
-        ->assertForbidden();
+        ->assertOk();
 
     $this->actingAs($platform)->withHeaders($origin + ['X-Tenant' => 'itneck'])
-        ->putJson('/api/v1/org/settings', ['display_name' => 'Nope'])
-        ->assertForbidden();
+        ->putJson('/api/v1/org/settings', ['display_name' => 'Super admin check'])
+        ->assertSuccessful();
 });

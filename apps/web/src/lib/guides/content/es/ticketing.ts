@@ -22,7 +22,7 @@ export const ticketingGuide: GuideModule = {
   ],
   openInAppHref: "/org/ticketing",
   overview:
-    "El módulo de ticketing cubre lo básico del service desk ITIL para operadores en /org/ticketing: mesas, tickets con notas/tareas/adjuntos, acciones masivas, procedimientos y escalado, políticas SLA, lectores de correo IMAP, artículos KB (incluida la conversión ticket→KB), Buscar todo, preferencias e informes CSV/PDF/JSON. Los empleados envían y siguen el trabajo en el portal de servicio aparte (/portal)—consulte esa guía para los pasos del usuario final. Los permisos se dividen en org.ticketing.tickets, .admin, .kb, .reports y .portal, con roles semilla sd_* / kb_admin.",
+    "El módulo de ticketing cubre lo básico del service desk ITIL para operadores en /org/ticketing: mesas, tickets con notas/tareas/adjuntos, acciones masivas, procedimientos y escalado, políticas SLA, lectores de correo IMAP, artículos KB (incluida la conversión ticket→KB), Buscar todo, preferencias e informes CSV/PDF/JSON. Los empleados envían y siguen el trabajo en el portal de servicio aparte (/portal)—consulte esa guía para los pasos del usuario final. Los permisos se dividen en org.ticketing.tickets, .admin, .reports y .portal, con roles semilla sd_* / kb_admin. Los artículos KB tienen su propia sección (/org/kb) con los permisos org.kb.view y org.kb.manage.",
   example: {
     title: "Un informe de phishing se convierte en artículo KB",
     narrative:
@@ -46,7 +46,7 @@ export const ticketingGuide: GuideModule = {
     {
       title: "Publique conocimiento y exporte",
       body: "Convierta tickets resueltos a KB, verifique Buscar todo / visibilidad del portal y exporte paquetes CSV/PDF o JSON.",
-      href: "/org/ticketing/kb",
+      href: "/org/kb",
     },
   ],
   sections: [
@@ -125,7 +125,7 @@ export const ticketingGuide: GuideModule = {
         {
           title: "Redacte y publique artículos",
           body: "Cree, edite, publique/despublique o elimine artículos KB. Los borradores no publicados no llegan al portal del empleado.",
-          href: "/org/ticketing/kb",
+          href: "/org/kb",
         },
         {
           title: "Convierta ticket → KB",

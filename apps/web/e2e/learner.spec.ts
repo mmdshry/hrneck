@@ -4,7 +4,7 @@ import { ORG_STORAGE_STATE } from "./helpers/auth";
 test.use({ storageState: ORG_STORAGE_STATE });
 
 test.describe("Learner portal", () => {
-  test("assigns a course then shows progress in /learn", async ({ page }) => {
+  test("assigns a course then shows progress in /portal", async ({ page }) => {
     test.setTimeout(120_000);
     // page.evaluate below calls same-origin /api routes and reads XSRF-TOKEN, so open the app origin first.
     await page.goto("/org");
@@ -75,7 +75,7 @@ test.describe("Learner portal", () => {
 
     expect(result.ok).toBeTruthy();
 
-    await page.goto("/learn");
+    await page.goto("/portal");
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     await expect(
       page.getByText(/security fundamentals|learner portal|progress|assigned/i).first(),

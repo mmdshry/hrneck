@@ -17,11 +17,16 @@ function xsrfToken(): string | null {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
+export type AuthenticatedDownloadResult = {
+  /** True when the server cut the export at its row cap (`X-Report-Truncated: 1`). */
+  truncated: boolean;
+};
+
 export async function downloadAuthenticated(
   url: string,
   filename: string,
   accept: string,
-): Promise<void> {
+): Promise<AuthenticatedDownloadResult> {
   await ensureCsrf();
   const headers = new Headers({
     Accept: accept,
@@ -40,6 +45,8 @@ export async function downloadAuthenticated(
   }
 
   downloadBlob(await response.blob(), filename);
+
+  return { truncated: response.headers.get("X-Report-Truncated") === "1" };
 }
 
 export async function captureElementPng(

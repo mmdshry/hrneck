@@ -11,14 +11,17 @@ test.describe("Ticketing advanced flows", () => {
     await expect(page.getByRole("heading", { name: "Ticketing" })).toBeVisible();
 
     const summary = `E2E advanced ${Date.now()}`;
-    await page.locator("#summary").fill(summary);
+    await page.getByRole("button", { name: "New ticket" }).click();
+    const newTicketDialog = page.getByRole("dialog", { name: "New ticket" });
+    await expect(newTicketDialog.locator("#new-ticket-desk")).not.toHaveValue("", { timeout: 20_000 });
+    await newTicketDialog.locator("#new-ticket-summary").fill(summary);
     const [created] = await Promise.all([
       page.waitForResponse(
         (res) =>
           res.url().includes("/api/v1/org/ticketing/tickets") &&
           res.request().method() === "POST",
       ),
-      page.getByRole("button", { name: "Create ticket" }).click(),
+      newTicketDialog.getByRole("button", { name: "Create ticket" }).click(),
     ]);
     expect(created.status()).toBe(201);
     await expect(page).toHaveURL(/\/org\/ticketing\/tickets\/\d+/, { timeout: 30_000 });
@@ -38,19 +41,21 @@ test.describe("Ticketing advanced flows", () => {
 
     await page.goto(ticketUrl);
     await page.getByRole("button", { name: "Convert to KB" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Convert to KB" }).click();
     await expect(page.getByText(/converted|knowledge|kb/i).first()).toBeVisible({
       timeout: 15_000,
     });
 
     await page.goto("/portal/tickets");
     await expect(page.getByRole("heading", { name: "My tickets" })).toBeVisible();
-    await expect(page.locator("#portal-desk")).toBeVisible({ timeout: 20_000 });
+    await page.getByRole("button", { name: "New request" }).click({ timeout: 20_000 });
+    const requestDialog = page.getByRole("dialog", { name: "New request" });
+    await expect(requestDialog.locator("#portal-desk")).not.toHaveValue("", { timeout: 20_000 });
     const portalSummary = `Portal E2E ${Date.now()}`;
-    await page.locator("#portal-desk").selectOption({ index: 0 });
-    await page.locator("#portal-summary").fill(portalSummary);
-    await page.locator("form").filter({ has: page.locator("#portal-summary") }).evaluate((form) => {
-      (form as HTMLFormElement).requestSubmit();
-    });
+    await requestDialog.getByRole("button", { name: "Next" }).click();
+    await requestDialog.locator("#portal-summary").fill(portalSummary);
+    await requestDialog.getByRole("button", { name: "Next" }).click();
+    await requestDialog.getByRole("button", { name: "Submit", exact: true }).click();
     await expect(page).toHaveURL(/\/portal\/tickets\/\d+/, { timeout: 30_000 });
   });
 });

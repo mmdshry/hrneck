@@ -4,6 +4,7 @@ namespace App\Domains\AnalyticsReporting\Actions;
 
 use App\Domains\Campaigns\Models\TrainingAssignment;
 use App\Domains\TargetsGroups\Models\Target;
+use App\Support\OrgTimezone;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -28,7 +29,7 @@ class BuildTargetReportMetrics
      * }  $options
      * @return array<string, mixed>
      */
-    public function handle(string $periodKey, string $timezone = 'UTC', array $options = []): array
+    public function handle(string $periodKey, ?string $timezone = null, array $options = []): array
     {
         $mode = $options['mode'] ?? 'single';
         if (! in_array($mode, ['single', 'list'], true)) {
@@ -36,7 +37,7 @@ class BuildTargetReportMetrics
         }
 
         $includeTraining = (bool) ($options['include_training'] ?? true);
-        $period = $this->periods->parse($periodKey, $timezone);
+        $period = $this->periods->parse($periodKey, $timezone ?? OrgTimezone::current());
         $organization = $this->organizationName();
 
         $targetId = isset($options['target_id']) ? (int) $options['target_id'] : null;
@@ -82,7 +83,7 @@ class BuildTargetReportMetrics
             'timezone' => $period['timezone'],
             'brand' => (string) config('brand.name'),
             'organization' => $organization,
-            'generated_at' => now('UTC')->format('m/d/Y H:i').' UTC',
+            'generated_at' => now($period['timezone'])->format('m/d/Y H:i').' '.$period['timezone'],
             'filters' => $filters,
             'summary' => $summary,
             'status_order' => ClassifyTrainingAssignmentOutcome::STATUS_ORDER,

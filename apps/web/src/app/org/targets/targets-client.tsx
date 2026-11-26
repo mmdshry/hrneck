@@ -1,26 +1,23 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toastSuccess, toastError, toastInfo } from "@/lib/toast";
 import { useTranslations } from "next-intl";
 import { Avatar } from "@/components/ui/avatar";
-import { AvatarUploader } from "@/components/ui/avatar-uploader";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
-import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
-import { LocationSelect } from "@/components/ui/location-select";
 import { Select } from "@/components/ui/select";
-import { TimezoneSelect } from "@/components/ui/timezone-select";
-import { liveStatusLabel, useLiveTopic } from "@/hooks/use-live-topic";
+import { liveStatusLabel, useLiveStatusLabels, useLiveTopic } from "@/hooks/use-live-topic";
 import { useDataTableQuery } from "@/hooks/use-data-table-query";
-import { api, ensureCsrf, fetchSessionUser } from "@/lib/api";
+import { useOrgTimezone } from "@/hooks/use-org-timezone";
+import { formatDateTimeCompact } from "@/lib/format-datetime";
+import { api, apiOptional, ensureCsrf, fetchSessionUser } from "@/lib/api";
 import { serializeDataTableQuery } from "@/lib/data-table-query";
+import { roleChoicesFor } from "@/lib/org-role-choices";
 import { orgLiveChannel } from "@/lib/live-topics";
 import {
   DEFAULT_PAGE_SIZE,
@@ -31,33 +28,32 @@ import {
   type PageSize,
   type PaginationMeta,
 } from "@/lib/pagination";
+import { hasAnyPermission, hasPermission, type SessionUser } from "@/lib/session";
+import { matchesCells } from "@/lib/table-filter";
 import { resolveTenant } from "@/lib/tenant";
 import { ImportWizardDialog } from "./import/import-wizard-dialog";
+import { SetEmployeePasswordDialog } from "./set-employee-password-dialog";
 import {
-  EMPLOYMENT_TYPE_OPTIONS,
-  PREFERRED_LANGUAGE_OPTIONS,
-  RISK_TIER_OPTIONS,
-  emptyTargetForm,
-  formFromTarget,
-  languageLabel,
-  payloadFromForm,
-  type DepartmentOption,
-  type Target,
-  type TargetFormState,
-} from "./target-types";
+  useEmployeeStatusOptions,
+  useEmploymentTypeOptions,
+  useRiskTierOptions,
+} from "./target-form-steps";
+import { TargetFormWizard } from "./target-form-wizard";
+import { languageLabel, type Target } from "./target-types";
 
 type TargetsPayload = {
   data: Target[];
 };
 
+type OrgRole = {
+  id: number;
+  name: string;
+  permissions: string[];
+};
+
 function formatDateCell(value: string | null | undefined): string {
   if (!value) return "";
   return String(value).slice(0, 10);
-}
-
-function formatDateTimeCell(value: string | null | undefined): string {
-  if (!value) return "";
-  return String(value).replace("T", " ").slice(0, 19);
 }
 
 function managerLabel(target: Target): string {
@@ -70,7 +66,7 @@ function groupsLabel(target: Target): string {
   return target.groups?.map((group) => group.name).filter(Boolean).join(", ") ?? "";
 }
 
-function targetCells(target: Target): Record<string, string> {
+function targetCells(target: Target, timeZone: string): Record<string, string> {
   return {
     email: target.email,
     first_name: target.first_name ?? "",
@@ -84,49 +80,31 @@ function targetCells(target: Target): Record<string, string> {
     employment_type: target.employment_type ?? "",
     hire_date: formatDateCell(target.hire_date),
     preferred_language: languageLabel(target.preferred_language),
-    timezone: target.timezone ?? "",
     external_id: target.external_id ?? "",
     status: target.status ?? "",
     risk_score: String(target.risk_score ?? 0),
     risk_tier: target.risk_tier ?? "",
     risk_source: target.risk_source ?? "",
-    risk_updated_at: formatDateTimeCell(target.risk_updated_at),
-    last_training_completed_at: formatDateTimeCell(target.last_training_completed_at),
+    risk_updated_at: formatDateTimeCompact(target.risk_updated_at, timeZone),
+    last_training_completed_at: formatDateTimeCompact(target.last_training_completed_at, timeZone),
     notification_opt_out: target.notification_opt_out ? "yes" : "no",
     joined_via: target.joined_via ?? "",
     user_id: target.user_id != null ? String(target.user_id) : "",
+    role: (target.account_roles ?? []).join(" "),
     groups: groupsLabel(target),
   };
-}
-
-function matchesCells(
-  q: string,
-  columnFilters: Record<string, string>,
-  cells: Record<string, string>,
-): boolean {
-  const needle = q.trim().toLowerCase();
-  if (needle && !Object.values(cells).join(" ").toLowerCase().includes(needle)) {
-    return false;
-  }
-  for (const [key, raw] of Object.entries(columnFilters)) {
-    const value = raw.trim().toLowerCase();
-    if (!value) continue;
-    if (!String(cells[key] ?? "").toLowerCase().includes(value)) return false;
-  }
-  return true;
 }
 
 export function TargetsClient() {
   const t = useTranslations("org.employees");
   const tCommon = useTranslations("common");
-  const statusOptions = [
-    { label: tCommon("active"), value: "active" },
-    { label: tCommon("inactive"), value: "inactive" },
-  ];
+  const orgTimeZone = useOrgTimezone();
+  const statusOptions = useEmployeeStatusOptions();
+  const employmentTypeOptions = useEmploymentTypeOptions();
+  const riskTierOptions = useRiskTierOptions();
   const tenant = resolveTenant();
   const channel = tenant ? orgLiveChannel(tenant, "targets") : null;
   const [targets, setTargets] = useState<Target[]>([]);
-  const [managerOptions, setManagerOptions] = useState<Target[]>([]);
   const [liveTargets, setLiveTargets] = useState<Target[] | null>(null);
   const [targetsMeta, setTargetsMeta] = useState<PaginationMeta>(emptyMeta());
   const [targetsPage, setTargetsPage] = useState(1);
@@ -136,9 +114,10 @@ export function TargetsClient() {
   const [modalOpen, setModalOpen] = useState(false);
   const [importWizardOpen, setImportWizardOpen] = useState(false);
   const [editing, setEditing] = useState<Target | null>(null);
-  const [form, setForm] = useState<TargetFormState>(emptyTargetForm());
-  const [departments, setDepartments] = useState<DepartmentOption[]>([]);
-  const [saving, setSaving] = useState(false);
+  const [passwordTarget, setPasswordTarget] = useState<Target | null>(null);
+  const [session, setSession] = useState<SessionUser | null>(null);
+  const [sessionReady, setSessionReady] = useState(false);
+  const [roles, setRoles] = useState<OrgRole[]>([]);
   const [loading, setLoading] = useState(true);
   const tableQuery = useDataTableQuery();
   const filters = useMemo(
@@ -157,14 +136,14 @@ export function TargetsClient() {
       columnFilters: Record<string, string>,
     ) => {
       const filtered = items.filter((target) =>
-        matchesCells(q, columnFilters, targetCells(target)),
+        matchesCells(q, columnFilters, targetCells(target, orgTimeZone)),
       );
       const sliced = paginateLocal(filtered, nextPage, nextPerPage);
       setTargets(sliced.data);
       setTargetsMeta(sliced.meta);
       setTargetsPage(sliced.meta.current_page);
     },
-    [],
+    [orgTimeZone],
   );
 
   const onPayload = useCallback((payload: TargetsPayload) => {
@@ -194,6 +173,27 @@ export function TargetsClient() {
     channel,
     onPayload,
   });
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const me = await fetchSessionUser().catch(() => null);
+      if (cancelled) return;
+      setSession(me);
+      setSessionReady(true);
+      if (me && hasPermission(me, "org.roles.manage")) {
+        const res = await apiOptional<{ data: OrgRole[] }>("/api/v1/org/roles?per_page=100", {
+          tenant: resolveTenant(),
+        }).catch(() => null);
+        if (cancelled || !res) return;
+        const parsed = parsePaginatedResponse<OrgRole>(res, 100);
+        setRoles(parsed.data.length ? parsed.data : (res.data ?? []));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (filtersKeyRef.current !== filtersKey) {
@@ -230,7 +230,18 @@ export function TargetsClient() {
     tableQuery.debounced,
   ]);
 
-  const statusLabel = liveStatusLabel(status);
+  const liveLabels = useLiveStatusLabels();
+  const statusLabel = liveStatusLabel(status, liveLabels);
+
+  const canManageTargets = hasPermission(session, "org.targets.manage");
+  const canViewTargets = hasAnyPermission(session, ["org.targets.view", "org.targets.manage"]);
+  const canManageUsers = hasPermission(session, "org.users.manage");
+  const canGrantOrgAdmin = session?.roles.includes("org_admin") ?? false;
+  /** Roles the viewer may assign. Only org admins may grant org_admin; the API enforces the same rule. */
+  const roleCatalog = useMemo(
+    () => (canGrantOrgAdmin ? roles : roles.filter((role) => role.name !== "org_admin")),
+    [roles, canGrantOrgAdmin],
+  );
 
   async function afterMutation(nextPage = targetsPage) {
     if (liveTargets === null) {
@@ -238,92 +249,30 @@ export function TargetsClient() {
     }
   }
 
-  const loadDepartments = useCallback(async () => {
-    const t = resolveTenant();
-    const res = await api(`/api/v1/org/departments?${paginationQuery(1, 500, { active_only: "1" })}`, {
-      tenant: t,
-    });
-    const parsed = parsePaginatedResponse<DepartmentOption>(res, 500);
-    setDepartments(parsed.data.filter((department) => department.is_active !== false));
-  }, []);
-
-  const loadManagerOptions = useCallback(async () => {
-    const t = resolveTenant();
-    const res = await api(`/api/v1/org/targets?${paginationQuery(1, 500)}`, { tenant: t });
-    const parsed = parsePaginatedResponse<Target>(res, 500);
-    setManagerOptions(parsed.data);
-  }, []);
-
-  function patchForm<K extends keyof TargetFormState>(key: K, value: TargetFormState[K]) {
-    setForm((prev) => ({ ...prev, [key]: value }));
-  }
-
   function openCreateModal() {
     setEditing(null);
-    setForm(emptyTargetForm());
     setModalOpen(true);
-    void Promise.all([loadDepartments(), loadManagerOptions()]).catch((err: unknown) => {
-      toastError(err instanceof Error ? err.message : t("failedFormOptions"));
-    });
   }
 
   function openEditModal(target: Target) {
     setEditing(target);
-    setForm(formFromTarget(target));
     setModalOpen(true);
-    void Promise.all([loadDepartments(), loadManagerOptions()]).catch((err: unknown) => {
-      toastError(err instanceof Error ? err.message : t("failedFormOptions"));
-    });
   }
 
   function closeModal() {
-    if (saving) return;
     setModalOpen(false);
     setEditing(null);
-    setForm(emptyTargetForm());
   }
 
-  async function saveTarget(event: FormEvent) {
-    event.preventDefault();
-    
-    setSaving(true);
-    try {
-      await ensureCsrf();
-      if (editing) {
-        await api<{ data: Target }>(`/api/v1/org/targets/${editing.id}`, {
-          method: "PATCH",
-          tenant: resolveTenant(),
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payloadFromForm(form, { includeStatus: true })),
-        });
-        toastSuccess(t("employeeUpdated"));
-      } else {
-        const res = await api<{
-          data: Target;
-          meta?: { auto_assigned_instance_count?: number };
-        }>("/api/v1/org/targets", {
-          method: "POST",
-          tenant: resolveTenant(),
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payloadFromForm(form)),
-        });
-        const autoCount = res.meta?.auto_assigned_instance_count ?? 0;
-        toastSuccess(
-          autoCount > 0
-            ? `Employee created. Auto-assigned ${autoCount} checklist instance${autoCount === 1 ? "" : "s"}.`
-            : t("employeeCreated"),
-        );
-      }
-      setModalOpen(false);
-      setEditing(null);
-      setForm(emptyTargetForm());
-      setTargetsPage(1);
-      await afterMutation(1);
-    } catch (err) {
-      toastError(err instanceof Error ? err.message : editing ? tCommon("updateFailed") : tCommon("createFailed"));
-    } finally {
-      setSaving(false);
-    }
+  function updateTargetAvatar(targetId: number, url: string | null) {
+    setTargets((rows) =>
+      rows.map((row) => (row.id === targetId ? { ...row, avatar_url: url } : row)),
+    );
+    setLiveTargets((rows) =>
+      rows
+        ? rows.map((row) => (row.id === targetId ? { ...row, avatar_url: url } : row))
+        : rows,
+    );
   }
 
   async function archiveTarget(target: Target) {
@@ -377,6 +326,23 @@ export function TargetsClient() {
     }
   }
 
+  async function syncTargetRole(target: Target, nextRole: string) {
+    if (target.user_id == null) return;
+    try {
+      await ensureCsrf();
+      await api(`/api/v1/org/users/${target.user_id}/roles`, {
+        method: "PUT",
+        tenant: resolveTenant(),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roles: [nextRole] }),
+      });
+      toastSuccess(t("rolesUpdated"));
+      await afterMutation();
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : tCommon("updateFailed"));
+    }
+  }
+
   const columns: Array<DataTableColumn<Target>> = [
     {
       id: "avatar",
@@ -398,6 +364,39 @@ export function TargetsClient() {
       header: tCommon("email"),
       accessorKey: "email",
       cell: (target) => target.email,
+    },
+    {
+      id: "role",
+      header: tCommon("role"),
+      filter: "select",
+      filterOptions: roleCatalog.map((role) => ({ label: role.name, value: role.name })),
+      filterValue: (target) => (target.account_roles ?? []).join(" "),
+      enableSorting: false,
+      cell: (target) => {
+        if (target.user_id == null) {
+          return <span className="text-[var(--muted-foreground)]">{tCommon("emDash")}</span>;
+        }
+        const choice = roleChoicesFor(target.account_roles ?? [], roleCatalog, t("noRole"));
+        return (
+          <Select
+            aria-label={t("roleFor", { email: target.email })}
+            value={choice.value}
+            disabled={!canManageUsers}
+            onChange={(e) => {
+              const next = e.target.value;
+              if (next === "" || next === choice.value) return;
+              void syncTargetRole(target, next);
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {choice.options.map((option) => (
+              <option key={option.value || "none"} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
+        );
+      },
     },
     {
       id: "first_name",
@@ -451,7 +450,7 @@ export function TargetsClient() {
       id: "employment_type",
       header: tCommon("type"),
       filter: "select",
-      filterOptions: EMPLOYMENT_TYPE_OPTIONS,
+      filterOptions: employmentTypeOptions,
       accessorKey: "employment_type",
       cell: (target) => target.employment_type || "—",
     },
@@ -466,12 +465,6 @@ export function TargetsClient() {
       header: tCommon("language"),
       accessorKey: "preferred_language",
       cell: (target) => languageLabel(target.preferred_language),
-    },
-    {
-      id: "timezone",
-      header: tCommon("timezone"),
-      accessorKey: "timezone",
-      cell: (target) => target.timezone || "—",
     },
     {
       id: "external_id",
@@ -497,7 +490,7 @@ export function TargetsClient() {
       id: "risk_tier",
       header: tCommon("riskTier"),
       filter: "select",
-      filterOptions: RISK_TIER_OPTIONS,
+      filterOptions: riskTierOptions,
       accessorKey: "risk_tier",
       cell: (target) => target.risk_tier || tCommon("emDash"),
     },
@@ -510,15 +503,16 @@ export function TargetsClient() {
     {
       id: "risk_updated_at",
       header: tCommon("riskUpdated"),
-      filterValue: (target) => formatDateTimeCell(target.risk_updated_at),
-      cell: (target) => formatDateTimeCell(target.risk_updated_at) || tCommon("emDash"),
+      filterValue: (target) => formatDateTimeCompact(target.risk_updated_at, orgTimeZone),
+      cell: (target) =>
+        formatDateTimeCompact(target.risk_updated_at, orgTimeZone) || tCommon("emDash"),
     },
     {
       id: "last_training_completed_at",
       header: tCommon("lastTraining"),
-      filterValue: (target) => formatDateTimeCell(target.last_training_completed_at),
+      filterValue: (target) => formatDateTimeCompact(target.last_training_completed_at, orgTimeZone),
       cell: (target) =>
-        formatDateTimeCell(target.last_training_completed_at) || tCommon("emDash"),
+        formatDateTimeCompact(target.last_training_completed_at, orgTimeZone) || tCommon("emDash"),
     },
     {
       id: "notification_opt_out",
@@ -557,50 +551,64 @@ export function TargetsClient() {
       enableGlobalFilter: false,
       cell: (target) => (
         <div className="flex flex-wrap items-center gap-2">
-          <LinkButton href={`/org/targets/${target.id}`} size="compact" variant="outline">
-            {tCommon("openAction")}
-          </LinkButton>
-          <Button
-            type="button"
-            variant="outline"
-            size="compact"
-            onClick={() => openEditModal(target)}
-          >
-            {tCommon("edit")}
-          </Button>
-          {target.status === "inactive" ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="compact"
-              onClick={() => void reactivateTarget(target)}
-            >
-              {tCommon("reactivate")}
-            </Button>
-          ) : (
-            <Button
-              type="button"
-              variant="outline"
-              size="compact"
-              onClick={() => setPendingArchive(target)}
-            >
-              {tCommon("archive")}
-            </Button>
-          )}
-          <Button
-            type="button"
-            variant="outline"
-            size="compact"
-            onClick={() => setPendingDeleteTarget(target)}
-          >
-            {tCommon("delete")}
-          </Button>
+          {canViewTargets ? (
+            <LinkButton href={`/org/targets/${target.id}`} size="compact" variant="outline">
+              {tCommon("openAction")}
+            </LinkButton>
+          ) : null}
+          {canManageTargets ? (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                size="compact"
+                onClick={() => openEditModal(target)}
+              >
+                {tCommon("edit")}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="compact"
+                onClick={() => setPasswordTarget(target)}
+              >
+                {t("setPassword")}
+              </Button>
+              {target.status === "inactive" ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="compact"
+                  onClick={() => void reactivateTarget(target)}
+                >
+                  {tCommon("reactivate")}
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="compact"
+                  onClick={() => setPendingArchive(target)}
+                >
+                  {tCommon("archive")}
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="compact"
+                onClick={() => setPendingDeleteTarget(target)}
+              >
+                {tCommon("delete")}
+              </Button>
+            </>
+          ) : null}
         </div>
       ),
     },
   ];
 
-  if (loading) {
+  if (loading || !sessionReady) {
     return <PageSkeleton className="max-w-5xl" />;
   }
 
@@ -610,14 +618,16 @@ export function TargetsClient() {
         title={t("title")}
         description={statusLabel ?? t("description")}
         actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" variant="secondary" onClick={() => setImportWizardOpen(true)}>
-              {t("importEmployees")}
-            </Button>
-            <Button type="button" variant="secondary" onClick={openCreateModal}>
-              {t("addEmployee")}
-            </Button>
-          </div>
+          canManageTargets ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="button" variant="secondary" onClick={() => setImportWizardOpen(true)}>
+                {t("importEmployees")}
+              </Button>
+              <Button type="button" variant="secondary" onClick={openCreateModal}>
+                {t("addEmployee")}
+              </Button>
+            </div>
+          ) : undefined
         }
       />
       
@@ -648,252 +658,24 @@ export function TargetsClient() {
         />
       </section>
 
-      <Dialog
-        open={modalOpen}
-        onOpenChange={(open) => {
-          if (!open) closeModal();
-          else setModalOpen(true);
-        }}
-        title={editing ? t("editEmployee") : t("addEmployee")}
-        description={
-          editing ? t("editEmployeeDescription") : t("createEmployeeDescription")
-        }
-        dismissible={!saving}
-        footer={
-          <>
-            <Button type="button" variant="outline" onClick={closeModal} disabled={saving}>
-              {tCommon("cancel")}
-            </Button>
-            <Button
-              type="submit"
-              form="target-form"
-              disabled={saving || !form.email.trim() || !form.timezone.trim()}
-            >
-              {saving
-                ? tCommon("saving")
-                : editing
-                  ? tCommon("save")
-                  : t("addEmployee")}
-            </Button>
-          </>
-        }
-      >
-        <form id="target-form" onSubmit={(e) => void saveTarget(e)} className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
-          {editing ? (
-            <div className="space-y-1">
-              <Label>{tCommon("photo")}</Label>
-              <AvatarUploader
-                name={[form.first_name, form.last_name].filter(Boolean).join(" ")}
-                email={form.email}
-                avatarUrl={editing.avatar_url}
-                endpoint={`/api/v1/org/targets/${editing.id}/avatar`}
-                withTenant
-                size="md"
-                onChanged={(url) => {
-                  setEditing((prev) => (prev ? { ...prev, avatar_url: url } : prev));
-                  setTargets((rows) =>
-                    rows.map((row) =>
-                      row.id === editing.id ? { ...row, avatar_url: url } : row,
-                    ),
-                  );
-                  setLiveTargets((rows) =>
-                    rows
-                      ? rows.map((row) =>
-                          row.id === editing.id ? { ...row, avatar_url: url } : row,
-                        )
-                      : rows,
-                  );
-                }}
-              />
-            </div>
-          ) : null}
-          <div className="space-y-1">
-            <Label htmlFor="target-email">{tCommon("email")}</Label>
-            <Input
-              id="target-email"
-              type="email"
-              value={form.email}
-              onChange={(e) => patchForm("email", e.target.value)}
-              required
-              autoFocus
-            />
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1">
-              <Label htmlFor="target-first-name">{tCommon("firstName")}</Label>
-              <Input
-                id="target-first-name"
-                value={form.first_name}
-                onChange={(e) => patchForm("first_name", e.target.value)}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="target-last-name">{tCommon("lastName")}</Label>
-              <Input
-                id="target-last-name"
-                value={form.last_name}
-                onChange={(e) => patchForm("last_name", e.target.value)}
-              />
-            </div>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1">
-              <Label htmlFor="target-job-title">{tCommon("titleLabel")}</Label>
-              <Input
-                id="target-job-title"
-                value={form.job_title}
-                onChange={(e) => patchForm("job_title", e.target.value)}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="target-department">{tCommon("department")}</Label>
-              <Select
-                id="target-department"
-                value={form.department_id}
-                onChange={(e) => patchForm("department_id", e.target.value)}
-              >
-                <option value="">{t("noDepartment")}</option>
-                {departments.map((department) => (
-                  <option key={department.id} value={String(department.id)}>
-                    {department.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1">
-              <Label htmlFor="target-manager">{tCommon("manager")}</Label>
-              <Select
-                id="target-manager"
-                value={form.manager_target_id}
-                onChange={(e) => patchForm("manager_target_id", e.target.value)}
-              >
-                <option value="">{t("noManager")}</option>
-                {managerOptions
-                  .filter((row) => !editing || row.id !== editing.id)
-                  .map((row) => (
-                    <option key={row.id} value={String(row.id)}>
-                      {[row.first_name, row.last_name].filter(Boolean).join(" ") || row.email} ({row.email})
-                    </option>
-                  ))}
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="target-employment-type">{t("employmentType")}</Label>
-              <Select
-                id="target-employment-type"
-                value={form.employment_type}
-                onChange={(e) => patchForm("employment_type", e.target.value)}
-              >
-                <option value="">{t("notSet")}</option>
-                {EMPLOYMENT_TYPE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1">
-              <Label htmlFor="target-hire-date">{tCommon("hireDate")}</Label>
-              <Input
-                id="target-hire-date"
-                type="date"
-                value={form.hire_date}
-                onChange={(e) => patchForm("hire_date", e.target.value)}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="target-employee-number">{tCommon("employeeNumber")}</Label>
-              <Input
-                id="target-employee-number"
-                value={form.employee_number}
-                onChange={(e) => patchForm("employee_number", e.target.value)}
-              />
-            </div>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1">
-              <Label htmlFor="target-phone">{tCommon("phone")}</Label>
-              <Input
-                id="target-phone"
-                value={form.phone}
-                onChange={(e) => patchForm("phone", e.target.value)}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="target-location">{tCommon("location")}</Label>
-              <LocationSelect
-                id="target-location"
-                value={form.location}
-                onChange={(next) => patchForm("location", next)}
-              />
-            </div>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1">
-              <Label htmlFor="target-language">{t("preferredLanguage")}</Label>
-              <Select
-                id="target-language"
-                value={form.preferred_language}
-                onChange={(e) => patchForm("preferred_language", e.target.value)}
-              >
-                <option value="">{t("notSet")}</option>
-                {PREFERRED_LANGUAGE_OPTIONS.map((option) => (
-                  <option key={option.code} value={option.code}>
-                    {option.label}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="target-timezone">{tCommon("timezone")}</Label>
-              <TimezoneSelect
-                id="target-timezone"
-                value={form.timezone}
-                onChange={(e) => patchForm("timezone", e.target.value)}
-                required
-              />
-            </div>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1">
-              <Label htmlFor="target-external-id">{tCommon("externalId")}</Label>
-              <Input
-                id="target-external-id"
-                value={form.external_id}
-                onChange={(e) => patchForm("external_id", e.target.value)}
-              />
-            </div>
-            {editing ? (
-              <div className="space-y-1">
-                <Label htmlFor="target-status">{tCommon("status")}</Label>
-                <Select
-                  id="target-status"
-                  value={form.status}
-                  onChange={(e) => patchForm("status", e.target.value)}
-                >
-                  {statusOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            ) : null}
-          </div>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={form.notification_opt_out}
-              onChange={(e) => patchForm("notification_opt_out", e.target.checked)}
-            />
-            {t("optOutCampaignNotifications")}
-          </label>
-        </form>
-      </Dialog>
+      <SetEmployeePasswordDialog
+        key={passwordTarget?.id ?? "closed"}
+        target={passwordTarget}
+        onClose={() => setPasswordTarget(null)}
+      />
+
+      {modalOpen ? (
+        <TargetFormWizard
+          target={editing}
+          roleOptions={canManageUsers ? roleCatalog : undefined}
+          onClose={closeModal}
+          onSaved={async () => {
+            setTargetsPage(1);
+            await afterMutation(1);
+          }}
+          onAvatarChanged={updateTargetAvatar}
+        />
+      ) : null}
 
       <ImportWizardDialog
         open={importWizardOpen}

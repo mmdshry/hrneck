@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers\Api\V1\Org\Ticketing;
 
+use App\Domains\AnalyticsReporting\Support\ReportPdf;
 use App\Domains\Ticketing\Actions\TicketingReports;
 use App\Http\Controllers\Controller;
-use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -25,10 +25,14 @@ class TicketingReportController extends Controller
     {
         $deskId = $request->filled('desk_id') ? (int) $request->input('desk_id') : null;
         $csv = $reports->csv($deskId);
+        $truncated = $reports->truncated($deskId);
 
         return response()->streamDownload(function () use ($csv): void {
             echo $csv;
-        }, 'ticketing-report.csv', ['Content-Type' => 'text/csv']);
+        }, 'ticketing-report.csv', [
+            'Content-Type' => 'text/csv',
+            'X-Report-Truncated' => $truncated ? '1' : '0',
+        ]);
     }
 
     public function pdf(Request $request, TicketingReports $reports): StreamedResponse
@@ -40,15 +44,17 @@ class TicketingReportController extends Controller
         $html = view('reports.ticketing', [
             'summary' => $summary,
             'rows' => $rows,
+            'truncated' => $reports->truncated($deskId),
+            'maxRows' => TicketingReports::ROW_CAP,
             'tenant' => tenant('id'),
             'brand' => config('brand.name'),
             'generatedAt' => now()->toIso8601String(),
         ])->render();
 
-        $pdf = Pdf::loadHTML($html)->setPaper('a4', 'landscape');
+        $pdf = ReportPdf::render($html);
 
         return response()->streamDownload(function () use ($pdf): void {
-            echo $pdf->output();
+            echo $pdf;
         }, 'ticketing-report.pdf', ['Content-Type' => 'application/pdf']);
     }
 }

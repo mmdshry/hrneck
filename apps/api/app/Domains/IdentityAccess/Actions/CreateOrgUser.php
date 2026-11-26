@@ -3,6 +3,7 @@
 namespace App\Domains\IdentityAccess\Actions;
 
 use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
+use App\Domains\Subscriptions\Support\TenantEntitlements;
 use App\Domains\TargetsGroups\Support\ResolveDepartmentFields;
 use App\Models\Role;
 use App\Models\Tenant;
@@ -17,6 +18,7 @@ class CreateOrgUser
         private readonly SeedRbacCatalog $rbac,
         private readonly ProvisionEmployeePair $provision,
         private readonly EnsureTenantMembership $memberships,
+        private readonly TenantEntitlements $entitlements,
     ) {}
 
     /**
@@ -33,20 +35,16 @@ class CreateOrgUser
     ): User {
         $email = $this->provision->normalizeEmail($email);
 
-        $existing = $this->provision->findUserByEmail($email);
-        if ($existing !== null) {
-            if ($existing->isPlatformStaff()) {
-                throw ValidationException::withMessages([
-                    'email' => ['This email belongs to a platform staff account and cannot be linked to an organization.'],
-                ]);
-            }
+        $this->provision->assertNoPlatformAccount($email);
 
-            if ($existing->belongsToTenant($tenantId, activeOnly: false)) {
-                throw ValidationException::withMessages([
-                    'email' => ['A user with this email already belongs to this organization.'],
-                ]);
-            }
+        if ($this->provision->findOrgUserByEmail($email, $tenantId) !== null) {
+            throw ValidationException::withMessages([
+                'email' => ['A user with this email already belongs to this organization.'],
+            ]);
         }
+
+        // Every organization account is an employee, so each account needs an employee seat.
+        $this->entitlements->assertCanGrantEmployeeTarget($tenantId, $email, null);
 
         $this->rbac->ensureOrgAdminRole($tenantId);
 
@@ -61,24 +59,16 @@ class CreateOrgUser
             }) ?? $departmentFields;
         }
 
-        if ($existing === null) {
-            $user = User::query()->create([
-                'name' => $name,
-                'email' => $email,
-                'password' => Hash::make($password),
-                'tenant_id' => $tenantId,
-                'department_id' => $departmentFields['department_id'],
-                'department' => $departmentFields['department'],
-                'must_set_password' => false,
-            ]);
-            $user->forceFill(['email_verified_at' => now()])->save();
-        } else {
-            $user = $existing;
-            $user->forceFill([
-                'name' => $name !== '' ? $name : $user->name,
-                'disabled_at' => null,
-            ])->save();
-        }
+        $user = User::query()->create([
+            'name' => $name,
+            'email' => $email,
+            'password' => Hash::make($password),
+            'tenant_id' => $tenantId,
+            'department_id' => $departmentFields['department_id'],
+            'department' => $departmentFields['department'],
+            'must_set_password' => false,
+        ]);
+        $user->forceFill(['email_verified_at' => now()])->save();
 
         $this->memberships->handle($user, $tenantId, $departmentFields);
 
@@ -97,11 +87,9 @@ class CreateOrgUser
 
         setPermissionsTeamId(null);
 
-        if (in_array(OrgPermissionCatalog::LEARNER, $roleNames, true)) {
-            $this->withTenant($tenantId, function () use ($user, $tenantId): void {
-                $this->provision->ensureTargetForLearner($user, $tenantId);
-            });
-        }
+        $this->withTenant($tenantId, function () use ($user, $tenantId): void {
+            $this->provision->ensureTargetForAccount($user, $tenantId);
+        });
 
         return $user->load(['roles', 'memberships.tenant']);
     }

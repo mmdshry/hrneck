@@ -131,6 +131,8 @@ class MfaService
 
     public function disable(User $user): void
     {
+        $user->webauthnCredentials()->delete();
+
         $user->forceFill([
             'mfa_secret' => null,
             'mfa_enabled' => false,
@@ -140,6 +142,45 @@ class MfaService
 
         cache()->forget($this->pendingSetupKey($user));
         cache()->forget('mfa_totp_ts:'.$user->id);
+    }
+
+    /**
+     * Recomputes mfa_enabled from the factors that still exist (authenticator app and/or passkeys).
+     *
+     * When no recovery codes exist yet, fresh ones are generated and returned once in plaintext,
+     * so a user who only has a passkey can still recover the account.
+     *
+     * @return list<string>|null
+     */
+    public function reconcileFactors(User $user): ?array
+    {
+        $hasAuthenticatorApp = is_string($user->mfa_secret) && $user->mfa_secret !== '';
+        $hasPasskey = $user->webauthnCredentials()->exists();
+
+        if (! $hasAuthenticatorApp && ! $hasPasskey) {
+            $user->forceFill([
+                'mfa_enabled' => false,
+                'mfa_confirmed_at' => null,
+                'mfa_recovery_codes' => null,
+            ])->save();
+
+            return null;
+        }
+
+        $attributes = [
+            'mfa_enabled' => true,
+            'mfa_confirmed_at' => $user->mfa_confirmed_at ?? now(),
+        ];
+
+        $plainCodes = null;
+        if (empty($user->mfa_recovery_codes)) {
+            $plainCodes = $this->generateRecoveryCodes();
+            $attributes['mfa_recovery_codes'] = $this->hashRecoveryCodes($plainCodes);
+        }
+
+        $user->forceFill($attributes)->save();
+
+        return $plainCodes;
     }
 
     public function issueChallengeToken(User $user, bool $remember = false): string

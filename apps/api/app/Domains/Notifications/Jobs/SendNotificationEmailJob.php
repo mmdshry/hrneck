@@ -2,6 +2,7 @@
 
 namespace App\Domains\Notifications\Jobs;
 
+use App\Domains\Notifications\Mails\BrandedNotificationMail;
 use App\Domains\Notifications\Support\NotificationEmailGate;
 use App\Support\AppLocale;
 use Illuminate\Bus\Queueable;
@@ -35,9 +36,7 @@ class SendNotificationEmailJob implements ShouldQueue
         }
 
         try {
-            Mail::raw($this->body, function ($message): void {
-                $message->to($this->email)->subject($this->subject);
-            });
+            Mail::to($this->email)->send(BrandedNotificationMail::fromPlainBody($this->subject, $this->body));
         } catch (Throwable $e) {
             report($e);
         }

@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers\Api\V1\Org\Ticketing;
 
+use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
+use App\Domains\Subscriptions\Support\PlanFeature;
+use App\Domains\Subscriptions\Support\TenantEntitlements;
 use App\Domains\Ticketing\Models\SdKbArticle;
 use App\Domains\Ticketing\Models\SdTicket;
 use App\Domains\Ticketing\Support\TicketingPayload;
@@ -9,10 +12,11 @@ use App\Http\Controllers\Controller;
 use App\Support\ApiPagination;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 
 class SearchController extends Controller
 {
-    public function __invoke(Request $request): JsonResponse
+    public function __invoke(Request $request, TenantEntitlements $entitlements): JsonResponse
     {
         $q = trim((string) $request->input('q', ''));
         $perPage = ApiPagination::perPage($request);
@@ -39,6 +43,7 @@ class SearchController extends Controller
         $like = '%'.str_replace(['%', '_'], ['\\%', '\\_'], $q).'%';
 
         $tickets = SdTicket::query()
+            ->visibleTo($request->user())
             ->with(['desk', 'stage', 'priority'])
             ->active()
             ->where(function ($b) use ($like): void {
@@ -49,14 +54,19 @@ class SearchController extends Controller
             ->latest()
             ->paginate($perPage, ['*'], 'tickets_page');
 
-        $kb = SdKbArticle::query()
-            ->where(function ($b) use ($like): void {
-                $b->where('summary', 'like', $like)
-                    ->orWhere('number', 'like', $like)
-                    ->orWhere('description', 'like', $like);
-            })
-            ->latest()
-            ->paginate($perPage, ['*'], 'kb_page');
+        $canSearchKb = $request->user()?->can(OrgPermissionCatalog::KB_VIEW) === true
+            && $entitlements->hasFeature((string) tenant('id'), PlanFeature::KnowledgeBase);
+
+        $kb = $canSearchKb
+            ? SdKbArticle::query()
+                ->where(function ($b) use ($like): void {
+                    $b->where('summary', 'like', $like)
+                        ->orWhere('number', 'like', $like)
+                        ->orWhere('description', 'like', $like);
+                })
+                ->latest()
+                ->paginate($perPage, ['*'], 'kb_page')
+            : new LengthAwarePaginator([], 0, $perPage, 1, ['pageName' => 'kb_page']);
 
         return response()->json([
             'data' => [

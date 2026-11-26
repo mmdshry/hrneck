@@ -4,47 +4,48 @@ export const learnerPortalGuide: GuideModule = {
   slug: "learner-portal",
   title: "Portal del alumno",
   summary:
-    "Complete cursos asignados, vea lecciones con tiempo de visionado registrado, haga cuestionarios y siga las notificaciones de formación en /learn.",
+    "Completa los cursos asignados, mira lecciones con tiempo de reproducción registrado, realiza cuestionarios y sigue las notificaciones de formación desde tu panel de empleado en /portal.",
   keywords: [
     "alumno",
-    "aprender",
+    "learn",
+    "panel",
     "cuestionario",
     "curso",
     "inscripción",
-    "tiempo de visionado",
-    "ensayo",
+    "watch time",
+    "essay",
     "portal",
   ],
-  openInAppHref: "/learn",
+  openInAppHref: "/portal",
   overview:
-    "El portal del alumno es donde las personas inscritas consumen contenido de concienciación en seguridad. Los operadores asignan cursos desde /org/training; los alumnos inician sesión en el host del tenant y abren /learn para ver asignaciones, leer artículos, ver vídeo subido o incrustado (se informa el tiempo de visionado), abrir PDF, marcar lecciones como completadas y hacer cuestionarios con notas de aprobado, flags opcionales, temporizadores y respuestas de ensayo. Los checklists de RR. HH. nunca aparecen aquí. La campana de notificaciones en la cabecera del alumno muestra eventos training_assigned con enlaces profundos de vuelta a /learn.",
+    "Los empleados llegan a su panel en /portal tras iniciar sesión. Mis cursos enumera la formación de concienciación en seguridad asignada: los operadores asignan cursos desde /org/training y los alumnos abren cada curso para ver lecciones, leer artículos, ver vídeo subido o incrustado (el tiempo de visualización se reporta), abrir PDF, marcar lecciones como completadas y hacer cuestionarios con puntuaciones de aprobado, indicadores opcionales, cuentas atrás y respuestas de ensayo. El mismo panel enlaza con Mis tickets y la Base de conocimiento. Las listas de RR. HH. nunca aparecen aquí. La campana de notificaciones muestra eventos training_assigned con enlaces directos de vuelta a /portal. El plan puede desactivar Mis cursos; el resto del panel sigue funcionando.",
   example: {
-    title: "La analista de Finanzas termina Phishing Essentials",
+    title: "Analista de finanzas completa Phishing Essentials",
     narrative:
-      "Maya abre /learn, ve Concienciación de seguridad Q4 al 40 %, ve la Lección 2 (4 minutos registrados), la marca como completada y luego hace el cuestionario obligatorio con temporizador de 15 minutos. Aprueba con un 88 %, deja un ensayo sobre «cómo informaría un señuelo» y el informe de visionado de la org actualiza su fila antes del siguiente recordatorio.",
+      "Maya abre /portal, ve Concienciación de seguridad Q4 en Mis cursos al 40 %, mira la Lección 2 (4 minutos registrados), la marca como completada y luego hace el cuestionario obligatorio con una cuenta atrás de 15 minutos. Aprueba con un 88 %, deja un ensayo sobre «cómo reportaría un cebo» y el informe de visualización de la organización actualiza su fila antes del siguiente recordatorio.",
   },
   steps: [
     {
-      title: "Inicie sesión en el host del tenant",
-      body: "Use su cuenta de la org en {slug}.hrneck.test. Puede requerirse MFA. Los alumnos no usan MSP ni la administración Filament.",
+      title: "Inicia sesión en el host del tenant",
+      body: "Usa tu cuenta de la organización en {slug}.hrneck.test. Puede requerirse MFA. Los alumnos no usan el MSP ni el admin de Filament.",
       href: "/login",
     },
     {
-      title: "Abra /learn",
-      body: "Revise los cursos asignados con estado y progreso. Solo aparecen las inscripciones creadas por asignaciones o campañas de Formación.",
-      href: "/learn",
+      title: "Abre tu panel en /portal",
+      body: "Mis cursos muestra la formación asignada con estado y progreso. Solo aparecen las inscripciones creadas por asignaciones de formación o campañas. Mis tickets y la Base de conocimiento están a un clic.",
+      href: "/portal",
     },
     {
-      title: "Complete las lecciones",
-      body: "Lea artículos, vea vídeo (URL o subida), abra PDF y marque cada lección como completada al terminarla.",
+      title: "Completa las lecciones",
+      body: "Lee artículos, mira vídeo (URL o subida), abre PDF y marca cada lección como completada al terminar.",
     },
     {
-      title: "Haga los cuestionarios",
-      body: "Respete la nota de aprobado, obligatorio u opcional, y cualquier temporizador. Responda opción múltiple y ensayos sin puntuación, luego envíe.",
+      title: "Realiza los cuestionarios",
+      body: "Respeta la puntuación de aprobado, lo obligatorio frente a lo opcional y cualquier cuenta atrás. Responde preguntas de opción múltiple y ensayos sin puntuación, y envía.",
     },
     {
-      title: "Observe la campana de notificaciones",
-      body: "Las nuevas asignaciones de formación aparecen en la campana de la cabecera del alumno con un enlace profundo al curso.",
+      title: "Vigila la campana de notificaciones",
+      body: "Las nuevas asignaciones de formación aparecen en la campana con un enlace directo al curso en tu panel.",
     },
   ],
   sections: [
@@ -52,24 +53,24 @@ export const learnerPortalGuide: GuideModule = {
       title: "Lo que los alumnos nunca ven",
       steps: [
         {
-          title: "Sin checklists de RR. HH.",
-          body: "Los formularios de onboarding/offboarding son solo de administración en /org/checklists. Los empleados son registros de audiencia; las instancias de checklist las rellenan operadores de RR. HH.",
+          title: "Sin listas de RR. HH.",
+          body: "Los formularios de incorporación/baja son solo para administradores en /org/checklists. Los empleados son registros de audiencia; las instancias de checklist las rellenan los operadores de RR. HH.",
         },
         {
           title: "Sin barra lateral de administración de la org",
-          body: "La autoría de cursos, el lanzamiento de campañas y la exportación del informe de visionado permanecen en /org para usuarios con org.training.manage.",
+          body: "La creación de cursos, el lanzamiento de campañas y la exportación del informe de visualización se mantienen en /org para usuarios con org.training.manage.",
         },
       ],
     },
   ],
   diagram: {
-    title: "Ruta del alumno",
+    title: "Recorrido del alumno",
     nodes: [
       { id: "assign", label: "La org asigna el curso" },
-      { id: "learn", label: "Lista /learn" },
+      { id: "learn", label: "Mis cursos en /portal" },
       { id: "lesson", label: "Lección" },
       { id: "quiz", label: "Cuestionario" },
-      { id: "report", label: "Informe de visionado de la org" },
+      { id: "report", label: "Informe de visualización" },
     ],
     edges: [
       { from: "assign", to: "learn" },
@@ -87,23 +88,17 @@ export const learnerPortalGuide: GuideModule = {
     ],
     highlight: {
       title: "Phishing Essentials",
-      caption: "Lección 2 de 3 · 4 m vistos · cuestionario desbloqueado a continuación",
+      caption: "Lección 2 de 3 · 4 min vistos · cuestionario desbloqueado después",
       progress: 66,
     },
     rows: [
-      { title: "Lección 1 · Detectar el señuelo", meta: "Completada" },
+      { title: "Lección 1 · Detectar el cebo", meta: "Completada" },
       { title: "Lección 2 · Enlaces seguros", meta: "En curso · vídeo" },
-      { title: "Cuestionario · Informar phishing", meta: "Obligatorio · límite 15 m" },
+      { title: "Cuestionario · Reportar phishing", meta: "Obligatorio · límite 15 min" },
     ],
     annotations: [
-      {
-        label: "Tiempo de visionado",
-        note: "El progreso del vídeo se reporta al informe de visionado de la org.",
-      },
-      {
-        label: "Campana",
-        note: "Las notificaciones training_assigned enlazan profundamente a /learn.",
-      },
+      { label: "Tiempo de reproducción", note: "El progreso del vídeo se reporta al informe de visualización." },
+      { label: "Campana", note: "Las notificaciones training_assigned enlazan directamente con /portal." },
     ],
   },
   related: ["training", "auth", "announcements-notifications"],

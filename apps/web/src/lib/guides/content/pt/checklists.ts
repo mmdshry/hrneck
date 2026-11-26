@@ -22,7 +22,7 @@ export const checklistsGuide: GuideModule = {
   ],
   openInAppHref: "/org/checklists",
   overview:
-    "As checklists são fluxos internos de RH—não são conteúdo de formação e nunca aparecem em /learn. Os administradores desenham modelos flexíveis, copiam os cinco modelos de sistema de RH, agrupam packs (por exemplo um Welcome Pack), ligam instâncias a colaboradores e preenchem-nas como operadores. Ao guardar, escolhe se um novo esquema de modelo se aplica a instâncias abertas ou apenas a novas. Packs publicados podem auto-atribuir quando um novo colaborador é criado. Cada alteração de resposta entra no registo de atividade do tenant.",
+    "As checklists são fluxos internos de RH—não são conteúdo de formação e nunca aparecem em /portal. Os administradores desenham modelos flexíveis, copiam os cinco modelos de sistema de RH, agrupam packs (por exemplo um Welcome Pack), ligam instâncias a colaboradores e preenchem-nas como operadores. Ao guardar, escolhe se um novo esquema de modelo se aplica a instâncias abertas ou apenas a novas. Packs publicados podem auto-atribuir quando um novo colaborador é criado. Cada alteração de resposta entra no registo de atividade do tenant.",
   example: {
     title: "Welcome Pack de novo colaborador",
     narrative:

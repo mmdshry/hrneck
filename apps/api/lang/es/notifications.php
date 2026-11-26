@@ -11,4 +11,9 @@ return [
     'checklist_assigned_body' => "Se te ha asignado una lista de verificación: :name\nAbrir: :url\n",
     'announcement_open' => "\n\nAbrir: :url\n",
     'campaign_report_subject' => 'Informe de campaña de :brand',
+    'campaign_report_section_subject' => 'Informe de :section de :brand',
+    'campaign_report_pdf_attached' => 'Su informe está adjunto en PDF.',
+    'campaign_report_csv_attached' => 'Su informe está adjunto como archivo CSV.',
+    'campaign_report_csv_inline' => 'Su informe se incluye abajo en CSV.',
+    'campaign_report_truncated' => 'Este informe se cortó en :limit filas. Reduzca el periodo o los filtros para ver el resto.',
 ];

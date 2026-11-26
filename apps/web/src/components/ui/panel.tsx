@@ -4,12 +4,15 @@ import { cn } from "@/lib/utils";
 type PanelProps = HTMLAttributes<HTMLDivElement> & {
   title?: string;
   actions?: ReactNode;
+  /** Classes for the body wrapper; applies when a title or actions are shown. */
+  contentClassName?: string;
 };
 
 export function Panel({
   title,
   actions,
   className,
+  contentClassName,
   children,
   ...props
 }: PanelProps) {
@@ -49,7 +52,7 @@ export function Panel({
           <div className="flex flex-wrap items-center gap-2">{actions}</div>
         ) : null}
       </div>
-      <div className="p-4">{children}</div>
+      <div className={cn("p-4", contentClassName)}>{children}</div>
     </div>
   );
 }

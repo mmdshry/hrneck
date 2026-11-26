@@ -463,7 +463,6 @@ test('creating a target auto assigns published packs', function () {
             'email' => $email,
             'first_name' => 'New',
             'last_name' => 'Hire',
-            'timezone' => 'UTC',
         ])
         ->assertCreated()
         ->json();

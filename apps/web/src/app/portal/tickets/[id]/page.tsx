@@ -1,11 +1,15 @@
+import { getTranslations } from "next-intl/server";
 import { PortalTicketDetailClient } from "./portal-ticket-detail-client";
 
 export const instant = false;
 
-export const metadata = {
-  title: "Ticket",
-  description: "Portal ticket detail.",
-};
+export async function generateMetadata() {
+  const t = await getTranslations("portal");
+  return {
+    title: t("ticket"),
+    description: t("ticketDetailMetaDescription"),
+  };
+}
 
 export default async function PortalTicketDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

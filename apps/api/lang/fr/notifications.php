@@ -11,4 +11,9 @@ return [
     'checklist_assigned_body' => "Une liste de contrôle vous a été assignée : :name\nOuvrir : :url\n",
     'announcement_open' => "\n\nOuvrir : :url\n",
     'campaign_report_subject' => 'Rapport de campagne :brand',
+    'campaign_report_section_subject' => 'Rapport :brand : :section',
+    'campaign_report_pdf_attached' => 'Votre rapport est joint au format PDF.',
+    'campaign_report_csv_attached' => 'Votre rapport est joint au format CSV.',
+    'campaign_report_csv_inline' => 'Votre rapport est inclus ci-dessous au format CSV.',
+    'campaign_report_truncated' => 'Ce rapport a été tronqué à :limit lignes. Réduisez la période ou les filtres pour voir le reste.',
 ];

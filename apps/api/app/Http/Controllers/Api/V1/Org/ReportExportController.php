@@ -8,10 +8,13 @@ use App\Domains\AnalyticsReporting\Models\ReportArchive;
 use App\Domains\Audit\Actions\LogOrgActivity;
 use App\Domains\Realtime\Support\LiveTopics;
 use App\Domains\Realtime\Support\PublishLive;
+use App\Domains\TargetsGroups\Models\Group;
 use App\Domains\TargetsGroups\Models\Target;
 use App\Http\Controllers\Controller;
 use App\Support\ApiPagination;
 use App\Support\ListQuery;
+use App\Support\OrgTimezone;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -53,6 +56,49 @@ class ReportExportController extends Controller
         return response()->json(['data' => $calendar->handle($year)]);
     }
 
+    /**
+     * Employee and group pickers for the employee export. Scoped to the export permission so
+     * admins who can export but cannot manage targets or groups still get a working picker.
+     */
+    public function options(Request $request): JsonResponse
+    {
+        $search = trim((string) $request->input('q', ''));
+
+        $targets = Target::query()
+            ->where('status', 'active')
+            ->when($search !== '', function (Builder $query) use ($search): void {
+                $like = '%'.addcslashes($search, '%_\\').'%';
+                $query->where(function (Builder $inner) use ($like): void {
+                    $inner->where('email', 'like', $like)
+                        ->orWhere('first_name', 'like', $like)
+                        ->orWhere('last_name', 'like', $like);
+                });
+            })
+            ->orderBy('first_name')
+            ->orderBy('last_name')
+            ->orderBy('email')
+            ->limit(50)
+            ->get(['id', 'first_name', 'last_name', 'email'])
+            ->map(static fn (Target $target): array => [
+                'id' => $target->id,
+                'name' => trim(implode(' ', array_filter([(string) $target->first_name, (string) $target->last_name]))) ?: (string) $target->email,
+                'email' => $target->email,
+            ])
+            ->values()
+            ->all();
+
+        $groups = Group::query()
+            ->where('status', 'active')
+            ->orderBy('name')
+            ->limit(500)
+            ->get(['id', 'name'])
+            ->map(static fn (Group $group): array => ['id' => $group->id, 'name' => $group->name])
+            ->values()
+            ->all();
+
+        return response()->json(['data' => ['targets' => $targets, 'groups' => $groups]]);
+    }
+
     public function generate(Request $request, BuildQuarterlyPdfReport $builder, LogOrgActivity $audit): JsonResponse
     {
         $data = $request->validate([
@@ -82,8 +128,10 @@ class ReportExportController extends Controller
             $data['target_ids'] ?? [],
         )));
 
+        $timezone = $data['timezone'] ?? OrgTimezone::current();
+
         $result = $builder->handle($data['period_key'], $data['scope'], [
-            'timezone' => $data['timezone'] ?? 'UTC',
+            'timezone' => $timezone,
             'include_training' => $request->boolean('include_training', true),
             'mode' => $mode,
             'target_id' => $targetId,
@@ -109,7 +157,7 @@ class ReportExportController extends Controller
             'period_key' => $data['period_key'],
             'format' => 'pdf',
             'disk_path' => $result['path'],
-            'timezone' => $data['timezone'] ?? 'UTC',
+            'timezone' => $timezone,
             'options' => $options,
             'status' => 'ready',
             'generated_at' => now(),

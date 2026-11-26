@@ -21,7 +21,7 @@ export const trainingGuide: GuideModule = {
   ],
   openInAppHref: "/org/training",
   overview:
-    "Courses holds the library (article, video, and PDF lessons plus quizzes). Training assigns one or more courses to employees and/or groups, runs campaigns that queue a one-shot email reminder per recipient on launch (via SMTP and sending profiles), and reviews per-lesson progress with CSV or PDF export. Learners consume assigned content in the learner portal at /learn—not in the org queue. A secondary sample list at /org/campaigns exists for quick demos; the operator workflow lives under Training → Campaigns.",
+    "Courses holds the library (article, video, and PDF lessons plus quizzes). Training assigns one or more courses to employees and/or groups, runs campaigns that can hold several courses (drag them in and arrange their order) and queue one reminder email per recipient on launch that lists every course (via SMTP and sending profiles), and reviews per-lesson progress with CSV or PDF export. Learners consume assigned content in the employee dashboard at /portal—not in the org queue. A secondary sample list at /org/campaigns exists for quick demos; the operator workflow lives under Training → Campaigns.",
   example: {
     title: "Acme Finance Q4 awareness campaign",
     narrative:
@@ -35,12 +35,12 @@ export const trainingGuide: GuideModule = {
     },
     {
       title: "Assign content",
-      body: "On Training, select one or more courses and assign them to employees and/or groups. Learners see enrollments in /learn after assignment.",
+      body: "On Training, select one or more courses and assign them to employees and/or groups. Learners see enrollments under My courses on /portal after assignment.",
       href: "/org/training",
     },
     {
       title: "Create a campaign",
-      body: "Name the campaign, pick content, choose group_ids and/or targets, and launch. Launch queues one reminder job per recipient—there is no weekly reminder cadence. Confirm SMTP and the sending profile first.",
+      body: "Name the campaign, pick one or more courses, choose group_ids and/or targets, and launch. Launch queues one reminder email per recipient that lists every course in the campaign—there is no weekly reminder cadence. Confirm SMTP and the sending profile first.",
       href: "/org/training/campaigns",
     },
     {
@@ -90,19 +90,24 @@ export const trainingGuide: GuideModule = {
           body: "Download the viewing report as CSV for spreadsheets or PDF for stakeholder packs. Pair with Reporting for org-wide schedules.",
         },
         {
-          title: "Send learners to /learn",
+          title: "Send learners to /portal",
           body: "Operators stay in /org/training. Learners open the learner portal to read, watch, mark complete, and take quizzes. See the Learner portal guide.",
-          href: "/learn",
+          href: "/portal",
         },
       ],
     },
     {
       title: "Campaigns and reminders",
-      body: "Campaigns wrap content + audience + a one-shot reminder on launch. Statuses include draft, scheduled, running, completed, cancelled, and archived.",
+      body: "Campaigns wrap one or more courses + audience + a one-shot reminder on launch. Statuses include draft, scheduled, running, completed, cancelled, and archived.",
       steps: [
         {
           title: "Launch from Training → Campaigns",
-          body: "Name the wave, attach course content, select groups/employees, and launch. Each recipient gets one reminder job—no recurring weekly cadence.",
+          body: "Name the wave, add one or more courses, select groups/employees, and launch. Each recipient gets one reminder email that lists all of the wave's courses—no recurring weekly cadence.",
+          href: "/org/training/campaigns",
+        },
+        {
+          title: "Arrange courses in a campaign",
+          body: "Drag a course from the course library onto a campaign, or press Add. Drag rows or use the up and down buttons to set the order learners see. Courses can change only while the campaign is draft or scheduled, and a learner completes the campaign once every course in it is finished.",
           href: "/org/training/campaigns",
         },
         {

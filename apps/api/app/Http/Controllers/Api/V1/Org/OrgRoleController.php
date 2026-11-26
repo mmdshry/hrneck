@@ -4,11 +4,13 @@ namespace App\Http\Controllers\Api\V1\Org;
 
 use App\Domains\Audit\Actions\LogOrgActivity;
 use App\Domains\IdentityAccess\Actions\ManageOrgRole;
+use App\Domains\IdentityAccess\Actions\OrgRoleChangeGuard;
 use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
 use App\Domains\Realtime\Support\LiveTopics;
 use App\Domains\Realtime\Support\PublishLive;
 use App\Http\Controllers\Controller;
 use App\Models\Role;
+use App\Models\User;
 use App\Support\ApiPagination;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -60,13 +62,21 @@ class OrgRoleController extends Controller
         ]);
     }
 
-    public function store(Request $request, ManageOrgRole $manageOrgRole, LogOrgActivity $audit): JsonResponse
-    {
+    public function store(
+        Request $request,
+        ManageOrgRole $manageOrgRole,
+        OrgRoleChangeGuard $guard,
+        LogOrgActivity $audit,
+    ): JsonResponse {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:80'],
             'permissions' => ['required', 'array'],
             'permissions.*' => ['string'],
         ]);
+
+        /** @var User $actor */
+        $actor = $request->user();
+        $guard->assertCanGrantPermissions($actor, $data['permissions']);
 
         $role = $manageOrgRole->create(
             (string) tenant('id'),
@@ -84,13 +94,28 @@ class OrgRoleController extends Controller
         return response()->json(['data' => $this->serialize($role)], 201);
     }
 
-    public function update(Request $request, Role $role, ManageOrgRole $manageOrgRole, LogOrgActivity $audit): JsonResponse
-    {
+    public function update(
+        Request $request,
+        Role $role,
+        ManageOrgRole $manageOrgRole,
+        OrgRoleChangeGuard $guard,
+        LogOrgActivity $audit,
+    ): JsonResponse {
         $data = $request->validate([
             'name' => ['sometimes', 'string', 'max:80'],
             'permissions' => ['required', 'array'],
             'permissions.*' => ['string'],
         ]);
+
+        /** @var User $actor */
+        $actor = $request->user();
+        $tenantId = (string) tenant('id');
+        $guard->assertCanGrantPermissions(
+            $actor,
+            $data['permissions'],
+            $role->permissions->pluck('name')->values()->all(),
+        );
+        $guard->assertRolesManagementRemainsForRole($tenantId, $role, $data['permissions']);
 
         $before = $this->serialize($role);
         $updated = $manageOrgRole->update(
@@ -110,8 +135,14 @@ class OrgRoleController extends Controller
         return response()->json(['data' => $this->serialize($updated)]);
     }
 
-    public function destroy(Role $role, ManageOrgRole $manageOrgRole, LogOrgActivity $audit): JsonResponse
-    {
+    public function destroy(
+        Role $role,
+        ManageOrgRole $manageOrgRole,
+        OrgRoleChangeGuard $guard,
+        LogOrgActivity $audit,
+    ): JsonResponse {
+        $guard->assertRolesManagementRemainsForRole((string) tenant('id'), $role, []);
+
         $snapshot = $this->serialize($role);
         $manageOrgRole->delete((string) tenant('id'), $role);
 

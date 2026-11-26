@@ -11,4 +11,9 @@ return [
     'checklist_assigned_body' => "Вам назначен чеклист: :name\nОткрыть: :url\n",
     'announcement_open' => "\n\nОткрыть: :url\n",
     'campaign_report_subject' => 'Отчёт по кампании :brand',
+    'campaign_report_section_subject' => 'Отчёт :brand: :section',
+    'campaign_report_pdf_attached' => 'Ваш отчёт во вложении в формате PDF.',
+    'campaign_report_csv_attached' => 'Ваш отчёт во вложении в формате CSV.',
+    'campaign_report_csv_inline' => 'Ваш отчёт приведён ниже в формате CSV.',
+    'campaign_report_truncated' => 'Отчёт обрезан до :limit строк. Сузьте период или фильтры, чтобы увидеть остальное.',
 ];

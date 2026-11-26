@@ -1,20 +1,16 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
 import { Panel } from "@/components/ui/panel";
-import { Select } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { useDataTableQuery } from "@/hooks/use-data-table-query";
-import { liveStatusLabel, useLiveTopic } from "@/hooks/use-live-topic";
+import { liveStatusLabel, useLiveStatusLabels, useLiveTopic } from "@/hooks/use-live-topic";
 import { api, ensureCsrf, fetchSessionUser } from "@/lib/api";
 import { serializeDataTableQuery } from "@/lib/data-table-query";
 import { portalLiveChannel } from "@/lib/live-topics";
@@ -30,8 +26,9 @@ import {
 import { hasPermission, type SessionUser } from "@/lib/session";
 import { resolveTenant } from "@/lib/tenant";
 import { toastError } from "@/lib/toast";
+import { NewRequestWizard } from "./new-request-wizard";
+import type { Desk } from "./portal-ticket-types";
 
-type Desk = { id: number; name: string; type: string };
 type Ticket = {
   id: number;
   number: string;
@@ -88,9 +85,7 @@ export function PortalTicketsClient() {
   const [meta, setMeta] = useState<PaginationMeta>(emptyMeta());
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState<PageSize>(DEFAULT_PAGE_SIZE);
-  const [deskId, setDeskId] = useState("");
-  const [summary, setSummary] = useState("");
-  const [description, setDescription] = useState("");
+  const [wizardOpen, setWizardOpen] = useState(false);
   const tableQuery = useDataTableQuery();
   const filters = useMemo(
     () => serializeDataTableQuery(tableQuery.debounced),
@@ -123,7 +118,6 @@ export function PortalTicketsClient() {
     setLiveTickets(Array.isArray(payload.tickets) ? payload.tickets : []);
     if (Array.isArray(payload.desks)) {
       setDesks(payload.desks);
-      setDeskId((current) => current || (payload.desks[0] ? String(payload.desks[0].id) : ""));
     }
   }, []);
 
@@ -151,10 +145,9 @@ export function PortalTicketsClient() {
     setTickets(parsed.data);
     setMeta(parsed.meta);
     setPage(parsed.meta.current_page);
-    setDeskId((current) => current || (deskList.data?.[0] ? String(deskList.data[0].id) : ""));
   }, []);
 
-  const { status, error: liveError } = useLiveTopic<PortalPayload>({
+  const { status } = useLiveTopic<PortalPayload>({
     channel,
     onPayload,
   });
@@ -207,26 +200,9 @@ export function PortalTicketsClient() {
     t,
   ]);
 
-  const statusLabel = liveStatusLabel(status);
+  const liveLabels = useLiveStatusLabels();
+  const statusLabel = liveStatusLabel(status, liveLabels);
   const dash = tCommon("emDash");
-
-  async function onCreate(event: FormEvent) {
-    event.preventDefault();
-    try {
-      await ensureCsrf();
-      const created = await api<{ data: Ticket }>("/api/v1/org/portal/ticketing/tickets", {
-        method: "POST",
-        tenant: resolveTenant(),
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ desk_id: Number(deskId), summary, description }),
-      });
-      setSummary("");
-      setDescription("");
-      window.location.href = `/portal/tickets/${created.data.id}`;
-    } catch (err) {
-      toastError(err instanceof Error ? err.message : t("createFailed"));
-    }
-  }
 
   const canPortal = session ? hasPermission(session, "org.ticketing.portal") : false;
 
@@ -300,48 +276,14 @@ export function PortalTicketsClient() {
             ? `${t("submitAndTrack")} · ${statusLabel}`
             : t("submitAndTrack")
         }
+        actions={
+          canPortal ? (
+            <Button type="button" onClick={() => setWizardOpen(true)}>
+              {t("newRequest")}
+            </Button>
+          ) : null
+        }
       />
-      
-      {canPortal ? (
-        <Panel title={t("newRequest")}>
-          <form className="space-y-3" onSubmit={onCreate}>
-            <div className="space-y-1">
-              <Label htmlFor="portal-desk">{t("desk")}</Label>
-              <Select
-                id="portal-desk"
-                value={deskId}
-                onChange={(e) => setDeskId(e.target.value)}
-                required
-              >
-                {desks.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="portal-summary">{t("summary")}</Label>
-              <Input
-                id="portal-summary"
-                value={summary}
-                onChange={(e) => setSummary(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="portal-details">{t("details")}</Label>
-              <Textarea
-                id="portal-details"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={4}
-              />
-            </div>
-            <Button type="submit">{t("submit")}</Button>
-          </form>
-        </Panel>
-      ) : null}
       <Panel title={t("openTickets")}>
         <DataTable
           mode="server"
@@ -364,6 +306,9 @@ export function PortalTicketsClient() {
           }}
         />
       </Panel>
+      {wizardOpen ? (
+        <NewRequestWizard desks={desks} onClose={() => setWizardOpen(false)} />
+      ) : null}
     </div>
   );
 }

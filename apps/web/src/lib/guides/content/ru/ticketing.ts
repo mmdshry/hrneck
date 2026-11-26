@@ -22,7 +22,7 @@ export const ticketingGuide: GuideModule = {
   ],
   openInAppHref: "/org/ticketing",
   overview:
-    "Модуль тикетинга покрывает основы ITIL service desk для операторов в /org/ticketing: столы, тикеты с заметками/задачами/вложениями, массовые действия, процедуры и эскалация, политики SLA, IMAP-читатели почты, статьи KB (включая конвертацию ticket→KB), Search All, предпочтения и отчёты CSV/PDF/JSON. Сотрудники подают и отслеживают работу в отдельном сервисном портале (/portal) — см. это руководство для шагов конечного пользователя. Разрешения делятся на org.ticketing.tickets, .admin, .kb, .reports и .portal, с seed-ролями sd_* / kb_admin.",
+    "Модуль тикетинга покрывает основы ITIL service desk для операторов в /org/ticketing: столы, тикеты с заметками/задачами/вложениями, массовые действия, процедуры и эскалация, политики SLA, IMAP-читатели почты, статьи KB (включая конвертацию ticket→KB), Search All, предпочтения и отчёты CSV/PDF/JSON. Сотрудники подают и отслеживают работу в отдельном сервисном портале (/portal) — см. это руководство для шагов конечного пользователя. Разрешения делятся на org.ticketing.tickets, .admin, .reports и .portal, с seed-ролями sd_* / kb_admin. Статьи KB находятся в отдельном разделе (/org/kb) с разрешениями org.kb.view и org.kb.manage.",
   example: {
     title: "Отчёт о фишинге становится статьёй KB",
     narrative:
@@ -46,7 +46,7 @@ export const ticketingGuide: GuideModule = {
     {
       title: "Публикуйте знания и экспортируйте",
       body: "Конвертируйте решённые тикеты в KB, проверьте Search All / видимость в портале, затем экспортируйте пакеты CSV/PDF или JSON.",
-      href: "/org/ticketing/kb",
+      href: "/org/kb",
     },
   ],
   sections: [
@@ -125,7 +125,7 @@ export const ticketingGuide: GuideModule = {
         {
           title: "Создавайте и публикуйте статьи",
           body: "Создавайте, редактируйте, публикуйте/снимайте с публикации или удаляйте статьи KB. Неопубликованные черновики остаются вне портала сотрудников.",
-          href: "/org/ticketing/kb",
+          href: "/org/kb",
         },
         {
           title: "Конвертируйте ticket → KB",

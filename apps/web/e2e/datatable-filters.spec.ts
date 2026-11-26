@@ -9,8 +9,11 @@ test.describe("DataTable filters", () => {
     await page.goto("/org/ticketing");
     await expect(page.getByRole("heading", { name: "Ticketing" })).toBeVisible();
     // Empty queues render EmptyState (no column filter row). Seed one ticket first.
-    await page.locator("#summary").fill(`Filter seed ${Date.now()}`);
-    await page.getByRole("button", { name: "Create ticket" }).click();
+    await page.getByRole("button", { name: "New ticket" }).click();
+    const newTicketDialog = page.getByRole("dialog", { name: "New ticket" });
+    await expect(newTicketDialog.locator("#new-ticket-desk")).not.toHaveValue("", { timeout: 20_000 });
+    await newTicketDialog.locator("#new-ticket-summary").fill(`Filter seed ${Date.now()}`);
+    await newTicketDialog.getByRole("button", { name: "Create ticket" }).click();
     await page.waitForURL(/\/org\/ticketing\/tickets\/\d+/, { timeout: 30_000 });
     await page.goto("/org/ticketing");
     await expect(page.getByLabel("Search table").filter({ visible: true })).toBeVisible();

@@ -11,4 +11,9 @@ return [
     'checklist_assigned_body' => "Ihnen wurde eine Checkliste zugewiesen: :name\nÖffnen: :url\n",
     'announcement_open' => "\n\nÖffnen: :url\n",
     'campaign_report_subject' => ':brand Kampagnenbericht',
+    'campaign_report_section_subject' => ':brand :section-Bericht',
+    'campaign_report_pdf_attached' => 'Ihr Bericht ist als PDF angehängt.',
+    'campaign_report_csv_attached' => 'Ihr Bericht ist als CSV-Datei angehängt.',
+    'campaign_report_csv_inline' => 'Ihr Bericht ist unten als CSV enthalten.',
+    'campaign_report_truncated' => 'Dieser Bericht wurde nach :limit Zeilen abgeschnitten. Grenzen Sie Zeitraum oder Filter ein, um den Rest zu sehen.',
 ];

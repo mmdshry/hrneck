@@ -9,7 +9,6 @@ use App\Filament\Resources\Targets\Pages\ManageTargets;
 use App\Filament\Support\AuditsFilamentMutation;
 use App\Support\AppLocale;
 use App\Support\MajorCities;
-use App\Support\TimezoneOptions;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\DatePicker;
@@ -92,18 +91,13 @@ class TargetResource extends Resource
             Select::make('preferred_language')
                 ->options($localeOptions)
                 ->nullable(),
-            Select::make('timezone')
-                ->options(TimezoneOptions::all())
-                ->searchable()
-                ->required()
-                ->default('UTC'),
             Select::make('status')->options([
                 'active' => 'active',
                 'inactive' => 'inactive',
             ])->default('active'),
             TextInput::make('risk_score')->numeric()->disabled()->dehydrated(false),
             TextInput::make('risk_tier')->disabled()->dehydrated(false),
-            TextInput::make('external_id')->maxLength(120),
+            TextInput::make('external_id')->label('Employee ID')->maxLength(120),
             FileUpload::make('avatar_path')
                 ->label('Photo')
                 ->image()
@@ -138,7 +132,7 @@ class TargetResource extends Resource
                 TextColumn::make('risk_score')->sortable(),
                 TextColumn::make('risk_tier')->badge()->toggleable(),
                 TextColumn::make('employee_number')->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('external_id')->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('external_id')->label('Employee ID')->toggleable(isToggledHiddenByDefault: true),
             ])
             ->recordActions([
                 EditAction::make()

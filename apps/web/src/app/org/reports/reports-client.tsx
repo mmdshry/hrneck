@@ -7,11 +7,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
 import { Panel } from "@/components/ui/panel";
-import { liveStatusLabel, useLiveTopic } from "@/hooks/use-live-topic";
+import { liveStatusLabel, useLiveStatusLabels, useLiveTopic } from "@/hooks/use-live-topic";
 import { api, ensureCsrf } from "@/lib/api";
 import { paginationQuery, parsePaginatedResponse } from "@/lib/pagination";
 import { resolveTenant } from "@/lib/tenant";
 import { toastError } from "@/lib/toast";
+import { filterSupportForTab, sharedFiltersForTab } from "./report-filter-support";
 import { ReportSchedulesPanel } from "./report-schedules-panel";
 import {
   CampaignsSection,
@@ -56,6 +57,7 @@ function SegmentedBar({
   segments: StatusSegments;
   ariaLabel: string;
 }) {
+  const t = useTranslations("org.reports");
   const entries = Object.entries(segments).filter(([, v]) => v > 0);
   const total = entries.reduce((sum, [, v]) => sum + v, 0);
   if (total <= 0) {
@@ -63,7 +65,7 @@ function SegmentedBar({
       <div
         className="mt-3 h-2 rounded-full bg-[var(--muted)]"
         role="img"
-        aria-label={`${ariaLabel}: no data`}
+        aria-label={`${ariaLabel}: ${t("noData")}`}
       />
     );
   }
@@ -111,6 +113,7 @@ function OverviewBlock({
   segments: StatusSegments;
   onOpen: () => void;
 }) {
+  const t = useTranslations("org.reports");
   return (
     <button
       type="button"
@@ -135,7 +138,7 @@ function OverviewBlock({
             </div>
           ))}
         </dl>
-        <SegmentedBar segments={segments} ariaLabel={`${title} status breakdown`} />
+        <SegmentedBar segments={segments} ariaLabel={t("statusBreakdown", { title })} />
       </Panel>
     </button>
   );
@@ -148,6 +151,7 @@ export function ReportsClient() {
   const [tab, setTab] = useState<ReportTab>("overview");
   const [summary, setSummary] = useState<CampaignSummary | null>(null);
   const [blocks, setBlocks] = useState<OverviewBlocks | null>(null);
+  const [counts, setCounts] = useState<DetailedOverview["counts"] | null>(null);
   const [departmentId, setDepartmentId] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -161,6 +165,9 @@ export function ReportsClient() {
     }),
     [departmentId, from, to],
   );
+
+  const tabFilters = useMemo(() => sharedFiltersForTab(tab, sharedFilters), [tab, sharedFilters]);
+  const tabSupport = filterSupportForTab(tab);
 
   const channel = useMemo(() => `org.${tenant}.reports`, [tenant]);
 
@@ -178,6 +185,7 @@ export function ReportsClient() {
       { tenant: resolveTenant() },
     );
     setBlocks(res.data.blocks ?? null);
+    setCounts(res.data.counts ?? null);
     setSummary(res.data.campaign ?? null);
   }, [sharedFilters]);
 
@@ -231,26 +239,27 @@ export function ReportsClient() {
     });
   }, [refreshOverview, refreshSummary, t]);
 
-  const statusLabel = liveStatusLabel(status);
+  const liveLabels = useLiveStatusLabels();
+  const statusLabel = liveStatusLabel(status, liveLabels);
 
   const reportTabs = useMemo(
     () =>
-      REPORT_TABS.map((item) => ({
-        ...item,
+      REPORT_TABS.map((id) => ({
+        id,
         label:
-          item.id === "overview"
+          id === "overview"
             ? t("overview")
-            : item.id === "company"
+            : id === "company"
               ? t("company")
-              : item.id === "users"
+              : id === "users"
                 ? tCommon("users")
-                : item.id === "targets"
+                : id === "targets"
                   ? tCommon("employees")
-                  : item.id === "campaigns"
+                  : id === "campaigns"
                     ? t("campaigns")
-                    : item.id === "training"
+                    : id === "training"
                       ? t("training")
-                      : item.id === "checklists"
+                      : id === "checklists"
                         ? t("checklists")
                         : t("ticketing"),
       })),
@@ -290,24 +299,32 @@ export function ReportsClient() {
             ))}
           </select>
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="report-from">{tCommon("from")}</Label>
-          <Input
-            id="report-from"
-            type="date"
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="report-to">{tCommon("to")}</Label>
-          <Input
-            id="report-to"
-            type="date"
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-          />
-        </div>
+        {tabSupport.dateRange ? (
+          <>
+            <div className="space-y-1.5">
+              <Label htmlFor="report-from">{tCommon("from")}</Label>
+              <Input
+                id="report-from"
+                type="date"
+                value={from}
+                onChange={(e) => setFrom(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="report-to">{tCommon("to")}</Label>
+              <Input
+                id="report-to"
+                type="date"
+                value={to}
+                onChange={(e) => setTo(e.target.value)}
+              />
+            </div>
+          </>
+        ) : (
+          <p className="self-end text-sm text-[var(--muted-foreground)] sm:col-span-2">
+            {t("dateRangeNotApplicable")}
+          </p>
+        )}
       </Panel>
 
       <div className="mt-6 flex flex-wrap gap-2" role="tablist" aria-label={t("reportSections")}>
@@ -328,6 +345,29 @@ export function ReportsClient() {
       <div className="mt-8" role="tabpanel">
         {tab === "overview" ? (
           <div className="space-y-4">
+            {counts ? (
+              <Panel className="p-4">
+                <h3 className="text-sm font-medium">{t("totalsTitle")}</h3>
+                <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+                  {[
+                    { label: tCommon("users"), value: counts.users },
+                    { label: tCommon("employees"), value: counts.targets },
+                    { label: tCommon("groups"), value: counts.groups },
+                    { label: t("campaigns"), value: counts.campaigns },
+                    { label: t("enrollments"), value: counts.enrollments },
+                    { label: t("checklistTemplates"), value: counts.checklist_templates },
+                    { label: t("checklistInstances"), value: counts.checklist_instances },
+                    { label: t("ticketsOpen"), value: counts.tickets_open },
+                    { label: t("ticketsResolved"), value: counts.tickets_resolved },
+                  ].map((stat) => (
+                    <div key={stat.label}>
+                      <dt className="text-xs text-[var(--muted-foreground)]">{stat.label}</dt>
+                      <dd className="text-lg font-medium tabular-nums">{stat.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </Panel>
+            ) : null}
             {!blocks ? (
               <p className="text-sm text-[var(--muted-foreground)]">
                 {statusLabel ?? tCommon("loadingOverview")}
@@ -354,6 +394,7 @@ export function ReportsClient() {
                   stats={[
                     { label: tCommon("open"), value: blocks.checklists.open },
                     { label: tCommon("completed"), value: blocks.checklists.completed },
+                    { label: tCommon("cancelled"), value: blocks.checklists.cancelled },
                     { label: tCommon("total"), value: blocks.checklists.total },
                   ]}
                   segments={blocks.checklists.segments}
@@ -413,13 +454,13 @@ export function ReportsClient() {
           </div>
         ) : null}
 
-        {tab === "company" ? <CompanySection sharedFilters={sharedFilters} /> : null}
-        {tab === "users" ? <UsersSection sharedFilters={sharedFilters} /> : null}
-        {tab === "targets" ? <TargetsSection sharedFilters={sharedFilters} /> : null}
-        {tab === "campaigns" ? <CampaignsSection sharedFilters={sharedFilters} /> : null}
-        {tab === "training" ? <TrainingSection sharedFilters={sharedFilters} /> : null}
-        {tab === "checklists" ? <ChecklistsSection sharedFilters={sharedFilters} /> : null}
-        {tab === "ticketing" ? <TicketingSection sharedFilters={sharedFilters} /> : null}
+        {tab === "company" ? <CompanySection sharedFilters={tabFilters} /> : null}
+        {tab === "users" ? <UsersSection sharedFilters={tabFilters} /> : null}
+        {tab === "targets" ? <TargetsSection sharedFilters={tabFilters} /> : null}
+        {tab === "campaigns" ? <CampaignsSection sharedFilters={tabFilters} /> : null}
+        {tab === "training" ? <TrainingSection sharedFilters={tabFilters} /> : null}
+        {tab === "checklists" ? <ChecklistsSection sharedFilters={tabFilters} /> : null}
+        {tab === "ticketing" ? <TicketingSection sharedFilters={tabFilters} /> : null}
       </div>
 
       <ReportSchedulesPanel />

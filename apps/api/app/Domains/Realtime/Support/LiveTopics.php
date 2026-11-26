@@ -111,26 +111,39 @@ final class LiveTopics
         return "org.{$tenantId}.notifications.{$userId}";
     }
 
-    public static function permissionFor(string $topic): ?string
+    /**
+     * Any one of the returned permissions opens the topic. An empty list means the topic is unknown.
+     *
+     * @return list<string>
+     */
+    public static function permissionsFor(string $topic): array
     {
         return match ($topic) {
-            self::METRICS, self::REPORTS, self::REPORTS_DETAILED => OrgPermissionCatalog::REPORTS_VIEW,
-            self::REPORTS_EXPORT => OrgPermissionCatalog::REPORTS_EXPORT,
-            self::TRAINING_CAMPAIGNS, self::CAMPAIGNS => OrgPermissionCatalog::CAMPAIGNS_MANAGE,
-            self::TRAINING => OrgPermissionCatalog::TRAINING_MANAGE,
-            self::INTEGRATIONS, self::SENDING_PROFILES, self::BRANDING => OrgPermissionCatalog::SETTINGS_MANAGE,
-            self::USERS => OrgPermissionCatalog::USERS_MANAGE,
-            self::ROLES => OrgPermissionCatalog::ROLES_MANAGE,
-            self::TARGETS => OrgPermissionCatalog::TARGETS_MANAGE,
-            self::DEPARTMENTS => OrgPermissionCatalog::DEPARTMENTS_MANAGE,
-            self::GROUPS => OrgPermissionCatalog::GROUPS_MANAGE,
-            self::CHECKLISTS, self::CHECKLIST_INSTANCES => OrgPermissionCatalog::CHECKLISTS_MANAGE,
-            self::TICKETS => OrgPermissionCatalog::TICKETING_TICKETS,
-            self::DESKS, self::EMAIL_READERS => OrgPermissionCatalog::TICKETING_ADMIN,
-            self::KB => OrgPermissionCatalog::TICKETING_KB,
-            self::TICKETING_REPORTS => OrgPermissionCatalog::TICKETING_REPORTS,
-            self::ANNOUNCEMENTS => OrgPermissionCatalog::ANNOUNCEMENTS_MANAGE,
-            default => null,
+            self::METRICS, self::REPORTS, self::REPORTS_DETAILED => [OrgPermissionCatalog::REPORTS_VIEW],
+            self::REPORTS_EXPORT => [OrgPermissionCatalog::REPORTS_EXPORT],
+            self::TRAINING_CAMPAIGNS, self::CAMPAIGNS => [
+                OrgPermissionCatalog::CAMPAIGNS_VIEW,
+                OrgPermissionCatalog::CAMPAIGNS_MANAGE,
+            ],
+            self::TRAINING => [OrgPermissionCatalog::TRAINING_VIEW, OrgPermissionCatalog::TRAINING_MANAGE],
+            self::INTEGRATIONS, self::SENDING_PROFILES, self::BRANDING => [OrgPermissionCatalog::SETTINGS_MANAGE],
+            self::USERS => [OrgPermissionCatalog::USERS_VIEW, OrgPermissionCatalog::USERS_MANAGE],
+            self::ROLES => [OrgPermissionCatalog::ROLES_MANAGE],
+            self::TARGETS => [OrgPermissionCatalog::TARGETS_VIEW, OrgPermissionCatalog::TARGETS_MANAGE],
+            self::DEPARTMENTS => [OrgPermissionCatalog::DEPARTMENTS_VIEW, OrgPermissionCatalog::DEPARTMENTS_MANAGE],
+            self::GROUPS => [OrgPermissionCatalog::GROUPS_VIEW, OrgPermissionCatalog::GROUPS_MANAGE],
+            self::CHECKLISTS => [OrgPermissionCatalog::CHECKLISTS_VIEW, OrgPermissionCatalog::CHECKLISTS_MANAGE],
+            self::CHECKLIST_INSTANCES => [
+                OrgPermissionCatalog::CHECKLISTS_VIEW,
+                OrgPermissionCatalog::CHECKLISTS_FILL,
+                OrgPermissionCatalog::CHECKLISTS_MANAGE,
+            ],
+            self::TICKETS => [OrgPermissionCatalog::TICKETING_VIEW_ALL],
+            self::DESKS, self::EMAIL_READERS => [OrgPermissionCatalog::TICKETING_ADMIN],
+            self::KB => [OrgPermissionCatalog::KB_VIEW],
+            self::TICKETING_REPORTS => [OrgPermissionCatalog::TICKETING_REPORTS],
+            self::ANNOUNCEMENTS => [OrgPermissionCatalog::ANNOUNCEMENTS_MANAGE],
+            default => [],
         };
     }
 }

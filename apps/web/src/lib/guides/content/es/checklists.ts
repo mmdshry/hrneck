@@ -22,7 +22,7 @@ export const checklistsGuide: GuideModule = {
   ],
   openInAppHref: "/org/checklists",
   overview:
-    "Los checklists son flujos internos de RR. HH.—no contenido para alumnos y nunca se muestran en /learn. Los administradores diseñan plantillas flexibles, copian las cinco plantillas de sistema de RR. HH., agrupan packs (por ejemplo un Welcome Pack), conectan instancias a empleados y las rellenan como operadores. Al guardar elige si un nuevo esquema de plantilla se aplica a instancias abiertas o solo a las nuevas. Los packs publicados pueden autoasignarse al crear un empleado nuevo. Cada cambio de respuesta queda en el registro de actividad del tenant.",
+    "Los checklists son flujos internos de RR. HH.—no contenido para alumnos y nunca se muestran en /portal. Los administradores diseñan plantillas flexibles, copian las cinco plantillas de sistema de RR. HH., agrupan packs (por ejemplo un Welcome Pack), conectan instancias a empleados y las rellenan como operadores. Al guardar elige si un nuevo esquema de plantilla se aplica a instancias abiertas o solo a las nuevas. Los packs publicados pueden autoasignarse al crear un empleado nuevo. Cada cambio de respuesta queda en el registro de actividad del tenant.",
   example: {
     title: "Welcome Pack de nueva incorporación",
     narrative:

@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\ApplyFilamentTenantContext;
 use App\Http\Middleware\EnsureOrgMembership;
+use App\Http\Middleware\EnsurePlanFeature;
 use App\Http\Middleware\EnsurePlatformStaff;
 use App\Http\Middleware\InitializeTenancyByHeader;
 use App\Http\Middleware\SetPermissionsTeamFromTenant;
@@ -59,6 +60,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'org.membership' => EnsureOrgMembership::class,
             'org.team' => SetPermissionsTeamFromTenant::class,
             'platform.staff' => EnsurePlatformStaff::class,
+            'plan.feature' => EnsurePlanFeature::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

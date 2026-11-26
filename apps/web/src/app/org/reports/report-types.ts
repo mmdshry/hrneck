@@ -54,6 +54,7 @@ export type TrainingBlock = {
 export type ChecklistsBlock = {
   open: number;
   completed: number;
+  cancelled: number;
   total: number;
   completion_rate: number;
   by_status: StatusSegments;
@@ -160,13 +161,14 @@ export type SectionResponse<T> = {
   summary?: Record<string, unknown>;
 };
 
-export const REPORT_TABS: Array<{ id: ReportTab; label: string }> = [
-  { id: "overview", label: "Overview" },
-  { id: "company", label: "Company" },
-  { id: "users", label: "Users" },
-  { id: "targets", label: "Employees" },
-  { id: "campaigns", label: "Campaigns" },
-  { id: "training", label: "Training" },
-  { id: "checklists", label: "Checklists" },
-  { id: "ticketing", label: "Ticketing" },
+/** Tab order for the Reporting screen. Labels are translated where the tabs render. */
+export const REPORT_TABS: ReportTab[] = [
+  "overview",
+  "company",
+  "users",
+  "targets",
+  "campaigns",
+  "training",
+  "checklists",
+  "ticketing",
 ];

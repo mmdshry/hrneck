@@ -16,6 +16,7 @@ function orgUser(overrides: Partial<SessionUser> = {}): SessionUser {
     tenant_id: "itneck",
     roles: ["org_admin"],
     permissions: ["org.training.manage"],
+    has_org_access: true,
     is_platform_staff: false,
     ...overrides,
   };
@@ -112,14 +113,29 @@ describe("matchOrgMembership", () => {
 });
 
 describe("hasPermission for staff tenant context", () => {
-  it("elevates only support permissions while acting in tenant", () => {
-    const staff = staffUser({
+  it("platform agent acting in tenant sees only the API-provided support permissions", () => {
+    const agent = staffUser({
       staff_tenant_id: "itneck",
       acting_in_tenant: true,
+      permissions: ["org.targets.manage"],
     });
-    expect(hasPermission(staff, "org.targets.manage")).toBe(true);
-    expect(hasPermission(staff, "org.settings.manage")).toBe(false);
-    expect(hasPermission(staff, "org.roles.manage")).toBe(false);
+    expect(hasPermission(agent, "org.targets.manage")).toBe(true);
+    expect(hasPermission(agent, "org.settings.manage")).toBe(false);
+    expect(hasPermission(agent, "org.roles.manage")).toBe(false);
+  });
+
+  it("platform super admin acting in tenant gets roles and settings", () => {
+    const superAdmin = staffUser({
+      staff_tenant_id: "itneck",
+      acting_in_tenant: true,
+      permissions: ["org.roles.manage", "org.settings.manage"],
+    });
+    expect(hasPermission(superAdmin, "org.roles.manage")).toBe(true);
+    expect(hasPermission(superAdmin, "org.settings.manage")).toBe(true);
+  });
+
+  it("gives staff outside a tenant no org permissions", () => {
+    expect(hasPermission(staffUser(), "org.roles.manage")).toBe(false);
   });
 });
 
@@ -129,15 +145,32 @@ describe("MSP staff gate paths", () => {
     expect(defaultPostLoginPath(staffUser())).toBe("/msp");
   });
 
-  it("sends org learners to /org by default", () => {
+  it("sends org admins with console access to /org by default", () => {
+    expect(defaultPostLoginPath(orgUser({ has_org_access: true }))).toBe("/org");
+  });
+
+  it("sends employees without console access to the /portal dashboard by default", () => {
     const learner = orgUser({
       email: "employee1@mmdshry.com",
       roles: ["learner"],
-      permissions: [],
+      permissions: ["org.ticketing.portal"],
+      has_org_access: false,
       memberships: [{ tenant_id: "mmdshry", name: "mmdshry" }],
     });
     expect(canAccessMsp(learner)).toBe(false);
-    expect(defaultPostLoginPath(learner)).toBe("/org");
+    expect(defaultPostLoginPath(learner)).toBe("/portal");
+  });
+
+  it("keeps /select-org ahead of the employee dashboard for multi-org employees", () => {
+    const multi = orgUser({
+      has_org_access: false,
+      needs_org_selection: true,
+      memberships: [
+        { tenant_id: "itneck", name: "ITneck" },
+        { tenant_id: "company", name: "Company" },
+      ],
+    });
+    expect(defaultPostLoginPath(multi)).toBe("/select-org");
   });
 
   it("sends multi-membership users to /select-org", () => {
@@ -164,7 +197,7 @@ describe("MSP staff gate paths", () => {
       ],
     });
     expect(defaultPostLoginPath(selected)).toBe("/org");
-    expect(resolvePostLoginPath(selected, "/learn")).toBe("/learn");
+    expect(resolvePostLoginPath(selected, "/portal")).toBe("/portal");
   });
 
   it("sends null-tenant non-staff to /org, not /msp", () => {
@@ -185,7 +218,7 @@ describe("MSP staff gate paths", () => {
 
   it("keeps non-msp next paths for everyone", () => {
     expect(resolvePostLoginPath(orgUser(), "/org")).toBe("/org");
-    expect(resolvePostLoginPath(orgUser(), "/learn")).toBe("/learn");
+    expect(resolvePostLoginPath(orgUser(), "/portal/tickets")).toBe("/portal/tickets");
     expect(resolvePostLoginPath(staffUser(), "/org")).toBe("/org");
   });
 

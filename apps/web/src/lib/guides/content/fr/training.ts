@@ -21,7 +21,7 @@ export const trainingGuide: GuideModule = {
   ],
   openInAppHref: "/org/training",
   overview:
-    "Cours héberge la bibliothèque (leçons article, vidéo et PDF plus quiz). Formation assigne un ou plusieurs cours aux employés et/ou groupes, exécute des campagnes qui mettent en file un rappel e-mail unique par destinataire au lancement (via SMTP et profils d'envoi), et examine la progression par leçon avec export CSV ou PDF. Les apprenants consomment le contenu assigné dans le portail apprenant sur /learn—pas dans la file org. Une liste d'exemple secondaire existe sur /org/campaigns pour les démos rapides ; le flux opérateur vit sous Formation → Campagnes.",
+    "Cours héberge la bibliothèque (leçons article, vidéo et PDF plus quiz). Formation assigne un ou plusieurs cours aux employés et/ou groupes, exécute des campagnes pouvant regrouper plusieurs cours (glissez-les et définissez leur ordre) et met en file un rappel e-mail par destinataire au lancement, listant tous les cours (via SMTP et profils d'envoi), et examine la progression par leçon avec export CSV ou PDF. Les apprenants consomment le contenu assigné dans le tableau de bord employé sur /portal—pas dans la file org. Une liste d'exemple secondaire existe sur /org/campaigns pour les démos rapides ; le flux opérateur vit sous Formation → Campagnes.",
   example: {
     title: "Campagne de sensibilisation Q4 Finance Acme",
     narrative:
@@ -35,12 +35,12 @@ export const trainingGuide: GuideModule = {
     },
     {
       title: "Assignez le contenu",
-      body: "Sur Formation, sélectionnez un ou plusieurs cours et assignez-les aux employés et/ou groupes. Les apprenants voient les inscriptions dans /learn après l'assignation.",
+      body: "Sur Formation, sélectionnez un ou plusieurs cours et assignez-les aux employés et/ou groupes. Les apprenants voient les inscriptions dans /portal après l'assignation.",
       href: "/org/training",
     },
     {
       title: "Créez une campagne",
-      body: "Nommez la campagne, choisissez le contenu, sélectionnez group_ids et/ou targets, puis lancez. Le lancement met en file un job de rappel par destinataire—il n'y a pas de cadence hebdomadaire. Confirmez d'abord SMTP et le profil d'envoi.",
+      body: "Nommez la campagne, choisissez un ou plusieurs cours, sélectionnez group_ids et/ou targets, puis lancez. Le lancement met en file un e-mail de rappel par destinataire listant tous les cours de la campagne—il n'y a pas de cadence hebdomadaire. Confirmez d'abord SMTP et le profil d'envoi.",
       href: "/org/training/campaigns",
     },
     {
@@ -90,19 +90,24 @@ export const trainingGuide: GuideModule = {
           body: "Téléchargez le rapport de visionnage en CSV pour les tableurs ou en PDF pour les packs parties prenantes. Associez-le à Rapports pour les calendriers à l'échelle org.",
         },
         {
-          title: "Orientez les apprenants vers /learn",
+          title: "Orientez les apprenants vers /portal",
           body: "Les opérateurs restent dans /org/training. Les apprenants ouvrent le portail apprenant pour lire, regarder, marquer comme terminé et passer les quiz. Voir le guide Portail apprenant.",
-          href: "/learn",
+          href: "/portal",
         },
       ],
     },
     {
       title: "Campagnes et rappels",
-      body: "Les campagnes regroupent contenu + audience + un rappel unique au lancement. Les statuts incluent draft, scheduled, running, completed, cancelled et archived.",
+      body: "Les campagnes regroupent un ou plusieurs cours + audience + un rappel unique au lancement. Les statuts incluent draft, scheduled, running, completed, cancelled et archived.",
       steps: [
         {
           title: "Lancez depuis Formation → Campagnes",
-          body: "Nommez la vague, attachez le contenu du cours, sélectionnez groupes/employés et lancez. Chaque destinataire reçoit un job de rappel—sans cadence hebdomadaire récurrente.",
+          body: "Nommez la vague, ajoutez un ou plusieurs cours, sélectionnez groupes/employés et lancez. Chaque destinataire reçoit un e-mail de rappel listant tous les cours de la vague—sans cadence hebdomadaire récurrente.",
+          href: "/org/training/campaigns",
+        },
+        {
+          title: "Organisez les cours de la campagne",
+          body: "Glissez un cours depuis la bibliothèque sur une campagne, ou appuyez sur Ajouter. Glissez les lignes ou utilisez les boutons monter et descendre pour définir l'ordre que verront les apprenants. Les cours ne peuvent être modifiés que lorsque la campagne est en brouillon ou planifiée ; un apprenant termine la campagne lorsque tous ses cours sont achevés.",
           href: "/org/training/campaigns",
         },
         {

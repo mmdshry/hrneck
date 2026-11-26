@@ -18,7 +18,7 @@ export const announcementsNotificationsGuide: GuideModule = {
   example: {
     title: "Avis de formation obligatoire",
     narrative:
-      "Après avoir lancé Sensibilisation sécurité Q4, Mira publie « Terminez la formation phishing avant vendredi », et les opérateurs Finance voient à la fois l'annonce et les notifications individuelles de formation assignée dans la cloche avec des liens vers /learn ou la progression de campagne.",
+      "Après avoir lancé Sensibilisation sécurité Q4, Mira publie « Terminez la formation phishing avant vendredi », et les opérateurs Finance voient à la fois l'annonce et les notifications individuelles de formation assignée dans la cloche avec des liens vers /portal ou la progression de campagne.",
   },
   steps: [
     {
@@ -68,7 +68,7 @@ export const announcementsNotificationsGuide: GuideModule = {
     rows: [
       {
         title: "Formation assignée · Phishing Essentials",
-        meta: "Lien profond · /learn",
+        meta: "Lien profond · /portal",
       },
       {
         title: "Ticket assigné · INC-1842",

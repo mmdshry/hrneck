@@ -1,0 +1,24 @@
+{
+  "properties": {
+    "connectionParameters": {
+      "api_key": {
+        "type": "securestring",
+        "uiDefinition": {
+          "displayName": "Connector API key",
+          "description": "The COPILOT_STUDIO_CONNECTOR_API_KEY value from the HRNECK API server. It is separate from the Direct Line secret.",
+          "tooltip": "Paste the connector key from apps/api/.env",
+          "constraints": {
+            "tabIndex": 1,
+            "clearText": false,
+            "required": "true"
+          }
+        }
+      }
+    },
+    "iconBrandColor": "#0F6C7A",
+    "capabilities": [],
+    "publisher": "HRNECK",
+    "stackOwner": "",
+    "stackName": ""
+  }
+}

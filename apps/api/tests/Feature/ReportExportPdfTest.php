@@ -224,3 +224,66 @@ test('employee export supports single target list filter and validation', functi
         ->and((int) ($archive->options['target_id'] ?? 0))->toBe($alice->id);
     Tenancy::end();
 });
+
+test('employee export rejects an unknown mode', function () {
+    $this->actingAs(orgAdmin())
+        ->withHeader('X-Tenant', 'itneck')
+        ->postJson('/api/v1/org/reports/export', [
+            'scope' => 'user',
+            'mode' => 'everyone',
+            'period_type' => 'monthly',
+            'period_key' => '2026-10',
+        ])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['mode']);
+});
+
+test('export options lists active employees and groups for the employee picker', function () {
+    $user = orgAdmin();
+    Tenancy::initialize(Tenant::query()->findOrFail('itneck'));
+
+    Group::query()->create(['name' => 'Picker Export Group', 'source' => 'manual', 'status' => 'active']);
+    Target::query()->create([
+        'email' => 'picker.export@example.test',
+        'first_name' => 'Pia',
+        'last_name' => 'Picker',
+        'status' => 'active',
+    ]);
+    Tenancy::end();
+
+    $response = $this->actingAs($user)
+        ->withHeader('X-Tenant', 'itneck')
+        ->getJson('/api/v1/org/reports/export/options?q=picker')
+        ->assertOk();
+
+    expect(collect($response->json('data.targets'))->pluck('email')->all())->toContain('picker.export@example.test')
+        ->and(collect($response->json('data.groups'))->pluck('name')->all())->toContain('Picker Export Group');
+});
+
+test('export calendar links a generated business quarter to its archive', function () {
+    Storage::fake('local');
+
+    $user = orgAdmin();
+
+    $created = $this->actingAs($user)
+        ->withHeader('X-Tenant', 'itneck')
+        ->postJson('/api/v1/org/reports/export', [
+            'scope' => 'business',
+            'period_type' => 'quarterly',
+            'period_key' => '2026-Q3',
+            'timezone' => 'UTC',
+            'include_training' => true,
+        ])
+        ->assertCreated();
+
+    $quarters = $this->actingAs($user)
+        ->withHeader('X-Tenant', 'itneck')
+        ->getJson('/api/v1/org/reports/export/calendar?year=2026')
+        ->assertOk()
+        ->json('data.quarters');
+
+    $quarter = collect($quarters)->firstWhere('key', '2026-Q3');
+
+    expect($quarter)->not->toBeNull()
+        ->and($quarter['archive_id'])->toBe($created->json('data.id'));
+});

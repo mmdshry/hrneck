@@ -3,6 +3,7 @@
 import { useTranslations } from "next-intl";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,7 +13,7 @@ import { PageSkeleton } from "@/components/ui/page-skeleton";
 import { Panel } from "@/components/ui/panel";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { liveStatusLabel, useLiveTopic } from "@/hooks/use-live-topic";
+import { liveStatusLabel, useLiveStatusLabels, useLiveTopic } from "@/hooks/use-live-topic";
 import { api, ensureCsrf, fetchSessionUser } from "@/lib/api";
 import { downloadAuthenticated } from "@/lib/download";
 import { orgLiveChannel } from "@/lib/live-topics";
@@ -20,6 +21,7 @@ import { hasPermission, type SessionUser } from "@/lib/session";
 import { resolveTenant } from "@/lib/tenant";
 import { toastError, toastSuccess, toastWarning } from "@/lib/toast";
 import type { SdDesk, SdTicket } from "../../ticketing-types";
+import { TicketDetailsEditDialog } from "./ticket-details-edit-dialog";
 
 type TicketsPayload = {
   data: SdTicket[];
@@ -126,6 +128,9 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
   const [copyDeskId, setCopyDeskId] = useState("");
   const [copyLink, setCopyLink] = useState(true);
   const [copyIncludeNotes, setCopyIncludeNotes] = useState(false);
+  const [copyConfirmOpen, setCopyConfirmOpen] = useState(false);
+  const [convertConfirmOpen, setConvertConfirmOpen] = useState(false);
+  const [detailsEditOpen, setDetailsEditOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [session, setSession] = useState<SessionUser | null>(null);
 
@@ -159,8 +164,11 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
     [ticketId, refreshDetail],
   );
 
+  // Org-wide live feed is only for users who can see every ticket; others use REST.
+  const canViewAllTickets = Boolean(session && hasPermission(session, "org.ticketing.view_all"));
   const { status, error: liveError } = useLiveTopic<TicketsPayload>({
     channel,
+    enabled: canViewAllTickets,
     onPayload,
   });
 
@@ -193,33 +201,9 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
     })();
   }, []);
 
-  const statusLabel = liveStatusLabel(status);
-  const canConvertKb = hasPermission(session, "org.ticketing.kb");
-
-  async function saveDetails(event: FormEvent) {
-    event.preventDefault();
-    if (!ticket) return;
-    try {
-      await ensureCsrf();
-      const updated = await api<{ data: SdTicket }>(`/api/v1/org/ticketing/tickets/${ticketId}`, {
-        method: "PATCH",
-        tenant: resolveTenant(),
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          summary: ticket.summary,
-          description: ticket.description,
-          stage_id: ticket.stage_id,
-          status_id: ticket.status_id,
-          priority_id: ticket.priority_id,
-          assignee_pool: ticket.assignee_pool,
-        }),
-      });
-      setTicket(updated.data);
-      toastSuccess(t("saved"));
-    } catch (err) {
-      toastError(err instanceof Error ? err.message : tCommon("saveFailed"));
-    }
-  }
+  const liveLabels = useLiveStatusLabels();
+  const statusLabel = canViewAllTickets ? liveStatusLabel(status, liveLabels) : null;
+  const canConvertKb = hasPermission(session, "org.kb.manage");
 
   async function addNote(event: FormEvent) {
     event.preventDefault();
@@ -326,13 +310,17 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
     }
   }
 
-  async function copyTicket(event: FormEvent) {
+  function requestCopy(event: FormEvent) {
     event.preventDefault();
-    const deskId = Number(copyDeskId);
-    if (!deskId) {
+    if (!Number(copyDeskId)) {
       toastWarning(t("selectDeskForCopy"));
       return;
     }
+    setCopyConfirmOpen(true);
+  }
+
+  async function copyTicket() {
+    const deskId = Number(copyDeskId);
     try {
       await ensureCsrf();
       const res = await api<{ data: SdTicket }>(`/api/v1/org/ticketing/tickets/${ticketId}/copy`, {
@@ -408,7 +396,7 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
           size="compact"
           onClick={() => void toggleTaskComplete(task.id, !task.is_completed)}
         >
-          {task.is_completed ? t("markOpen") : t("markDone")}
+          {task.is_completed ? tCommon("markOpen") : tCommon("markDone")}
         </Button>
       ),
     },
@@ -436,7 +424,7 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
     },
     {
       id: "actions",
-      header: "Actions",
+      header: tCommon("actions"),
       filter: "none",
       enableSorting: false,
       enableGlobalFilter: false,
@@ -478,7 +466,7 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
               {t("backToQueue")}
             </LinkButton>
             {canConvertKb ? (
-              <Button type="button" variant="outline" onClick={() => void convertKb()}>
+              <Button type="button" variant="outline" onClick={() => setConvertConfirmOpen(true)}>
                 {t("convertToKb")}
               </Button>
             ) : null}
@@ -511,89 +499,52 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
 
       {tab === "details" ? (
         <>
-          <Panel title={t("detailsPanel")}>
-            <form className="grid gap-3 md:grid-cols-2" onSubmit={saveDetails}>
-              <div className="space-y-1 md:col-span-2">
-                <Label htmlFor="ticket-summary">{tCommon("summary")}</Label>
-                <Input
-                  id="ticket-summary"
-                  value={ticket.summary}
-                  onChange={(e) => setTicket({ ...ticket, summary: e.target.value })}
-                />
+          <Panel
+            title={t("detailsPanel")}
+            actions={
+              <Button type="button" variant="outline" onClick={() => setDetailsEditOpen(true)}>
+                {tCommon("edit")}
+              </Button>
+            }
+          >
+            <dl className="grid gap-4 text-sm sm:grid-cols-2">
+              <div className="space-y-1 sm:col-span-2">
+                <dt className="text-[var(--muted-foreground)]">{tCommon("summary")}</dt>
+                <dd className="font-medium text-[var(--foreground)]">
+                  {ticket.summary || tCommon("emDash")}
+                </dd>
               </div>
-              <div className="space-y-1 md:col-span-2">
-                <Label htmlFor="ticket-description">{tCommon("descriptionLabel")}</Label>
-                <Textarea
-                  id="ticket-description"
-                  rows={5}
-                  value={ticket.description ?? ""}
-                  onChange={(e) => setTicket({ ...ticket, description: e.target.value })}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="ticket-stage">{tCommon("stage")}</Label>
-                <Select
-                  id="ticket-stage"
-                  value={String(ticket.stage_id ?? "")}
-                  onChange={(e) => setTicket({ ...ticket, stage_id: Number(e.target.value) })}
-                >
-                  {(desk?.stages ?? []).map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </Select>
+              <div className="space-y-1 sm:col-span-2">
+                <dt className="text-[var(--muted-foreground)]">{tCommon("descriptionLabel")}</dt>
+                <dd className="whitespace-pre-wrap">{ticket.description || tCommon("emDash")}</dd>
               </div>
               <div className="space-y-1">
-                <Label htmlFor="ticket-priority">{tCommon("priority")}</Label>
-                <Select
-                  id="ticket-priority"
-                  value={String(ticket.priority_id ?? "")}
-                  onChange={(e) => setTicket({ ...ticket, priority_id: Number(e.target.value) })}
-                >
-                  {(desk?.priorities ?? []).map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </Select>
+                <dt className="text-[var(--muted-foreground)]">{tCommon("stage")}</dt>
+                <dd>{ticket.stage?.name ?? tCommon("emDash")}</dd>
               </div>
               <div className="space-y-1">
-                <Label htmlFor="ticket-status">{tCommon("status")}</Label>
-                <Select
-                  id="ticket-status"
-                  value={String(ticket.status_id ?? "")}
-                  onChange={(e) => setTicket({ ...ticket, status_id: Number(e.target.value) })}
-                >
-                  {(desk?.statuses ?? []).map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </Select>
+                <dt className="text-[var(--muted-foreground)]">{tCommon("priority")}</dt>
+                <dd>{ticket.priority?.name ?? tCommon("emDash")}</dd>
               </div>
               <div className="space-y-1">
-                <Label htmlFor="ticket-assignee-pool">{t("assigneePool")}</Label>
-                <Input
-                  id="ticket-assignee-pool"
-                  value={ticket.assignee_pool ?? ""}
-                  onChange={(e) => setTicket({ ...ticket, assignee_pool: e.target.value })}
-                />
+                <dt className="text-[var(--muted-foreground)]">{tCommon("status")}</dt>
+                <dd>{ticket.status?.name ?? tCommon("emDash")}</dd>
               </div>
-              <div className="md:col-span-2 text-sm text-[var(--muted-foreground)]">
-                {t("escalationLevel", { level: ticket.escalation_level ?? 0 })}
-                {ticket.sla_response_breached || ticket.sla_resolve_breached
-                  ? t("slaBreachSuffix")
-                  : ""}
+              <div className="space-y-1">
+                <dt className="text-[var(--muted-foreground)]">{t("assigneePool")}</dt>
+                <dd>{ticket.assignee_pool || tCommon("emDash")}</dd>
               </div>
-              <div>
-                <Button type="submit">{tCommon("save")}</Button>
-              </div>
-            </form>
+            </dl>
+            <p className="mt-4 text-sm text-[var(--muted-foreground)]">
+              {t("escalationLevel", { level: ticket.escalation_level ?? 0 })}
+              {ticket.sla_response_breached || ticket.sla_resolve_breached
+                ? t("slaBreachSuffix")
+                : ""}
+            </p>
           </Panel>
 
           <Panel title={t("copyTicket")}>
-            <form className="grid gap-3 md:grid-cols-2" onSubmit={copyTicket}>
+            <form className="grid gap-3 md:grid-cols-2" onSubmit={requestCopy}>
               <div className="space-y-1">
                 <Label htmlFor="copy-desk">{t("targetDesk")}</Label>
                 <Select
@@ -700,7 +651,7 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
           </div>
           <form className="flex gap-2" onSubmit={addTask}>
             <Label htmlFor="ticket-task-title" className="sr-only">
-              Task title
+              {t("taskTitle")}
             </Label>
             <Input
               id="ticket-task-title"
@@ -751,6 +702,36 @@ export function TicketDetailClient({ ticketId }: { ticketId: number }) {
           />
         </Panel>
       ) : null}
+
+      <TicketDetailsEditDialog
+        open={detailsEditOpen}
+        onOpenChange={setDetailsEditOpen}
+        ticket={ticket}
+        desk={desk}
+        onSaved={setTicket}
+      />
+
+      <ConfirmDialog
+        open={copyConfirmOpen}
+        onOpenChange={setCopyConfirmOpen}
+        title={t("copyTicket")}
+        description={t("copyTicketConfirm", { number: ticket.number })}
+        confirmLabel={t("copyTicket")}
+        cancelLabel={tCommon("cancel")}
+        workingLabel={tCommon("working")}
+        onConfirm={copyTicket}
+      />
+
+      <ConfirmDialog
+        open={convertConfirmOpen}
+        onOpenChange={setConvertConfirmOpen}
+        title={t("convertToKb")}
+        description={t("convertToKbConfirm", { number: ticket.number })}
+        confirmLabel={t("convertToKb")}
+        cancelLabel={tCommon("cancel")}
+        workingLabel={tCommon("working")}
+        onConfirm={convertKb}
+      />
     </div>
   );
 }

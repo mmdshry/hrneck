@@ -18,7 +18,7 @@ export const announcementsNotificationsGuide: GuideModule = {
   example: {
     title: "Aviso de formação obrigatória",
     narrative:
-      "Após lançar Sensibilização de Segurança Q4, a Mira publica “Concluir formação de phishing até sexta-feira”, e os operadores de Finanças veem tanto o anúncio como as notificações individuais de formação atribuída no sino com ligações para /learn ou o progresso da campanha.",
+      "Após lançar Sensibilização de Segurança Q4, a Mira publica “Concluir formação de phishing até sexta-feira”, e os operadores de Finanças veem tanto o anúncio como as notificações individuais de formação atribuída no sino com ligações para /portal ou o progresso da campanha.",
   },
   steps: [
     {
@@ -66,7 +66,7 @@ export const announcementsNotificationsGuide: GuideModule = {
       progress: 100,
     },
     rows: [
-      { title: "Formação atribuída · Phishing Essentials", meta: "Deep link · /learn" },
+      { title: "Formação atribuída · Phishing Essentials", meta: "Deep link · /portal" },
       { title: "Ticket atribuído · INC-1842", meta: "Deep link · ticketing" },
       { title: "Checklist atribuída · Acesso IT", meta: "Deep link · instâncias" },
     ],

@@ -2,6 +2,7 @@
 
 namespace App\Domains\IdentityAccess\Jobs;
 
+use App\Domains\IdentityAccess\Notifications\EmployeeInviteNotification;
 use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Bus\Queueable;
@@ -36,7 +37,8 @@ class SendEmployeeInviteJob implements ShouldQueue
             }
 
             try {
-                Password::broker()->sendResetLink(['email' => $user->email]);
+                $token = Password::broker(EmployeeInviteNotification::PASSWORD_BROKER)->createToken($user);
+                $user->notify(new EmployeeInviteNotification($token));
             } catch (\Throwable $e) {
                 report($e);
             }

@@ -18,7 +18,7 @@ export const announcementsNotificationsGuide: GuideModule = {
   example: {
     title: "Pflichtschulungs-Hinweis",
     narrative:
-      "Nach dem Start von Security Awareness Q4 veröffentlicht Mira „Phishing-Schulung bis Freitag abschließen“, und Finance-Operatoren sehen sowohl die Ankündigung als auch einzelne Schulungs-zugewiesen-Benachrichtigungen in der Glocke mit Links zu /learn oder Kampagnenfortschritt.",
+      "Nach dem Start von Security Awareness Q4 veröffentlicht Mira „Phishing-Schulung bis Freitag abschließen“, und Finance-Operatoren sehen sowohl die Ankündigung als auch einzelne Schulungs-zugewiesen-Benachrichtigungen in der Glocke mit Links zu /portal oder Kampagnenfortschritt.",
   },
   steps: [
     {
@@ -66,7 +66,7 @@ export const announcementsNotificationsGuide: GuideModule = {
       progress: 100,
     },
     rows: [
-      { title: "Schulung zugewiesen · Phishing Essentials", meta: "Deep Link · /learn" },
+      { title: "Schulung zugewiesen · Phishing Essentials", meta: "Deep Link · /portal" },
       { title: "Ticket zugewiesen · INC-1842", meta: "Deep Link · Ticketing" },
       { title: "Checkliste zugewiesen · IT-Zugang", meta: "Deep Link · Instanzen" },
     ],

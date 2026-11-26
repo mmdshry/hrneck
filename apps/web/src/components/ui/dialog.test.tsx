@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -52,6 +53,53 @@ describe("Dialog", () => {
     expect(document.activeElement).toBe(input);
   });
 
+  it("ignores Escape, backdrop clicks and the close button while busy", () => {
+    const onOpenChange = vi.fn();
+    render(
+      <Dialog open busy onOpenChange={onOpenChange} title="Saving">
+        <p>Body</p>
+      </Dialog>,
+    );
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.click(screen.getByRole("dialog").parentElement as HTMLElement);
+
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Close" }).hasAttribute("disabled")).toBe(true);
+  });
+
+  it("uses alertdialog role when requested", () => {
+    render(
+      <Dialog open role="alertdialog" onOpenChange={() => undefined} title="Delete item">
+        <p>Body</p>
+      </Dialog>,
+    );
+    expect(screen.getByRole("alertdialog", { name: "Delete item" })).toBeTruthy();
+  });
+
+  it("focuses the initialFocusRef element on open", () => {
+    function Harness() {
+      const secondRef = useRef<HTMLInputElement>(null);
+      return (
+        <Dialog open initialFocusRef={secondRef} onOpenChange={() => undefined} title="Edit">
+          <input aria-label="First" />
+          <input aria-label="Second" ref={secondRef} />
+        </Dialog>
+      );
+    }
+
+    render(<Harness />);
+    expect(document.activeElement).toBe(screen.getByLabelText("Second"));
+  });
+
+  it("keeps long bodies inside a scroll container", () => {
+    render(
+      <Dialog open onOpenChange={() => undefined} title="Long" footer={<button type="button">Done</button>}>
+        <p>Body</p>
+      </Dialog>,
+    );
+    expect(screen.getByText("Body").closest(".overflow-y-auto")).toBeTruthy();
+  });
 });
 
 describe("ConfirmDialog", () => {
@@ -101,5 +149,39 @@ describe("ConfirmDialog", () => {
       expect(onConfirm).toHaveBeenCalledTimes(1);
     });
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
+  });
+
+  it("uses alertdialog role for destructive variants", () => {
+    render(
+      <ConfirmDialog
+        open
+        onOpenChange={() => undefined}
+        title="Delete item"
+        description="This cannot be undone."
+        variant="destructive"
+        onConfirm={() => undefined}
+      />,
+    );
+    expect(screen.getByRole("alertdialog", { name: "Delete item" })).toBeTruthy();
+  });
+
+  it("shows the error message when onConfirm rejects", async () => {
+    const onConfirm = vi.fn().mockRejectedValue(new Error("Target is in use"));
+
+    render(
+      <ConfirmDialog
+        open
+        onOpenChange={() => undefined}
+        title="Delete item"
+        description="This cannot be undone."
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={onConfirm}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+    expect(await screen.findByRole("alert")).toHaveProperty("textContent", "Target is in use");
   });
 });

@@ -22,11 +22,24 @@ final class TargetProfileFields
 
     public const RISK_SOURCE_COMPUTED = 'computed';
 
+    /** Employee created automatically for an organization account (every account is an employee). */
+    public const JOINED_VIA_ACCOUNT = 'account';
+
+    /** Legacy value for employees created when a learner role was granted. */
+    public const JOINED_VIA_LEARNER_ROLE = 'learner_role';
+
     public const JOINED_VIA = [
         'manual',
         'csv',
         'directory',
-        'learner_role',
+        self::JOINED_VIA_LEARNER_ROLE,
+        self::JOINED_VIA_ACCOUNT,
+    ];
+
+    /** Employees that exist only because their login exists, so deleting the login removes them. */
+    public const AUTO_CREATED_JOINED_VIA = [
+        self::JOINED_VIA_LEARNER_ROLE,
+        self::JOINED_VIA_ACCOUNT,
     ];
 
     public const CSV_HEADERS = [
@@ -42,7 +55,6 @@ final class TargetProfileFields
         'hire_date',
         'manager_email',
         'preferred_language',
-        'timezone',
         'external_id',
     ];
 
@@ -73,7 +85,6 @@ final class TargetProfileFields
             'location',
             'employment_type',
             'preferred_language',
-            'timezone',
             'external_id',
             'notification_opt_out',
         ];

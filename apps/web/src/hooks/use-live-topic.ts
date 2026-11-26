@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { fetchSessionUser } from "@/lib/api";
 import { getEcho } from "@/lib/echo";
 
@@ -195,19 +196,44 @@ export function useLiveTopic<T = Record<string, unknown>>({
   return { status, error };
 }
 
-export function liveStatusLabel(status: LiveStatus): string | null {
+export type LiveStatusLabels = { connecting: string; disconnected: string; unavailable: string };
+
+// English defaults, kept only for callers that have not migrated to useLiveStatusLabels yet.
+const ENGLISH_LIVE_STATUS_LABELS: LiveStatusLabels = {
+  connecting: "Connecting…",
+  disconnected: "Disconnected",
+  unavailable: "Live sync unavailable",
+};
+
+export function liveStatusLabel(
+  status: LiveStatus,
+  labels: LiveStatusLabels = ENGLISH_LIVE_STATUS_LABELS,
+): string | null {
   switch (status) {
     case "connecting":
-      return "Connecting…";
+      return labels.connecting;
     case "live":
       return null;
     case "disconnected":
-      return "Disconnected";
+      return labels.disconnected;
     case "error":
-      return "Live sync unavailable";
+      return labels.unavailable;
     default: {
       const _exhaustive: never = status;
       return _exhaustive;
     }
   }
+}
+
+/** Translated labels for `liveStatusLabel`, using the `common` namespace. */
+export function useLiveStatusLabels(): LiveStatusLabels {
+  const t = useTranslations("common");
+  return useMemo(
+    () => ({
+      connecting: t("connecting"),
+      disconnected: t("disconnected"),
+      unavailable: t("liveUnavailable"),
+    }),
+    [t],
+  );
 }

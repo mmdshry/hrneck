@@ -4,35 +4,38 @@ import { useTranslations } from "next-intl";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Panel } from "@/components/ui/panel";
 import { Select } from "@/components/ui/select";
 import { api, ensureCsrf } from "@/lib/api";
 import { resolveTenant } from "@/lib/tenant";
 import { toastError, toastSuccess } from "@/lib/toast";
-
-type ReportSchedule = {
-  id: number;
-  name: string;
-  cadence: "monthly" | "weekly" | "quarterly";
-  format: "csv" | "pdf";
-  recipient_email: string;
-  next_run_at?: string | null;
-};
+import { RecipientPicker } from "./recipient-picker";
+import {
+  cadenceLabel,
+  recipientName,
+  sectionLabel,
+  sectionOptions,
+  selectedRecipientLabels,
+  type ReportRecipient,
+  type ReportSchedule,
+  type ScheduleSection,
+} from "./report-schedule-form";
+import { ReportScheduleWizard } from "./report-schedule-wizard";
 
 export function ReportSchedulesPanel() {
   const t = useTranslations("org.reports");
   const tCommon = useTranslations("common");
   const [schedules, setSchedules] = useState<ReportSchedule[]>([]);
-  const [name, setName] = useState(t("monthlyCsv"));
-  const [cadence, setCadence] = useState<ReportSchedule["cadence"]>("monthly");
-  const [format, setFormat] = useState<ReportSchedule["format"]>("csv");
-  const [recipientEmail, setRecipientEmail] = useState("");
-  const [oneOffEmail, setOneOffEmail] = useState("");
+  const [recipientOptions, setRecipientOptions] = useState<ReportRecipient[]>([]);
+  const [oneOffRecipientIds, setOneOffRecipientIds] = useState<number[]>([]);
+  const [oneOffSection, setOneOffSection] = useState<ScheduleSection>("campaigns");
   const [loading, setLoading] = useState(true);
   const [pendingDelete, setPendingDelete] = useState<ReportSchedule | null>(null);
-  const [editing, setEditing] = useState<ReportSchedule | null>(null);
+  const [sendNowOpen, setSendNowOpen] = useState(false);
+  const [scheduleWizard, setScheduleWizard] = useState<{
+    schedule: ReportSchedule | null;
+  } | null>(null);
 
   const refresh = useCallback(async () => {
     await ensureCsrf();
@@ -40,6 +43,14 @@ export function ReportSchedulesPanel() {
       tenant: resolveTenant(),
     });
     setSchedules(Array.isArray(res.data) ? res.data : []);
+  }, []);
+
+  const loadRecipients = useCallback(async () => {
+    await ensureCsrf();
+    const res = await api<{ data: ReportRecipient[] }>("/api/v1/org/reports/recipients", {
+      tenant: resolveTenant(),
+    });
+    setRecipientOptions(Array.isArray(res.data) ? res.data : []);
   }, []);
 
   useEffect(() => {
@@ -50,52 +61,11 @@ export function ReportSchedulesPanel() {
       .finally(() => setLoading(false));
   }, [refresh, t]);
 
-  async function onCreate(event: FormEvent) {
-    event.preventDefault();
-    try {
-      await ensureCsrf();
-      await api("/api/v1/org/reports/schedules", {
-        method: "POST",
-        tenant: resolveTenant(),
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          cadence,
-          format,
-          recipient_email: recipientEmail,
-        }),
-      });
-      setRecipientEmail("");
-      await refresh();
-      toastSuccess(t("scheduleCreated"));
-    } catch (err) {
-      toastError(err instanceof Error ? err.message : tCommon("createFailed"));
-    }
-  }
-
-  async function onSaveEdit(event: FormEvent) {
-    event.preventDefault();
-    if (!editing) return;
-    try {
-      await ensureCsrf();
-      await api(`/api/v1/org/reports/schedules/${editing.id}`, {
-        method: "PATCH",
-        tenant: resolveTenant(),
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: editing.name,
-          cadence: editing.cadence,
-          format: editing.format,
-          recipient_email: editing.recipient_email,
-        }),
-      });
-      setEditing(null);
-      await refresh();
-      toastSuccess(t("scheduleUpdated"));
-    } catch (err) {
-      toastError(err instanceof Error ? err.message : tCommon("updateFailed"));
-    }
-  }
+  useEffect(() => {
+    void loadRecipients().catch((err: unknown) => {
+      toastError(err instanceof Error ? err.message : t("recipientsLoadFailed"));
+    });
+  }, [loadRecipients, t]);
 
   async function onDelete() {
     if (!pendingDelete) return;
@@ -113,20 +83,25 @@ export function ReportSchedulesPanel() {
     }
   }
 
-  async function onSendNow(event: FormEvent) {
+  function onSendNowSubmit(event: FormEvent) {
     event.preventDefault();
+    setSendNowOpen(true);
+  }
+
+  async function onSendNow() {
     try {
       await ensureCsrf();
       await api("/api/v1/org/reports/email", {
         method: "POST",
         tenant: resolveTenant(),
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: oneOffEmail }),
+        body: JSON.stringify({ recipient_user_ids: oneOffRecipientIds, section: oneOffSection }),
       });
       toastSuccess(t("reportEmailQueued"));
-      setOneOffEmail("");
+      setOneOffRecipientIds([]);
     } catch (err) {
       toastError(err instanceof Error ? err.message : t("sendFailed"));
+      throw err;
     }
   }
 
@@ -134,80 +109,47 @@ export function ReportSchedulesPanel() {
     <Panel className="mt-8 space-y-6 p-4">
       <div>
         <h2 className="text-lg font-medium">{t("scheduledEmailReports")}</h2>
-        <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-          Configure monthly, weekly, or quarterly cadences and send a one-off CSV report.
-        </p>
+        <p className="mt-1 text-sm text-[var(--muted-foreground)]">{t("scheduleDescription")}</p>
       </div>
 
-      <form onSubmit={onCreate} className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-1 sm:col-span-2">
-          <Label htmlFor="schedule-name">Name</Label>
-          <Input
-            id="schedule-name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-          />
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="schedule-cadence">{t("cadence")}</Label>
-          <Select
-            id="schedule-cadence"
-            value={cadence}
-            onChange={(e) => setCadence(e.target.value as ReportSchedule["cadence"])}
-          >
-            <option value="weekly">Weekly</option>
-            <option value="monthly">Monthly</option>
-            <option value="quarterly">Quarterly</option>
-          </Select>
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="schedule-format">Format</Label>
-          <Select
-            id="schedule-format"
-            value={format}
-            onChange={(e) => setFormat(e.target.value as ReportSchedule["format"])}
-          >
-            <option value="csv">CSV</option>
-            <option value="pdf">PDF</option>
-          </Select>
-        </div>
-        <div className="space-y-1 sm:col-span-2">
-          <Label htmlFor="schedule-email">{t("recipientEmail")}</Label>
-          <Input
-            id="schedule-email"
-            type="email"
-            value={recipientEmail}
-            onChange={(e) => setRecipientEmail(e.target.value)}
-            required
-          />
-        </div>
-        <div className="sm:col-span-2">
-          <Button type="submit">{t("addSchedule")}</Button>
-        </div>
-      </form>
-
-      <form onSubmit={onSendNow} className="flex flex-wrap items-end gap-2 border-t border-[var(--border)] pt-4">
+      <form onSubmit={onSendNowSubmit} className="flex flex-wrap items-start gap-2">
         <div className="min-w-[16rem] flex-1 space-y-1">
-          <Label htmlFor="one-off-email">{t("sendReportNow")}</Label>
-          <Input
-            id="one-off-email"
-            type="email"
-            value={oneOffEmail}
-            onChange={(e) => setOneOffEmail(e.target.value)}
-            placeholder="ops@example.com"
-            required
+          <Label htmlFor="one-off-recipients">{t("sendReportNow")}</Label>
+          <RecipientPicker
+            id="one-off-recipients"
+            options={recipientOptions}
+            selectedIds={oneOffRecipientIds}
+            onChange={setOneOffRecipientIds}
           />
         </div>
-        <Button type="submit" variant="secondary">
-          Queue email
+        <div className="min-w-[12rem] space-y-1">
+          <Label htmlFor="one-off-section">{t("reportSection")}</Label>
+          <Select
+            id="one-off-section"
+            value={oneOffSection}
+            onChange={(e) => setOneOffSection(e.target.value as ScheduleSection)}
+          >
+            {sectionOptions(t, tCommon).map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <Button type="submit" variant="secondary" disabled={oneOffRecipientIds.length === 0}>
+          {t("queueEmail")}
         </Button>
       </form>
 
       <div className="space-y-3 border-t border-[var(--border)] pt-4">
-        <h3 className="text-sm font-medium">{t("existingSchedules")}</h3>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-medium">{t("existingSchedules")}</h3>
+          <Button type="button" onClick={() => setScheduleWizard({ schedule: null })}>
+            {t("addSchedule")}
+          </Button>
+        </div>
         {loading ? (
-          <p className="text-sm text-[var(--muted-foreground)]">Loading…</p>
+          <p className="text-sm text-[var(--muted-foreground)]">{t("loadingSchedules")}</p>
         ) : schedules.length === 0 ? (
           <p className="text-sm text-[var(--muted-foreground)]">{t("noSchedulesYet")}</p>
         ) : (
@@ -220,12 +162,27 @@ export function ReportSchedulesPanel() {
                 <div>
                   <p className="font-medium">{row.name}</p>
                   <p className="text-sm text-[var(--muted-foreground)]">
-                    {row.cadence} · {row.format.toUpperCase()} · {row.recipient_email}
+                    {cadenceLabel(row.cadence, tCommon)} · {row.format.toUpperCase()}
+                    {row.format === "csv" ? ` · ${sectionLabel(row.section, t, tCommon)}` : ""} ·{" "}
+                    {row.recipients.length === 0
+                      ? t("noRecipientsSet")
+                      : row.recipients
+                          .map((recipient) =>
+                            recipient.eligible
+                              ? recipientName(recipient)
+                              : `${recipientName(recipient)} (${t("recipientUnavailable")})`,
+                          )
+                          .join(", ")}
                   </p>
                 </div>
                 <div className="flex gap-2">
-                  <Button type="button" variant="secondary" size="sm" onClick={() => setEditing(row)}>
-                    Edit
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setScheduleWizard({ schedule: row })}
+                  >
+                    {tCommon("edit")}
                   </Button>
                   <Button
                     type="button"
@@ -233,7 +190,7 @@ export function ReportSchedulesPanel() {
                     size="sm"
                     onClick={() => setPendingDelete(row)}
                   >
-                    Delete
+                    {tCommon("delete")}
                   </Button>
                 </div>
               </li>
@@ -242,71 +199,30 @@ export function ReportSchedulesPanel() {
         )}
       </div>
 
-      {editing ? (
-        <form
-          onSubmit={onSaveEdit}
-          className="grid gap-3 rounded-[var(--radius)] border border-[var(--border)] p-3 sm:grid-cols-2"
-        >
-          <div className="space-y-1 sm:col-span-2">
-            <Label htmlFor="edit-schedule-name">{t("editName")}</Label>
-            <Input
-              id="edit-schedule-name"
-              value={editing.name}
-              onChange={(e) => setEditing({ ...editing, name: e.target.value })}
-              required
-            />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="edit-schedule-cadence">{t("cadence")}</Label>
-            <Select
-              id="edit-schedule-cadence"
-              value={editing.cadence}
-              onChange={(e) =>
-                setEditing({
-                  ...editing,
-                  cadence: e.target.value as ReportSchedule["cadence"],
-                })
-              }
-            >
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-              <option value="quarterly">Quarterly</option>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="edit-schedule-format">Format</Label>
-            <Select
-              id="edit-schedule-format"
-              value={editing.format}
-              onChange={(e) =>
-                setEditing({
-                  ...editing,
-                  format: e.target.value as ReportSchedule["format"],
-                })
-              }
-            >
-              <option value="csv">CSV</option>
-              <option value="pdf">PDF</option>
-            </Select>
-          </div>
-          <div className="space-y-1 sm:col-span-2">
-            <Label htmlFor="edit-schedule-email">{t("recipientEmail")}</Label>
-            <Input
-              id="edit-schedule-email"
-              type="email"
-              value={editing.recipient_email}
-              onChange={(e) => setEditing({ ...editing, recipient_email: e.target.value })}
-              required
-            />
-          </div>
-          <div className="flex gap-2 sm:col-span-2">
-            <Button type="submit">Save changes</Button>
-            <Button type="button" variant="secondary" onClick={() => setEditing(null)}>
-              Cancel
-            </Button>
-          </div>
-        </form>
+      {scheduleWizard ? (
+        <ReportScheduleWizard
+          schedule={scheduleWizard.schedule}
+          recipientOptions={recipientOptions}
+          onClose={() => setScheduleWizard(null)}
+          onSaved={refresh}
+        />
       ) : null}
+
+      <ConfirmDialog
+        open={sendNowOpen}
+        onOpenChange={setSendNowOpen}
+        title={t("sendReportNow")}
+        description={t("sendNowConfirm", {
+          section: sectionLabel(oneOffSection, t, tCommon),
+          recipients: selectedRecipientLabels(oneOffRecipientIds, recipientOptions).join(", "),
+        })}
+        confirmLabel={t("queueEmail")}
+        cancelLabel={tCommon("cancel")}
+        closeLabel={tCommon("close")}
+        workingLabel={tCommon("working")}
+        errorFallback={t("sendFailed")}
+        onConfirm={onSendNow}
+      />
 
       <ConfirmDialog
         open={pendingDelete !== null}
@@ -316,10 +232,17 @@ export function ReportSchedulesPanel() {
         title={t("deleteSchedule")}
         description={
           pendingDelete
-            ? `Remove “${pendingDelete.name}” (${pendingDelete.recipient_email})?`
+            ? t("removeScheduleConfirm", {
+                name: pendingDelete.name,
+                email: pendingDelete.recipients.map(recipientName).join(", "),
+              })
             : ""
         }
         confirmLabel={tCommon("delete")}
+        cancelLabel={tCommon("cancel")}
+        closeLabel={tCommon("close")}
+        workingLabel={tCommon("working")}
+        errorFallback={tCommon("deleteFailed")}
         variant="destructive"
         onConfirm={onDelete}
       />

@@ -12,7 +12,7 @@ import { Panel } from "@/components/ui/panel";
 import { api, ensureCsrf } from "@/lib/api";
 import { toastError } from "@/lib/toast";
 
-function ResetPasswordForm() {
+function ResetPasswordForm({ isInvite }: { isInvite: boolean }) {
   const t = useTranslations("auth");
   const tCommon = useTranslations("common");
   const router = useRouter();
@@ -37,6 +37,8 @@ function ResetPasswordForm() {
         body: JSON.stringify({
           token,
           email,
+          // The link names the organization whose login this token belongs to.
+          tenant: searchParams.get("tenant") ?? undefined,
           password,
           password_confirmation: passwordConfirmation,
         }),
@@ -86,10 +88,28 @@ function ResetPasswordForm() {
           />
         </div>
         <Button type="submit" className="w-full" disabled={loading || !token}>
-          {loading ? tCommon("saving") : t("resetPassword")}
+          {loading ? tCommon("saving") : isInvite ? t("inviteSubmit") : t("resetPassword")}
         </Button>
       </form>
     </Panel>
+  );
+}
+
+// Invite links (`invite=1`) come from the employee invite email and open the same page with set-password copy.
+function ResetPasswordContent() {
+  const t = useTranslations("auth");
+  const isInvite = useSearchParams().get("invite") === "1";
+
+  return (
+    <>
+      <h1 className="font-[family-name:var(--font-display)] text-3xl tracking-tight">
+        {isInvite ? t("inviteTitle") : t("resetTitle")}
+      </h1>
+      <p className="mt-2 text-sm text-[var(--muted-foreground)]">
+        {isInvite ? t("inviteDescription") : t("resetDescription")}
+      </p>
+      <ResetPasswordForm isInvite={isInvite} />
+    </>
   );
 }
 
@@ -98,14 +118,8 @@ export default function ResetPasswordPage() {
 
   return (
     <div className="mx-auto flex min-h-full w-full max-w-md flex-1 flex-col justify-center px-6 py-16">
-      <h1 className="font-[family-name:var(--font-display)] text-3xl tracking-tight">
-        {t("resetTitle")}
-      </h1>
-      <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-        {t("resetDescription")}
-      </p>
       <Suspense fallback={<MinimalLoader className="min-h-40 py-10" />}>
-        <ResetPasswordForm />
+        <ResetPasswordContent />
       </Suspense>
       <p className="mt-6 text-center text-sm text-[var(--muted-foreground)]">
         <Link href="/login" className="underline-offset-4 hover:underline">

@@ -11,7 +11,9 @@ use App\Domains\TargetsGroups\Models\Target;
 use App\Domains\Ticketing\Actions\TicketingReports;
 use App\Domains\Ticketing\Models\SdTicket;
 use App\Domains\TrainingLms\Models\Enrollment;
+use App\Models\TenantMembership;
 use App\Models\User;
+use App\Support\OrgTimezone;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
@@ -32,6 +34,9 @@ class BuildOrgDetailedReport
         'checklists',
         'ticketing',
     ];
+
+    /** Maximum rows written to a section CSV. Larger sets are cut and flagged via X-Report-Truncated. */
+    public const CSV_ROW_CAP = 5000;
 
     public function __construct(
         private readonly BuildCampaignReport $campaignReport,
@@ -92,7 +97,10 @@ class BuildOrgDetailedReport
                 ],
             ],
             'counts' => [
-                'users' => User::query()->inTenant((string) tenant('id'))->count(),
+                'users' => $this->applyUserDepartmentFilter(
+                    User::query()->inTenant((string) tenant('id')),
+                    $departmentId,
+                )->count(),
                 'targets' => $targetsQuery->count(),
                 'groups' => Group::query()->count(),
                 'campaigns' => $campaign['campaigns'],
@@ -199,6 +207,7 @@ class BuildOrgDetailedReport
         return [
             'open' => $open,
             'completed' => $completed,
+            'cancelled' => (int) ($byStatus[ChecklistInstance::STATUS_CANCELLED] ?? 0),
             'total' => $total,
             'completion_rate' => $eligible > 0 ? round(($completed / $eligible) * 100, 1) : 0.0,
             'by_status' => $byStatus,
@@ -261,57 +270,153 @@ class BuildOrgDetailedReport
             throw new InvalidArgumentException("Unknown report section [{$section}].");
         }
 
-        $filename = 'org-report-'.$section.'-'.now()->format('Ymd-His').'.csv';
+        $filename = 'org-report-'.$section.'-'.now(OrgTimezone::current())->format('Ymd-His').'.csv';
 
         return response()->streamDownload(function () use ($section, $filters): void {
             $out = fopen('php://output', 'w');
 
-            match ($section) {
-                'company' => $this->writeCompanyCsv(
-                    $out,
-                    isset($filters['department_id']) ? (int) $filters['department_id'] : null,
-                ),
-                'users' => $this->writeMappedCsv(
-                    $out,
-                    ['id', 'name', 'email', 'roles', 'mfa_enabled'],
-                    $this->usersQuery($filters)->limit(5000)->get()->map(fn (User $u) => $this->mapUser($u)),
-                ),
-                'targets' => $this->writeMappedCsv(
-                    $out,
-                    ['id', 'email', 'first_name', 'last_name', 'department', 'status', 'risk_score', 'groups'],
-                    $this->targetsQuery($filters)->limit(5000)->get()->map(function (Target $t) {
-                        $mapped = $this->mapTarget($t);
-                        $mapped['groups'] = implode('|', $mapped['groups']);
-
-                        return $mapped;
-                    }),
-                ),
-                'campaigns' => $this->writeCampaignsCsv($out, $filters),
-                'recipients' => $this->writeMappedCsv(
-                    $out,
-                    ['id', 'campaign_id', 'campaign_name', 'email', 'name', 'department', 'status', 'sent_at', 'opened_at', 'completed'],
-                    $this->recipientsQuery($filters)->limit(5000)->get()->map(fn (CampaignRecipient $r) => $this->mapRecipient($r)),
-                ),
-                'training' => $this->writeMappedCsv(
-                    $out,
-                    ['id', 'email', 'name', 'department', 'course', 'status', 'progress', 'opened_at', 'completed_at', 'source'],
-                    $this->trainingQuery($filters)->limit(5000)->get()->map(fn (Enrollment $e) => $this->mapEnrollment($e)),
-                ),
-                'checklists' => $this->writeMappedCsv(
-                    $out,
-                    ['id', 'title', 'template', 'category', 'email', 'name', 'status', 'progress_pct', 'started_at', 'completed_at'],
-                    $this->checklistsQuery($filters)->limit(5000)->get()->map(fn (ChecklistInstance $i) => $this->mapChecklistInstance($i)),
-                ),
-                'ticketing' => $this->writeMappedCsv(
-                    $out,
-                    ['id', 'number', 'summary', 'desk', 'stage', 'priority', 'status', 'sla_response_breached', 'sla_resolve_breached', 'created_at', 'resolved_at'],
-                    $this->ticketingQuery($filters)->limit(5000)->get()->map(fn (SdTicket $t) => $this->mapTicket($t)),
-                ),
-                default => null,
-            };
+            $this->writeCsvSection($section, $filters, $out);
 
             fclose($out);
         }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
+    /**
+     * Whether the section holds more rows than one CSV can carry, so the export is cut at CSV_ROW_CAP.
+     *
+     * @param  array<string, mixed>  $filters
+     */
+    public function csvTruncated(string $section, array $filters = []): bool
+    {
+        $query = $this->csvQuery(strtolower($section), $filters);
+
+        return $query !== null && $query->reorder()->count() > self::CSV_ROW_CAP;
+    }
+
+    /**
+     * Section CSV as a string, used for scheduled report emails.
+     *
+     * @param  array<string, mixed>  $filters
+     */
+    public function csvContent(string $section, array $filters = []): string
+    {
+        $section = strtolower($section);
+        if (! in_array($section, self::SECTIONS, true)) {
+            throw new InvalidArgumentException("Unknown report section [{$section}].");
+        }
+
+        $out = fopen('php://temp', 'r+');
+        $this->writeCsvSection($section, $filters, $out);
+        rewind($out);
+        $content = stream_get_contents($out);
+        fclose($out);
+
+        return is_string($content) ? $content : '';
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     */
+    private function csvQuery(string $section, array $filters): ?Builder
+    {
+        return match ($section) {
+            'users' => $this->usersQuery($filters),
+            'targets' => $this->targetsQuery($filters),
+            'campaigns' => $this->campaignsQuery($filters),
+            'recipients' => $this->recipientsQuery($filters),
+            'training' => $this->trainingQuery($filters),
+            'checklists' => $this->checklistsQuery($filters),
+            'ticketing' => $this->ticketingQuery($filters),
+            default => null,
+        };
+    }
+
+    /**
+     * A user's department in this organization is the membership's department, falling back to the
+     * user row's department. This is the same precedence OrgUserController uses.
+     *
+     * @template TUser of User
+     *
+     * @param  Builder<TUser>  $query
+     * @return Builder<TUser>
+     */
+    private function applyUserDepartmentFilter(Builder $query, ?int $departmentId): Builder
+    {
+        if (! $departmentId) {
+            return $query;
+        }
+
+        $tenantId = (string) tenant('id');
+
+        return $query->where(function (Builder $scoped) use ($tenantId, $departmentId): void {
+            $scoped->whereIn(
+                'users.id',
+                TenantMembership::query()
+                    ->where('tenant_id', $tenantId)
+                    ->where('department_id', $departmentId)
+                    ->select('user_id'),
+            )->orWhere(function (Builder $fallback) use ($tenantId, $departmentId): void {
+                $fallback->where('users.department_id', $departmentId)
+                    ->whereNotIn(
+                        'users.id',
+                        TenantMembership::query()
+                            ->where('tenant_id', $tenantId)
+                            ->whereNotNull('department_id')
+                            ->select('user_id'),
+                    );
+            });
+        });
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @param  resource  $out
+     */
+    private function writeCsvSection(string $section, array $filters, $out): void
+    {
+        match ($section) {
+            'company' => $this->writeCompanyCsv(
+                $out,
+                isset($filters['department_id']) ? (int) $filters['department_id'] : null,
+            ),
+            'users' => $this->writeMappedCsv(
+                $out,
+                ['id', 'name', 'email', 'roles', 'mfa_enabled'],
+                $this->usersQuery($filters)->limit(self::CSV_ROW_CAP)->get()->map(fn (User $u) => $this->mapUser($u)),
+            ),
+            'targets' => $this->writeMappedCsv(
+                $out,
+                ['id', 'email', 'first_name', 'last_name', 'department', 'status', 'risk_score', 'groups'],
+                $this->targetsQuery($filters)->limit(self::CSV_ROW_CAP)->get()->map(function (Target $t) {
+                    $mapped = $this->mapTarget($t);
+                    $mapped['groups'] = implode('|', $mapped['groups']);
+
+                    return $mapped;
+                }),
+            ),
+            'campaigns' => $this->writeCampaignsCsv($out, $filters),
+            'recipients' => $this->writeMappedCsv(
+                $out,
+                ['id', 'campaign_id', 'campaign_name', 'email', 'name', 'department', 'status', 'sent_at', 'opened_at', 'completed'],
+                $this->recipientsQuery($filters)->limit(self::CSV_ROW_CAP)->get()->map(fn (CampaignRecipient $r) => $this->mapRecipient($r)),
+            ),
+            'training' => $this->writeMappedCsv(
+                $out,
+                ['id', 'email', 'name', 'department', 'course', 'status', 'progress', 'opened_at', 'completed_at', 'source'],
+                $this->trainingQuery($filters)->limit(self::CSV_ROW_CAP)->get()->map(fn (Enrollment $e) => $this->mapEnrollment($e)),
+            ),
+            'checklists' => $this->writeMappedCsv(
+                $out,
+                ['id', 'title', 'template', 'category', 'email', 'name', 'status', 'progress_pct', 'started_at', 'completed_at'],
+                $this->checklistsQuery($filters)->limit(self::CSV_ROW_CAP)->get()->map(fn (ChecklistInstance $i) => $this->mapChecklistInstance($i)),
+            ),
+            'ticketing' => $this->writeMappedCsv(
+                $out,
+                ['id', 'number', 'summary', 'desk', 'stage', 'priority', 'status', 'sla_response_breached', 'sla_resolve_breached', 'created_at', 'resolved_at'],
+                $this->ticketingQuery($filters)->limit(self::CSV_ROW_CAP)->get()->map(fn (SdTicket $t) => $this->mapTicket($t)),
+            ),
+            default => null,
+        };
     }
 
     /**
@@ -360,7 +465,11 @@ class BuildOrgDetailedReport
             ->all();
 
         $byGroup = Group::query()
-            ->withCount('targets')
+            ->withCount(['targets' => function (Builder $targets) use ($departmentId): void {
+                if ($departmentId) {
+                    $targets->where('department_id', $departmentId);
+                }
+            }])
             ->orderBy('name')
             ->get()
             ->map(fn (Group $group) => [
@@ -375,8 +484,7 @@ class BuildOrgDetailedReport
         $previousTeam = getPermissionsTeamId();
         setPermissionsTeamId($tenantId);
         try {
-            $byRole = User::query()
-                ->inTenant($tenantId)
+            $byRole = $this->applyUserDepartmentFilter(User::query()->inTenant($tenantId), $departmentId)
                 ->with('roles')
                 ->get()
                 ->flatMap(fn (User $user) => $user->getRoleNames())
@@ -496,6 +604,8 @@ class BuildOrgDetailedReport
             ->with('roles')
             ->orderBy('name');
 
+        $query = $this->applyUserDepartmentFilter($query, isset($filters['department_id']) ? (int) $filters['department_id'] : null);
+
         if (! empty($filters['q'])) {
             $q = '%'.addcslashes((string) $filters['q'], '%_\\').'%';
             $query->where(function (Builder $inner) use ($q): void {
@@ -581,7 +691,7 @@ class BuildOrgDetailedReport
      */
     private function campaignsQuery(array $filters): Builder
     {
-        $query = Campaign::query()->with('course')->latest('id');
+        $query = Campaign::query()->where('type', 'training')->with('courses')->latest('id');
 
         if (! empty($filters['q'])) {
             $q = '%'.addcslashes((string) $filters['q'], '%_\\').'%';
@@ -933,11 +1043,11 @@ class BuildOrgDetailedReport
 
     private function writeCampaignsCsv($out, array $filters): void
     {
-        $campaigns = $this->campaignsQuery($filters)->limit(5000)->get();
+        $campaigns = $this->campaignsQuery($filters)->limit(self::CSV_ROW_CAP)->get();
         $stats = $this->campaignFunnelByIds($campaigns->pluck('id')->all(), $filters);
         $this->writeMappedCsv(
             $out,
-            ['id', 'name', 'type', 'status', 'recipients', 'sent', 'opened', 'completed', 'no_action', 'opened_pct', 'completed_pct', 'no_action_pct'],
+            ['id', 'name', 'type', 'course', 'status', 'recipients', 'sent', 'opened', 'completed', 'no_action', 'opened_pct', 'completed_pct', 'no_action_pct'],
             $campaigns->map(fn (Campaign $c) => $this->mapCampaign($c, $stats[$c->id] ?? null)),
         );
     }
@@ -1015,7 +1125,7 @@ class BuildOrgDetailedReport
             'name' => $campaign->name,
             'type' => $campaign->type,
             'status' => $campaign->status,
-            'course' => $campaign->course?->title,
+            'course' => $campaign->courses->isEmpty() ? null : $campaign->courses->pluck('title')->implode(', '),
             'recipients' => $stats['recipients'],
             'sent' => $stats['sent'],
             'opened' => $opened,

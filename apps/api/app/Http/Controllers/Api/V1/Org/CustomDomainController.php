@@ -4,6 +4,9 @@ namespace App\Http\Controllers\Api\V1\Org;
 
 use App\Domains\Audit\Actions\LogOrgActivity;
 use App\Domains\CustomDomains\Actions\BuildDnsGuidance;
+use App\Domains\Subscriptions\Exceptions\PlanFeatureDisabled;
+use App\Domains\Subscriptions\Support\PlanFeature;
+use App\Domains\Subscriptions\Support\TenantEntitlements;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -11,7 +14,7 @@ use Illuminate\Support\Facades\DB;
 
 class CustomDomainController extends Controller
 {
-    public function show(BuildDnsGuidance $guidance): JsonResponse
+    public function show(BuildDnsGuidance $guidance, TenantEntitlements $entitlements): JsonResponse
     {
         $settings = DB::table('organization_settings')->first();
         $meta = json_decode((string) ($settings->meta ?? '{}'), true) ?: [];
@@ -19,16 +22,23 @@ class CustomDomainController extends Controller
 
         return response()->json([
             'data' => [
-                // Flag is defined in AppServiceProvider; avoid tenant-scoped Pennant DB lookups.
-                'enabled' => true,
+                'enabled' => $entitlements->hasFeature((string) tenant('id'), PlanFeature::CustomDomains),
                 'sending_domain' => $domain !== '' ? $domain : null,
                 'guidance' => $domain !== '' ? $guidance->handle($domain) : null,
             ],
         ]);
     }
 
-    public function update(Request $request, BuildDnsGuidance $guidance, LogOrgActivity $audit): JsonResponse
-    {
+    public function update(
+        Request $request,
+        BuildDnsGuidance $guidance,
+        LogOrgActivity $audit,
+        TenantEntitlements $entitlements,
+    ): JsonResponse {
+        if (! $entitlements->hasFeature((string) tenant('id'), PlanFeature::CustomDomains)) {
+            throw new PlanFeatureDisabled(PlanFeature::CustomDomains);
+        }
+
         $data = $request->validate([
             'sending_domain' => ['required', 'string', 'max:190'],
         ]);

@@ -73,6 +73,40 @@ class SeedRbacCatalog
         return $role;
     }
 
+    /**
+     * Creates the starter roles for an organization that does not have them yet.
+     * Create-only: an existing role keeps whatever permissions its admins chose.
+     */
+    public function ensureTemplateRoles(string $tenantId): void
+    {
+        setPermissionsTeamId(null);
+        foreach (OrgPermissionCatalog::all() as $name) {
+            Permission::findOrCreate($name, OrgPermissionCatalog::GUARD);
+        }
+        app()[PermissionRegistrar::class]->forgetCachedPermissions();
+
+        setPermissionsTeamId($tenantId);
+        foreach (OrgPermissionCatalog::templateRolePermissions() as $name => $permissions) {
+            $exists = Role::query()
+                ->where(config('permission.column_names.team_foreign_key'), $tenantId)
+                ->where('name', $name)
+                ->where('guard_name', OrgPermissionCatalog::GUARD)
+                ->exists();
+
+            if ($exists) {
+                continue;
+            }
+
+            $role = Role::create([
+                'name' => $name,
+                'guard_name' => OrgPermissionCatalog::GUARD,
+                config('permission.column_names.team_foreign_key') => $tenantId,
+            ]);
+            $role->syncPermissions($permissions);
+        }
+        setPermissionsTeamId(null);
+    }
+
     public function ensureLearnerRole(string $tenantId): Role
     {
         setPermissionsTeamId(null);

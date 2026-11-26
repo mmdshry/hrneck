@@ -4,9 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toastSuccess, toastError, toastInfo } from "@/lib/toast";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
@@ -14,7 +14,8 @@ import { PageSkeleton } from "@/components/ui/page-skeleton";
 import { Panel } from "@/components/ui/panel";
 import { Select } from "@/components/ui/select";
 import { useDataTableQuery } from "@/hooks/use-data-table-query";
-import { liveStatusLabel, useLiveTopic } from "@/hooks/use-live-topic";
+import { useOrgTimezone } from "@/hooks/use-org-timezone";
+import { liveStatusLabel, useLiveStatusLabels, useLiveTopic } from "@/hooks/use-live-topic";
 import { api, apiOptional, ensureCsrf, fetchSessionUser } from "@/lib/api";
 import { serializeDataTableQuery } from "@/lib/data-table-query";
 import {
@@ -26,13 +27,41 @@ import {
   type PageSize,
   type PaginationMeta,
 } from "@/lib/pagination";
-import { hasPermission } from "@/lib/session";
+import { hasAnyPermission, hasPermission } from "@/lib/session";
+import { matchesCells } from "@/lib/table-filter";
 import { resolveTenant } from "@/lib/tenant";
+import { type AudienceGroup, type AudienceTarget } from "../audience-picker";
+import { assignAudiencePayload, type AssignDraft } from "../training-assign-draft";
+import { formatTs } from "../training-shared";
 import {
-  AudiencePicker,
-  type AudienceGroup,
-  type AudienceTarget,
-} from "../audience-picker";
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  pointerWithin,
+  useSensor,
+  useSensors,
+  type CollisionDetection,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
+import {
+  isCourseListEditable,
+  moveCourseId,
+  parseDndId,
+  reorderCourseId,
+} from "./campaign-courses";
+import {
+  CampaignCourseList,
+  CampaignCoursesCell,
+  CampaignPanelDropzone,
+  CourseDragPreview,
+  LibraryCourseCard,
+  type CourseDndLabels,
+} from "./campaign-courses-dnd";
+import { LaunchCampaignWizard } from "./launch-campaign-wizard";
 
 type Dash = {
   campaigns_total: number;
@@ -51,8 +80,10 @@ type Campaign = {
   id: number;
   name: string;
   status: string;
-  course?: { title: string } | null;
+  courses?: Course[];
   recipients?: unknown[];
+  starts_at?: string | null;
+  expires_at?: string | null;
 };
 
 type Course = { id: number; title: string };
@@ -69,26 +100,25 @@ const CANCELABLE_STATUSES = new Set(["draft", "scheduled", "running"]);
 const ARCHIVE_VIA_DELETE = new Set(["running", "completed"]);
 const ARCHIVE_VIA_PATCH = new Set(["draft", "scheduled", "cancelled"]);
 
-function matchesCells(
-  q: string,
-  columnFilters: Record<string, string>,
-  cells: Record<string, string>,
-): boolean {
-  const needle = q.trim().toLowerCase();
-  if (needle && !Object.values(cells).join(" ").toLowerCase().includes(needle)) {
-    return false;
-  }
-  for (const [key, raw] of Object.entries(columnFilters)) {
-    const value = raw.trim().toLowerCase();
-    if (!value) continue;
-    if (!String(cells[key] ?? "").toLowerCase().includes(value)) return false;
-  }
-  return true;
+/** Pointer position wins when it is over a target; otherwise fall back to the closest one. */
+const preferPointerTargets: CollisionDetection = (args) => {
+  const pointerHits = pointerWithin(args);
+  return pointerHits.length > 0 ? pointerHits : closestCenter(args);
+};
+
+function courseIdsOf(campaign: Campaign): number[] {
+  return (campaign.courses ?? []).map((course) => course.id);
+}
+
+function courseTitlesOf(campaign: Campaign): string[] {
+  return (campaign.courses ?? []).map((course) => course.title);
 }
 
 export function TrainingCampaignsClient() {
   const t = useTranslations("org.campaigns");
+  const tTraining = useTranslations("org.training");
   const tCommon = useTranslations("common");
+  const orgTimeZone = useOrgTimezone();
   const statusOptions = [
     { label: tCommon("draft"), value: "draft" },
     { label: tCommon("scheduled"), value: "scheduled" },
@@ -107,11 +137,13 @@ export function TrainingCampaignsClient() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [targets, setTargets] = useState<AudienceTarget[]>([]);
   const [groups, setGroups] = useState<AudienceGroup[]>([]);
-  const [courseId, setCourseId] = useState<number | "">("");
-  const [name, setName] = useState("");
-  const [selectedTargetIds, setSelectedTargetIds] = useState<number[]>([]);
-  const [selectedGroupIds, setSelectedGroupIds] = useState<number[]>([]);
+  const [selectedCampaignId, setSelectedCampaignId] = useState<number | null>(null);
+  const [activeDragLabel, setActiveDragLabel] = useState<string | null>(null);
+  const [launchOpen, setLaunchOpen] = useState(false);
+  const [pendingCancel, setPendingCancel] = useState<Campaign | null>(null);
+  const [pendingArchive, setPendingArchive] = useState<Campaign | null>(null);
   const [loading, setLoading] = useState(true);
+  const [canManageCampaigns, setCanManageCampaigns] = useState(false);
   const tableQuery = useDataTableQuery();
   const filters = useMemo(
     () => serializeDataTableQuery(tableQuery.debounced),
@@ -134,7 +166,7 @@ export function TrainingCampaignsClient() {
         matchesCells(q, columnFilters, {
           name: campaign.name,
           status: campaign.status,
-          course: campaign.course?.title ?? "",
+          course: courseTitlesOf(campaign).join(" "),
         }),
       );
       const sliced = paginateLocal(filtered, nextPage, nextPerPage);
@@ -156,10 +188,6 @@ export function TrainingCampaignsClient() {
       setCourses(nextCourses);
       setTargets(nextTargets);
       setGroups(nextGroups);
-      setCourseId((current) => {
-        if (current !== "") return current;
-        return nextCourses[0]?.id ?? "";
-      });
     },
     [],
   );
@@ -181,18 +209,35 @@ export function TrainingCampaignsClient() {
     await ensureCsrf();
     const me = await fetchSessionUser();
     const tenantSlug = resolveTenant();
-    const canCampaigns = me ? hasPermission(me, "org.campaigns.manage") : false;
-    const canTargets = me ? hasPermission(me, "org.targets.manage") : false;
-    const canGroups = me ? hasPermission(me, "org.groups.manage") : false;
+    const canManage = me ? hasPermission(me, "org.campaigns.manage") : false;
+    const canViewCampaigns = me
+      ? hasAnyPermission(me, ["org.campaigns.view", "org.campaigns.manage"])
+      : false;
+    const canCourses = me
+      ? hasAnyPermission(me, [
+          "org.training.view",
+          "org.training.manage",
+          "org.campaigns.manage",
+        ])
+      : false;
+    const canTargets = me
+      ? hasAnyPermission(me, ["org.targets.view", "org.targets.manage"])
+      : false;
+    const canGroups = me
+      ? hasAnyPermission(me, ["org.groups.view", "org.groups.manage"])
+      : false;
+    setCanManageCampaigns(canManage);
     const [dashRes, coursesRes, targetsRes, groupsRes] = await Promise.all([
-      canCampaigns
+      canViewCampaigns
         ? apiOptional<{ data: Dash }>("/api/v1/org/campaigns/dashboard?type=training", {
             tenant: tenantSlug,
           })
         : Promise.resolve(null),
-      apiOptional(`/api/v1/org/training/courses?${paginationQuery(1, 100)}`, {
-        tenant: tenantSlug,
-      }),
+      canCourses
+        ? apiOptional(`/api/v1/org/training/courses?${paginationQuery(1, 100)}`, {
+            tenant: tenantSlug,
+          })
+        : Promise.resolve(null),
       canTargets
         ? apiOptional(`/api/v1/org/targets?${paginationQuery(1, 500)}`, {
             tenant: tenantSlug,
@@ -285,7 +330,8 @@ export function TrainingCampaignsClient() {
     tableQuery.debounced,
   ]);
 
-  const statusLabel = liveStatusLabel(status);
+  const liveLabels = useLiveStatusLabels();
+  const statusLabel = liveStatusLabel(status, liveLabels);
 
   async function refreshAfterMutation() {
     await refreshAuxiliary();
@@ -294,36 +340,34 @@ export function TrainingCampaignsClient() {
     }
   }
 
-  async function createCampaign() {
-    
+  async function launchCampaign(name: string, draft: AssignDraft): Promise<boolean> {
+    let launched = false;
     try {
-      if (selectedTargetIds.length === 0 && selectedGroupIds.length === 0) {
-        toastInfo(t("selectTargetOrGroup"));
-        return;
-      }
       await ensureCsrf();
       const tenantSlug = resolveTenant();
       const body: Record<string, unknown> = {
-        name: name || `Training ${new Date().toISOString()}`,
+        name: name || t("defaultCampaignName", { date: new Date().toISOString() }),
         type: "training",
-        course_id: courseId || undefined,
+        course_ids: draft.courseIds,
         launch: true,
+        ...assignAudiencePayload(draft),
       };
-      if (selectedTargetIds.length > 0) body.target_ids = selectedTargetIds;
-      if (selectedGroupIds.length > 0) body.group_ids = selectedGroupIds;
 
-      await api("/api/v1/org/campaigns", {
+      const res = await api<{ data: { status?: string } }>("/api/v1/org/campaigns", {
         method: "POST",
         tenant: tenantSlug,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      setName("");
-      toastSuccess(t("launched"));
+      launched = true;
+      toastSuccess(
+        res.data.status === "scheduled" ? tTraining("scheduledNotice") : t("launched"),
+      );
       await refreshAfterMutation();
     } catch (err) {
       toastError(err instanceof Error ? err.message : tCommon("createFailed"));
     }
+    return launched;
   }
 
   async function cancelCampaign(campaign: Campaign) {
@@ -343,7 +387,7 @@ export function TrainingCampaignsClient() {
             )
           : prev,
       );
-      toastSuccess(`Campaign “${campaign.name}” cancelled.`);
+      toastSuccess(t("campaignCancelled", { name: campaign.name }));
       await refreshAfterMutation();
     } catch (err) {
       toastError(err instanceof Error ? err.message : t("cancelFailed"));
@@ -375,10 +419,166 @@ export function TrainingCampaignsClient() {
             )
           : prev,
       );
-      toastSuccess(`Campaign “${campaign.name}” archived.`);
+      toastSuccess(t("campaignArchived", { name: campaign.name }));
       await refreshAfterMutation();
     } catch (err) {
       toastError(err instanceof Error ? err.message : t("archiveFailed"));
+    }
+  }
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const dndLabels: CourseDndLabels = {
+    dragLibraryCourse: t("dragLibraryCourse"),
+    dragMemberCourse: t("dragMemberCourse"),
+    add: tCommon("add"),
+    moveUp: t("moveCourseUp"),
+    moveDown: t("moveCourseDown"),
+    remove: tCommon("remove"),
+    dropHere: t("dropCourseHere"),
+    noCourses: t("noCampaignCourses"),
+  };
+
+  const allCampaigns = liveCampaigns ?? campaigns;
+  const selectedCampaign =
+    allCampaigns.find((row) => row.id === selectedCampaignId) ?? null;
+  const selectedCampaignEditable = selectedCampaign
+    ? isCourseListEditable(selectedCampaign.status)
+    : false;
+
+  function replaceCampaign(updated: Campaign) {
+    const merge = (rows: Campaign[]) =>
+      rows.map((row) => (row.id === updated.id ? { ...row, ...updated } : row));
+    setCampaigns(merge);
+    setLiveCampaigns((prev) => (prev ? merge(prev) : prev));
+  }
+
+  function findCampaign(campaignId: number | null): Campaign | undefined {
+    if (campaignId === null) return undefined;
+    return allCampaigns.find((row) => row.id === campaignId);
+  }
+
+  async function addCourseToCampaign(campaignId: number | null, courseId: number) {
+    const campaign = findCampaign(campaignId);
+    const course = courses.find((row) => row.id === courseId);
+    if (!campaign || !course) return;
+    if (!isCourseListEditable(campaign.status)) {
+      toastInfo(t("courseLockedHint"));
+      return;
+    }
+    if (courseIdsOf(campaign).includes(courseId)) {
+      toastInfo(t("courseAlreadyInCampaign", { course: course.title }));
+      return;
+    }
+
+    try {
+      await ensureCsrf();
+      const res = await api<{ data: Campaign }>(`/api/v1/org/campaigns/${campaign.id}/courses`, {
+        method: "POST",
+        tenant: resolveTenant(),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ course_id: courseId }),
+      });
+      replaceCampaign(res.data);
+      toastSuccess(t("courseAdded", { course: course.title, campaign: campaign.name }));
+      await refreshAfterMutation();
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : t("courseUpdateFailed"));
+    }
+  }
+
+  async function saveCourseOrder(campaign: Campaign, nextIds: number[]) {
+    if (nextIds.join(",") === courseIdsOf(campaign).join(",")) return;
+
+    const byId = new Map((campaign.courses ?? []).map((course) => [course.id, course] as const));
+    const reordered = nextIds.flatMap((id) => {
+      const course = byId.get(id);
+      return course ? [course] : [];
+    });
+    replaceCampaign({ ...campaign, courses: reordered });
+
+    try {
+      await ensureCsrf();
+      const res = await api<{ data: Campaign }>(
+        `/api/v1/org/campaigns/${campaign.id}/courses/order`,
+        {
+          method: "PUT",
+          tenant: resolveTenant(),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ course_ids: nextIds }),
+        },
+      );
+      replaceCampaign(res.data);
+      toastSuccess(t("courseOrderSaved"));
+    } catch (err) {
+      replaceCampaign(campaign);
+      toastError(err instanceof Error ? err.message : t("courseUpdateFailed"));
+      await refreshAfterMutation();
+    }
+  }
+
+  function moveCourse(campaign: Campaign, courseId: number, delta: -1 | 1) {
+    if (!isCourseListEditable(campaign.status)) {
+      toastInfo(t("courseLockedHint"));
+      return;
+    }
+    void saveCourseOrder(campaign, moveCourseId(courseIdsOf(campaign), courseId, delta));
+  }
+
+  async function removeCourseFromCampaign(campaign: Campaign, courseId: number) {
+    if (!isCourseListEditable(campaign.status)) {
+      toastInfo(t("courseLockedHint"));
+      return;
+    }
+    const course = (campaign.courses ?? []).find((row) => row.id === courseId);
+
+    try {
+      await ensureCsrf();
+      const res = await api<{ data: Campaign }>(
+        `/api/v1/org/campaigns/${campaign.id}/courses/${courseId}`,
+        { method: "DELETE", tenant: resolveTenant() },
+      );
+      replaceCampaign(res.data);
+      toastSuccess(t("courseRemoved", { course: course?.title ?? "", campaign: campaign.name }));
+      await refreshAfterMutation();
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : t("courseUpdateFailed"));
+    }
+  }
+
+  function handleDragStart(event: DragStartEvent) {
+    const source = parseDndId(String(event.active.id));
+    if (!source) return;
+    const pool = source.type === "library" ? courses : (selectedCampaign?.courses ?? []);
+    setActiveDragLabel(pool.find((row) => row.id === source.id)?.title ?? null);
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    setActiveDragLabel(null);
+    const source = parseDndId(String(event.active.id));
+    const target = event.over ? parseDndId(String(event.over.id)) : null;
+    if (!source || !target) return;
+
+    if (source.type === "library") {
+      if (target.type === "cell" || target.type === "panel") {
+        void addCourseToCampaign(target.id, source.id);
+      } else if (target.type === "member") {
+        void addCourseToCampaign(selectedCampaignId, source.id);
+      }
+      return;
+    }
+
+    if (
+      source.type === "member" &&
+      target.type === "member" &&
+      selectedCampaign &&
+      selectedCampaignEditable
+    ) {
+      const nextIds = reorderCourseId(courseIdsOf(selectedCampaign), source.id, target.id);
+      void saveCourseOrder(selectedCampaign, nextIds);
     }
   }
 
@@ -402,9 +602,30 @@ export function TrainingCampaignsClient() {
       id: "course",
       header: tCommon("course"),
       filter: "none",
-      filterValue: (campaign) => campaign.course?.title ?? "",
+      filterValue: (campaign) => courseTitlesOf(campaign).join(" "),
       enableSorting: false,
-      cell: (campaign) => campaign.course?.title ?? "—",
+      cell: (campaign) => (
+        <CampaignCoursesCell
+          campaignId={campaign.id}
+          editable={isCourseListEditable(campaign.status)}
+          courses={campaign.courses ?? []}
+          labels={dndLabels}
+        />
+      ),
+    },
+    {
+      id: "starts_at",
+      header: tTraining("startsAt"),
+      filter: "none",
+      enableSorting: false,
+      cell: (campaign) => formatTs(campaign.starts_at, orgTimeZone),
+    },
+    {
+      id: "expires_at",
+      header: tTraining("expiresAt"),
+      filter: "none",
+      enableSorting: false,
+      cell: (campaign) => formatTs(campaign.expires_at, orgTimeZone),
     },
     {
       id: "recipients",
@@ -424,25 +645,33 @@ export function TrainingCampaignsClient() {
         const canArchive =
           ARCHIVE_VIA_DELETE.has(campaign.status) ||
           ARCHIVE_VIA_PATCH.has(campaign.status);
-        if (!canCancel && !canArchive) return tCommon("emDash");
         return (
           <div className="flex flex-wrap items-center gap-2">
-            {canCancel ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="compact"
+              aria-pressed={selectedCampaignId === campaign.id}
+              onClick={() => setSelectedCampaignId(campaign.id)}
+            >
+              {t("manageCourses")}
+            </Button>
+            {canCancel && canManageCampaigns ? (
               <Button
                 type="button"
                 variant="outline"
                 size="compact"
-                onClick={() => void cancelCampaign(campaign)}
+                onClick={() => setPendingCancel(campaign)}
               >
                 {tCommon("cancel")}
               </Button>
             ) : null}
-            {canArchive ? (
+            {canArchive && canManageCampaigns ? (
               <Button
                 type="button"
                 variant="outline"
                 size="compact"
-                onClick={() => void archiveCampaign(campaign)}
+                onClick={() => setPendingArchive(campaign)}
               >
                 {tCommon("archive")}
               </Button>
@@ -458,127 +687,223 @@ export function TrainingCampaignsClient() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">
-      <PageHeader
-        title={t("title")}
-        description={t("description")}
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <span className="self-center text-sm text-[var(--muted-foreground)]">
-              {statusLabel ?? tCommon("live")}
-            </span>
-            <LinkButton href="/org/courses" variant="secondary">
-              {t("courseLibrary")}
-            </LinkButton>
-            <LinkButton href="/learn" variant="secondary">
-              {t("openLearn")}
-            </LinkButton>
-          </div>
-        }
-      />
-      {dash ? (
-        <dl className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          {[
-            [t("campaignsCaption"), dash.campaigns_total],
-            [t("enrollments"), dash.enrollments_total ?? tCommon("emDash")],
-            [tCommon("inProgress"), dash.enrollments_in_progress ?? tCommon("emDash")],
-            [tCommon("completed"), dash.enrollments_completed ?? tCommon("emDash")],
-            [t("openedPct"), dash.opened_pct],
-            [t("completedPct"), dash.completed_pct],
-          ].map(([label, value]) => (
-            <Panel key={String(label)} className="px-4 py-3">
-              <dt className="text-xs uppercase tracking-wide text-[var(--muted-foreground)]">
-                {label}
-              </dt>
-              <dd className="mt-1 text-2xl font-medium">{value}</dd>
-            </Panel>
-          ))}
-        </dl>
-      ) : (
-        <p className="mt-8 text-sm text-[var(--muted-foreground)]">
-          {statusLabel ?? t("waitingLive")}
-        </p>
-      )}
+    <DndContext
+      sensors={sensors}
+      collisionDetection={preferPointerTargets}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onDragCancel={() => setActiveDragLabel(null)}
+    >
+      <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">
+        <PageHeader
+          title={t("title")}
+          description={t("description")}
+          actions={
+            <div className="flex flex-wrap gap-2">
+              <span className="self-center text-sm text-[var(--muted-foreground)]">
+                {statusLabel ?? tCommon("live")}
+              </span>
+              <LinkButton href="/org/courses" variant="secondary">
+                {t("courseLibrary")}
+              </LinkButton>
+              <LinkButton href="/portal" variant="secondary">
+                {t("openLearn")}
+              </LinkButton>
+            </div>
+          }
+        />
+        {dash ? (
+          <dl className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            {[
+              [t("campaignsCaption"), dash.campaigns_total],
+              [t("enrollments"), dash.enrollments_total ?? tCommon("emDash")],
+              [tCommon("inProgress"), dash.enrollments_in_progress ?? tCommon("emDash")],
+              [tCommon("completed"), dash.enrollments_completed ?? tCommon("emDash")],
+              [t("openedPct"), dash.opened_pct],
+              [t("completedPct"), dash.completed_pct],
+            ].map(([label, value]) => (
+              <Panel key={String(label)} className="px-4 py-3">
+                <dt className="text-xs uppercase tracking-wide text-[var(--muted-foreground)]">
+                  {label}
+                </dt>
+                <dd className="mt-1 text-2xl font-medium">{value}</dd>
+              </Panel>
+            ))}
+          </dl>
+        ) : (
+          <p className="mt-8 text-sm text-[var(--muted-foreground)]">
+            {statusLabel ?? t("waitingLive")}
+          </p>
+        )}
 
-      <Panel className="mt-8 space-y-4 p-5">
-        <h2 className="text-lg font-medium">{t("launchCampaign")}</h2>
-        <div className="flex flex-wrap items-end gap-2">
-          <div className="min-w-[200px] flex-1 space-y-1">
-            <Label htmlFor="training-campaign-name" className="text-[var(--muted-foreground)]">
-              {tCommon("name")}
-            </Label>
-            <Input
-              id="training-campaign-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={t("namePlaceholder")}
-            />
-          </div>
-          {courses.length > 0 ? (
-            <div className="min-w-[200px] flex-1 space-y-1">
-              <Label htmlFor="training-course" className="text-[var(--muted-foreground)]">
-                {tCommon("course")}
+        <Panel className="mt-8 flex flex-wrap items-center justify-between gap-3 p-5">
+          <h2 className="text-lg font-medium">{t("launchCampaign")}</h2>
+          <Button
+            type="button"
+            onClick={() => setLaunchOpen(true)}
+            disabled={courses.length === 0 || !canManageCampaigns}
+          >
+            {t("createCampaign")}
+          </Button>
+        </Panel>
+
+        <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]">
+          <Panel className="space-y-3 p-5">
+            <h2 className="text-lg font-medium">{t("courseLibrary")}</h2>
+            <p className="text-sm text-[var(--muted-foreground)]">{t("courseLibraryHint")}</p>
+            {courses.length > 0 ? (
+              <ul className="max-h-[480px] space-y-2 overflow-y-auto pr-1">
+                {courses.map((course) => (
+                  <LibraryCourseCard
+                    key={course.id}
+                    course={course}
+                    canAdd={selectedCampaignEditable}
+                    labels={dndLabels}
+                    onAdd={(courseId) => void addCourseToCampaign(selectedCampaignId, courseId)}
+                  />
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-[var(--muted-foreground)]">{t("noCoursesAvailable")}</p>
+            )}
+          </Panel>
+
+          <Panel className="space-y-4 p-5">
+            <div className="space-y-2">
+              <Label htmlFor="campaign-courses-select" className="text-[var(--muted-foreground)]">
+                {t("campaignSelect")}
               </Label>
               <Select
-                id="training-course"
-                value={courseId === "" ? "" : String(courseId)}
-                onChange={(e) => setCourseId(e.target.value ? Number(e.target.value) : "")}
+                id="campaign-courses-select"
+                value={selectedCampaignId === null ? "" : String(selectedCampaignId)}
+                onChange={(e) =>
+                  setSelectedCampaignId(e.target.value ? Number(e.target.value) : null)
+                }
               >
-                {courses.map((course) => (
-                  <option key={course.id} value={course.id}>
-                    {course.title}
+                <option value="">{t("chooseCampaign")}</option>
+                {allCampaigns.map((campaign) => (
+                  <option key={campaign.id} value={campaign.id}>
+                    {campaign.name}
                   </option>
                 ))}
               </Select>
             </div>
-          ) : null}
+
+            {selectedCampaign ? (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <h3 className="font-medium">{selectedCampaign.name}</h3>
+                  <span className="text-xs text-[var(--muted-foreground)]">
+                    {selectedCampaign.status}
+                  </span>
+                </div>
+                {selectedCampaignEditable ? null : (
+                  <p className="text-sm text-[var(--muted-foreground)]">{t("courseLockedHint")}</p>
+                )}
+                <CampaignPanelDropzone
+                  campaignId={selectedCampaign.id}
+                  editable={selectedCampaignEditable}
+                  className="min-h-24"
+                >
+                  {(selectedCampaign.courses ?? []).length > 0 ? (
+                    <CampaignCourseList
+                      courses={selectedCampaign.courses ?? []}
+                      editable={selectedCampaignEditable}
+                      labels={dndLabels}
+                      onMove={(courseId, delta) => moveCourse(selectedCampaign, courseId, delta)}
+                      onRemove={(courseId) => void removeCourseFromCampaign(selectedCampaign, courseId)}
+                    />
+                  ) : (
+                    <div className="rounded-[var(--radius)] border border-dashed border-[var(--border)] p-6 text-center text-sm text-[var(--muted-foreground)]">
+                      {selectedCampaignEditable ? dndLabels.dropHere : dndLabels.noCourses}
+                    </div>
+                  )}
+                </CampaignPanelDropzone>
+              </div>
+            ) : (
+              <p className="text-sm text-[var(--muted-foreground)]">{t("noCampaignSelected")}</p>
+            )}
+          </Panel>
         </div>
 
-        <AudiencePicker
+        {courses.length === 0 && status === "live" ? (
+          <EmptyState
+            className="mt-4"
+            title={t("noCoursesAvailable")}
+            description={t("noCoursesHint")}
+          />
+        ) : null}
+      
+      
+        <DataTable
+          className="mt-8"
+          mode="server"
+          caption={t("campaignsCaption")}
+          columns={columns}
+          rows={campaigns}
+          filterState={tableQuery.state}
+          onFilterStateChange={tableQuery.setState}
+          getRowId={(row) => row.id}
+          emptyTitle={t("noCampaignsYet")}
+          emptyDescription={t("noCampaignsHint")}
+          pagination={{
+            page,
+            perPage,
+            total: campaignsMeta.total,
+            onPageChange: setPage,
+            onPerPageChange: (size) => {
+              setPerPage(size);
+              setPage(1);
+            },
+          }}
+        />
+
+        <LaunchCampaignWizard
+          open={launchOpen}
+          onOpenChange={setLaunchOpen}
+          courses={courses}
           targets={targets}
           groups={groups}
-          selectedTargetIds={selectedTargetIds}
-          selectedGroupIds={selectedGroupIds}
-          onChangeTargets={setSelectedTargetIds}
-          onChangeGroups={setSelectedGroupIds}
+          onLaunch={launchCampaign}
         />
 
-        <Button type="button" onClick={() => void createCampaign()} disabled={courses.length === 0}>
-          {t("createCampaign")}
-        </Button>
-      </Panel>
-
-      {courses.length === 0 && status === "live" ? (
-        <EmptyState
-          className="mt-4"
-          title={t("noCoursesAvailable")}
-          description={t("noCoursesHint")}
+        <ConfirmDialog
+          open={pendingCancel !== null}
+          onOpenChange={(open) => {
+            if (!open) setPendingCancel(null);
+          }}
+          title={t("cancelCampaignTitle")}
+          description={t("cancelCampaignDescription", { name: pendingCancel?.name ?? "" })}
+          confirmLabel={t("cancelCampaignAction")}
+          cancelLabel={t("keepCampaign")}
+          workingLabel={tCommon("working")}
+          errorFallback={t("cancelFailed")}
+          variant="destructive"
+          onConfirm={async () => {
+            if (pendingCancel) await cancelCampaign(pendingCancel);
+          }}
         />
-      ) : null}
-      
-      
-      <DataTable
-        className="mt-8"
-        mode="server"
-        caption={t("campaignsCaption")}
-        columns={columns}
-        rows={campaigns}
-        filterState={tableQuery.state}
-        onFilterStateChange={tableQuery.setState}
-        getRowId={(row) => row.id}
-        emptyTitle={t("noCampaignsYet")}
-        emptyDescription={t("noCampaignsHint")}
-        pagination={{
-          page,
-          perPage,
-          total: campaignsMeta.total,
-          onPageChange: setPage,
-          onPerPageChange: (size) => {
-            setPerPage(size);
-            setPage(1);
-          },
-        }}
-      />
-    </div>
+
+        <ConfirmDialog
+          open={pendingArchive !== null}
+          onOpenChange={(open) => {
+            if (!open) setPendingArchive(null);
+          }}
+          title={t("archiveCampaignTitle")}
+          description={t("archiveCampaignDescription", { name: pendingArchive?.name ?? "" })}
+          confirmLabel={tCommon("archive")}
+          cancelLabel={tCommon("cancel")}
+          workingLabel={tCommon("working")}
+          errorFallback={t("archiveFailed")}
+          variant="destructive"
+          onConfirm={async () => {
+            if (pendingArchive) await archiveCampaign(pendingArchive);
+          }}
+        />
+      </div>
+      <DragOverlay>
+        {activeDragLabel ? <CourseDragPreview label={activeDragLabel} /> : null}
+      </DragOverlay>
+    </DndContext>
   );
 }

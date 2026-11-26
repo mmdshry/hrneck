@@ -23,7 +23,6 @@ test('admin target avatar upload syncs linked user path', function () {
             'email' => 'avatar.sync@itneck.test',
             'first_name' => 'Avatar',
             'last_name' => 'Sync',
-            'timezone' => 'UTC',
         ])
         ->assertCreated();
 
@@ -60,7 +59,6 @@ test('self auth avatar upload syncs linked target', function () {
             'email' => 'self.avatar@itneck.test',
             'first_name' => 'Self',
             'last_name' => 'Avatar',
-            'timezone' => 'UTC',
         ])
         ->assertCreated();
 
@@ -98,7 +96,6 @@ test('deleting avatar clears both paths and removes file', function () {
             'email' => 'avatar.delete@itneck.test',
             'first_name' => 'Delete',
             'last_name' => 'Me',
-            'timezone' => 'UTC',
         ])
         ->assertCreated();
 
@@ -139,7 +136,6 @@ test('avatar stream returns 404 when empty and webp when present', function () {
             'email' => 'avatar.stream@itneck.test',
             'first_name' => 'Stream',
             'last_name' => 'Test',
-            'timezone' => 'UTC',
         ])
         ->assertCreated();
 
@@ -178,7 +174,6 @@ test('avatar upload rejects non-image and oversized files', function () {
             'email' => 'avatar.bad@itneck.test',
             'first_name' => 'Bad',
             'last_name' => 'File',
-            'timezone' => 'UTC',
         ])
         ->assertCreated();
 

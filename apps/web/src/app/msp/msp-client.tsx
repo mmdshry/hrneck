@@ -7,7 +7,7 @@ import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
 import { useDataTableQuery } from "@/hooks/use-data-table-query";
-import { liveStatusLabel, useLiveTopic } from "@/hooks/use-live-topic";
+import { liveStatusLabel, useLiveStatusLabels, useLiveTopic } from "@/hooks/use-live-topic";
 import { api, ensureCsrf, signOut as apiSignOut } from "@/lib/api";
 import { serializeDataTableQuery } from "@/lib/data-table-query";
 import {
@@ -222,7 +222,8 @@ export function MspClient() {
     tableQuery.debounced,
   ]);
 
-  const statusLabel = liveStatusLabel(status);
+  const liveLabels = useLiveStatusLabels();
+  const statusLabel = liveStatusLabel(status, liveLabels);
   const waitingForLive = liveTenants === null && status !== "live";
 
   async function enterTenant(tenantId: string) {

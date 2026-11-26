@@ -56,7 +56,7 @@ export function LandingAudiences() {
             {t.rich("employeesUse", {
               learnerLink: (chunks) => (
                 <Link
-                  href="/learn"
+                  href="/portal"
                   className="font-medium text-[var(--link)] underline-offset-4 hover:underline"
                 >
                   {chunks}
@@ -64,7 +64,7 @@ export function LandingAudiences() {
               ),
               serviceLink: (chunks) => (
                 <Link
-                  href="/portal"
+                  href="/portal/tickets"
                   className="font-medium text-[var(--link)] underline-offset-4 hover:underline"
                 >
                   {chunks}

@@ -22,7 +22,7 @@ export const checklistsGuide: GuideModule = {
   ],
   openInAppHref: "/org/checklists",
   overview:
-    "Checklisten sind interne HR-Workflows—kein Lerninhalt und nie in /learn sichtbar. Admins gestalten flexible Vorlagen, kopieren die fünf System-HR-Vorlagen, bündeln Packs (zum Beispiel ein Welcome Pack), verbinden Instanzen mit Mitarbeitenden und füllen sie als Operatoren aus. Beim Speichern wählen Sie, ob ein neues Vorlagenschema auf offene Instanzen oder nur auf neue angewendet wird. Veröffentlichte Packs können bei Erstellung eines neuen Mitarbeitenden auto-zuweisen. Jede Antwortänderung landet im Tenant-Aktivitätsprotokoll.",
+    "Checklisten sind interne HR-Workflows—kein Lerninhalt und nie auf /portal sichtbar. Admins gestalten flexible Vorlagen, kopieren die fünf System-HR-Vorlagen, bündeln Packs (zum Beispiel ein Welcome Pack), verbinden Instanzen mit Mitarbeitenden und füllen sie als Operatoren aus. Beim Speichern wählen Sie, ob ein neues Vorlagenschema auf offene Instanzen oder nur auf neue angewendet wird. Veröffentlichte Packs können bei Erstellung eines neuen Mitarbeitenden auto-zuweisen. Jede Antwortänderung landet im Tenant-Aktivitätsprotokoll.",
   example: {
     title: "Welcome Pack für Neueinstellungen",
     narrative:

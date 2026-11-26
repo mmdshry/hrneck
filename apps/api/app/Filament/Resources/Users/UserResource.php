@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Users;
 
 use App\Domains\IdentityAccess\Actions\CreateOrgUser;
 use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
+use App\Domains\Subscriptions\Exceptions\PlanLimitReached;
 use App\Filament\Resources\Users\Pages\ManageUsers;
 use App\Models\Tenant;
 use App\Models\User;
@@ -134,6 +135,9 @@ class UserResource extends Resource
             } catch (ValidationException $e) {
                 Notification::make()->danger()->title($e->getMessage())->send();
                 throw $e;
+            } catch (PlanLimitReached $e) {
+                Notification::make()->danger()->title($e->getMessage())->send();
+                throw $e->toValidationException('email');
             }
         }
 

@@ -2,6 +2,7 @@
 
 namespace App\Domains\Ticketing\Actions;
 
+use App\Domains\Notifications\Mails\BrandedNotificationMail;
 use App\Domains\Ticketing\Models\SdTicket;
 use App\Models\User;
 use Illuminate\Support\Carbon;
@@ -26,12 +27,11 @@ class SendPendingNotifications
                         $email = User::query()->whereKey($ticket->requester_user_id)->value('email');
                     }
                     if ($email) {
-                        Mail::raw(
-                            "Ticket {$ticket->number}: {$ticket->summary}",
-                            function ($message) use ($email, $ticket): void {
-                                $message->to($email)->subject('[Ticketing] '.$ticket->number);
-                            },
-                        );
+                        Mail::to($email)->send(new BrandedNotificationMail(
+                            subjectLine: '[Ticketing] '.$ticket->number,
+                            title: 'Ticket '.$ticket->number,
+                            lines: [(string) $ticket->summary],
+                        ));
                     }
                     $ticket->pending_notification_at = null;
                     $ticket->save();

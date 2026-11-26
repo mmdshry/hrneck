@@ -4,21 +4,31 @@ namespace App\Http\Controllers\Api\V1\Org;
 
 use App\Domains\Audit\Actions\LogOrgActivity;
 use App\Domains\Checklists\Actions\AssignAutoChecklistPacks;
+use App\Domains\IdentityAccess\Actions\AttachAccountRolesToTargets;
+use App\Domains\IdentityAccess\Actions\OrgRoleChangeGuard;
 use App\Domains\IdentityAccess\Actions\ProvisionEmployeePair;
+use App\Domains\IdentityAccess\Actions\SyncOrgUserRoles;
+use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
 use App\Domains\Realtime\Support\LiveTopics;
 use App\Domains\Realtime\Support\PublishLive;
+use App\Domains\Subscriptions\Support\TenantEntitlements;
 use App\Domains\TargetsGroups\Actions\RecalculateTargetRisk;
 use App\Domains\TargetsGroups\Models\Department;
 use App\Domains\TargetsGroups\Models\Target;
 use App\Domains\TargetsGroups\Support\TargetProfileFields;
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Support\ApiPagination;
 use App\Support\AppLocale;
 use App\Support\ListQuery;
 use App\Support\MajorCities;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 
 class TargetController extends Controller
@@ -72,6 +82,7 @@ class TargetController extends Controller
         ], 'id', 'desc');
 
         $rows = $query->paginate(ApiPagination::perPage($request, max: 500));
+        $this->attachAccountRoles(collect($rows->items()));
 
         return response()->json([
             'data' => collect($rows->items())->values(),
@@ -84,6 +95,7 @@ class TargetController extends Controller
         $model = Target::query()
             ->with(['groups', 'manager:id,email,first_name,last_name'])
             ->findOrFail($target);
+        $this->attachAccountRoles(collect([$model]));
 
         return response()->json(['data' => $model]);
     }
@@ -94,8 +106,17 @@ class TargetController extends Controller
         AssignAutoChecklistPacks $autoAssign,
         ProvisionEmployeePair $provision,
         RecalculateTargetRisk $recalculateRisk,
+        TenantEntitlements $entitlements,
+        OrgRoleChangeGuard $guard,
+        SyncOrgUserRoles $syncRoles,
     ): JsonResponse {
-        $data = $request->validate($this->writeRules());
+        $data = $request->validate(array_merge($this->writeRules(), [
+            'password' => ['nullable', 'string', Password::defaults()],
+            'roles' => ['sometimes', 'array', 'min:1'],
+            'roles.*' => ['string', 'max:80'],
+        ]));
+        $roles = $data['roles'] ?? null;
+        unset($data['roles']);
         $data = $this->normalizeWritableProfile($data);
 
         $departmentFields = $this->resolveDepartmentFields(
@@ -107,8 +128,23 @@ class TargetController extends Controller
 
         $tenantId = (string) tenant('id');
         $email = $provision->normalizeEmail($data['email']);
+        $password = isset($data['password']) ? (string) $data['password'] : null;
+        unset($data['password']);
+
+        // Checked before the target is created so a rejected request leaves no orphan employee row.
+        if ($password !== null && $provision->findOrgUserByEmail($email, $tenantId) !== null) {
+            throw ValidationException::withMessages([
+                'email' => ['A login already exists for this employee in this organization. Create the employee without a password, then set it from the employee list.'],
+            ]);
+        }
+
+        if ($roles !== null) {
+            $this->assertCanAssignAccountRoles($request->user(), $tenantId, $email, $roles, $provision, $guard);
+        }
+
         $profile = $this->extractProfileAttributes($data);
         $this->assertManagerNotSelf(null, $profile['manager_target_id'] ?? null);
+        $entitlements->assertCanCreateTargets((string) tenant('id'));
 
         $target = Target::query()->create(array_merge([
             'email' => $email,
@@ -122,7 +158,11 @@ class TargetController extends Controller
 
         $target = $recalculateRisk->handle($target, force: true);
 
-        $pair = $provision->ensureUserForTarget($target, $tenantId, queueInvite: true);
+        $pair = $provision->ensureUserForTarget($target, $tenantId, queueInvite: true, password: $password);
+
+        if ($roles !== null) {
+            $syncRoles->handle($pair['user'], $tenantId, $roles);
+        }
 
         $autoAssigned = $autoAssign->handle($target, $request->user()?->id);
 
@@ -130,6 +170,7 @@ class TargetController extends Controller
             'email' => $target->email,
             'auto_assigned_instance_count' => $autoAssigned,
             'login_invited' => $pair['invited'],
+            'login_password_set' => $password !== null,
         ]);
 
         $target->load(['groups', 'manager:id,email,first_name,last_name']);
@@ -240,7 +281,7 @@ class TargetController extends Controller
         ProvisionEmployeePair $provision,
     ): JsonResponse {
         $target = Target::query()->findOrFail($target);
-        $snapshot = $target->only(['id', 'email', 'status', 'user_id']);
+        $snapshot = $target->only(['id', 'email', 'first_name', 'last_name', 'status', 'user_id']);
         $tenantId = (string) tenant('id');
         $target->groups()->detach();
         $target->delete();
@@ -273,6 +314,46 @@ class TargetController extends Controller
         $this->publishTargetLive();
 
         return response()->json(['data' => $updated]);
+    }
+
+    /**
+     * Admin sets the employee's login password directly (no current password needed).
+     * The employee must sign in with it; any "must set password" invite state is cleared.
+     */
+    public function setPassword(
+        Request $request,
+        int $target,
+        LogOrgActivity $audit,
+        ProvisionEmployeePair $provision,
+    ): JsonResponse {
+        $target = Target::query()->findOrFail($target);
+        $data = $request->validate([
+            'password' => ['required', 'string', 'confirmed', Password::defaults()],
+        ]);
+
+        $tenantId = (string) tenant('id');
+        $user = $target->user_id !== null ? User::query()->find($target->user_id) : null;
+
+        // Each organization has its own login. An admin only ever changes the login owned by this organization,
+        // even when the target was linked to another organization's login.
+        if ($user === null || $user->tenant_id !== $tenantId) {
+            $user = $provision->findOrgUserByEmail((string) $target->email, $tenantId);
+        }
+
+        $user ??= $provision->ensureUserForTarget($target, $tenantId, queueInvite: false)['user'];
+
+        $user->forceFill([
+            'password' => $data['password'],
+            'remember_token' => Str::random(60),
+            'must_set_password' => false,
+        ])->save();
+
+        $audit->handle('targets', 'password_set', 'Employee password set', $target, [
+            'user_id' => $user->id,
+            'email' => $user->email,
+        ]);
+
+        return response()->json(['message' => __('auth.password_updated')]);
     }
 
     /**
@@ -353,12 +434,6 @@ class TargetController extends Controller
                 Rule::in(TargetProfileFields::EMPLOYMENT_TYPES),
             ]),
             'preferred_language' => array_merge($optional, ['nullable', 'string', 'max:16']),
-            'timezone' => array_merge($optional, [
-                $forUpdate ? 'filled' : 'required',
-                'string',
-                'max:64',
-                'timezone:all',
-            ]),
             'external_id' => array_merge($optional, ['nullable', 'string', 'max:120']),
             'notification_opt_out' => array_merge($optional, ['boolean']),
         ];
@@ -456,6 +531,42 @@ class TargetController extends Controller
             'department_id' => $department->id,
             'department' => $department->name,
         ];
+    }
+
+    /**
+     * Roles are assigned to the login behind an employee, so the actor must manage users and must not
+     * grant permissions it does not hold.
+     *
+     * @param  list<string>  $roles
+     */
+    private function assertCanAssignAccountRoles(
+        ?User $actor,
+        string $tenantId,
+        string $email,
+        array $roles,
+        ProvisionEmployeePair $provision,
+        OrgRoleChangeGuard $guard,
+    ): void {
+        if ($actor === null || ! $actor->can(OrgPermissionCatalog::USERS_MANAGE)) {
+            throw new AuthorizationException('You need permission to manage users to assign roles.');
+        }
+
+        $existing = $provision->findOrgUserByEmail($email, $tenantId);
+        $currentRoles = $existing !== null ? $guard->currentRoleNames($existing, $tenantId) : [];
+
+        $guard->assertCanGrantRoles($actor, $tenantId, $roles, $currentRoles);
+
+        if ($existing !== null) {
+            $guard->assertRolesManagementRemainsForUser($tenantId, $existing, $roles);
+        }
+    }
+
+    /**
+     * @param  Collection<int, Target>  $targets
+     */
+    private function attachAccountRoles(Collection $targets): void
+    {
+        app(AttachAccountRolesToTargets::class)->handle($targets, (string) tenant('id'));
     }
 
     private function publishTargetLive(): void

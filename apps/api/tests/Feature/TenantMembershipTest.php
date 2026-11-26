@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 use Stancl\Tenancy\Facades\Tenancy;
 
-test('same email can hold memberships in multiple tenants', function () {
+test('same email can hold a separate login in each organization', function () {
     $email = 'shared@example.test';
 
     $first = app(CreateOrgUser::class)->handle(
@@ -32,43 +32,50 @@ test('same email can hold memberships in multiple tenants', function () {
         [OrgPermissionCatalog::ORG_ADMIN],
     );
 
-    expect($first->id)->toBe($second->id);
-    expect(User::query()->whereRaw('LOWER(email) = ?', [$email])->count())->toBe(1);
-    expect(TenantMembership::query()->where('user_id', $first->id)->count())->toBe(2);
-    expect($first->fresh()->belongsToTenant('itneck'))->toBeTrue();
-    expect($first->fresh()->belongsToTenant('company'))->toBeTrue();
+    expect($first->id)->not->toBe($second->id);
+    expect(User::query()->withEmail($email)->count())->toBe(2);
+    expect($first->fresh()->tenant_id)->toBe('itneck');
+    expect($second->fresh()->tenant_id)->toBe('company');
+    expect($first->fresh()->belongsToTenant('company'))->toBeFalse();
+    expect($second->fresh()->belongsToTenant('itneck'))->toBeFalse();
+    expect(TenantMembership::query()->where('user_id', $first->id)->count())->toBe(1);
+    expect(TenantMembership::query()->where('user_id', $second->id)->count())->toBe(1);
 });
 
-test('login with multiple memberships requires org selection until enter', function () {
+test('each organization login keeps its own password', function () {
     $email = 'multi@example.test';
-    $password = 'DemoPass!234';
 
-    app(CreateOrgUser::class)->handle('itneck', 'Multi', $email, $password, [OrgPermissionCatalog::ORG_ADMIN]);
-    app(CreateOrgUser::class)->handle('company', 'Multi', $email, $password, [OrgPermissionCatalog::ORG_ADMIN]);
+    app(CreateOrgUser::class)->handle('itneck', 'Multi', $email, 'DemoPass!234', [OrgPermissionCatalog::ORG_ADMIN]);
+    app(CreateOrgUser::class)->handle('company', 'Multi', $email, 'OtherPass!234', [OrgPermissionCatalog::ORG_ADMIN]);
 
     $origin = ['Origin' => 'http://hrneck.test'];
 
-    $login = $this->withHeaders($origin)
+    $this->withHeaders($origin)
         ->postJson('/api/v1/auth/login', [
             'email' => $email,
-            'password' => $password,
+            'password' => 'OtherPass!234',
         ])
         ->assertOk()
-        ->assertJsonPath('data.needs_org_selection', true);
-
-    expect($login->json('data.memberships'))->toHaveCount(2);
-    expect($login->json('data.tenant_id'))->toBeNull();
-
-    $user = User::query()->whereRaw('LOWER(email) = ?', [$email])->firstOrFail();
-
-    $this->actingAs($user)
-        ->withHeaders($origin)
-        ->postJson('/api/v1/auth/orgs/itneck/enter')
-        ->assertOk()
-        ->assertJsonPath('data.tenant_id', 'itneck')
+        ->assertJsonPath('data.tenant_id', 'company')
         ->assertJsonPath('data.needs_org_selection', false);
 
-    expect(ActiveOrgTenant::id())->toBe('itneck');
+    $this->withHeaders($origin)
+        ->postJson('/api/v1/auth/login', [
+            'email' => $email,
+            'password' => 'DemoPass!234',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.tenant_id', 'itneck');
+
+    $this->withHeaders($origin)
+        ->postJson('/api/v1/auth/login', [
+            'email' => $email,
+            'password' => 'DemoPass!234',
+            'tenant' => 'company',
+        ])
+        ->assertUnprocessable();
+
+    $user = User::query()->withEmail($email)->where('tenant_id', 'itneck')->firstOrFail();
 
     $this->actingAs($user)
         ->withHeaders($origin + ['X-Tenant' => 'itneck'])
@@ -76,26 +83,42 @@ test('login with multiple memberships requires org selection until enter', funct
         ->assertOk();
 
     $this->actingAs($user)
-        ->withHeaders($origin)
-        ->postJson('/api/v1/auth/orgs/company/enter')
-        ->assertOk()
-        ->assertJsonPath('data.tenant_id', 'company');
-
-    $this->actingAs($user)
         ->withHeaders($origin + ['X-Tenant' => 'company'])
-        ->getJson('/api/v1/org/users')
-        ->assertOk();
-
-    $this->actingAs($user)
-        ->withHeaders($origin + ['X-Tenant' => 'test'])
         ->getJson('/api/v1/org/users')
         ->assertForbidden();
 });
 
-test('provisioning an employee in a second org reuses the same user', function () {
+test('identical passwords across organizations are resolved by the organization address', function () {
+    $email = 'twins@example.test';
+    $password = 'DemoPass!234';
+
+    app(CreateOrgUser::class)->handle('itneck', 'Twin', $email, $password, [OrgPermissionCatalog::ORG_ADMIN]);
+    app(CreateOrgUser::class)->handle('company', 'Twin', $email, $password, [OrgPermissionCatalog::ORG_ADMIN]);
+
+    $origin = ['Origin' => 'http://hrneck.test'];
+
+    $this->withHeaders($origin)
+        ->postJson('/api/v1/auth/login', [
+            'email' => $email,
+            'password' => $password,
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['email']);
+
+    $this->withHeaders($origin)
+        ->postJson('/api/v1/auth/login', [
+            'email' => $email,
+            'password' => $password,
+            'tenant' => 'company',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.tenant_id', 'company');
+});
+
+test('provisioning an employee in a second org creates a separate login', function () {
     $email = 'employee.shared@example.test';
 
-    app(CreateOrgUser::class)->handle(
+    $first = app(CreateOrgUser::class)->handle(
         'itneck',
         'Employee Shared',
         $email,
@@ -114,12 +137,13 @@ test('provisioning an employee in a second org reuses the same user', function (
         ]);
 
         $result = app(ProvisionEmployeePair::class)
-            ->ensureUserForTarget($target, 'company');
+            ->ensureUserForTarget($target, 'company', queueInvite: false);
 
-        expect($result['created'])->toBeFalse();
+        expect($result['created'])->toBeTrue();
+        expect($result['user']->id)->not->toBe($first->id);
         expect($result['user']->email)->toBe($email);
-        expect($result['user']->belongsToTenant('itneck'))->toBeTrue();
-        expect($result['user']->belongsToTenant('company'))->toBeTrue();
+        expect($result['user']->tenant_id)->toBe('company');
+        expect($first->fresh()->belongsToTenant('company'))->toBeFalse();
         expect($target->fresh()->user_id)->toBe($result['user']->id);
     } finally {
         Tenancy::end();
@@ -138,15 +162,15 @@ test('platform staff email cannot be linked as an org member', function () {
     ))->toThrow(ValidationException::class);
 });
 
-test('disabled membership blocks that tenant only', function () {
+test('disabled membership blocks that organization login only', function () {
     $email = 'partial.disable@example.test';
     $password = 'DemoPass!234';
 
-    $user = app(CreateOrgUser::class)->handle('itneck', 'Partial', $email, $password, [OrgPermissionCatalog::ORG_ADMIN]);
+    $itneckLogin = app(CreateOrgUser::class)->handle('itneck', 'Partial', $email, $password, [OrgPermissionCatalog::ORG_ADMIN]);
     app(CreateOrgUser::class)->handle('company', 'Partial', $email, $password, [OrgPermissionCatalog::ORG_ADMIN]);
 
     TenantMembership::query()
-        ->where('user_id', $user->id)
+        ->where('user_id', $itneckLogin->id)
         ->where('tenant_id', 'itneck')
         ->update(['disabled_at' => now()]);
 
@@ -156,6 +180,7 @@ test('disabled membership blocks that tenant only', function () {
         ->postJson('/api/v1/auth/login', [
             'email' => $email,
             'password' => $password,
+            'tenant' => 'company',
         ])
         ->assertOk();
 
@@ -174,6 +199,8 @@ test('disabled membership blocks that tenant only', function () {
     $this->withHeaders($origin + ['X-Tenant' => 'itneck'])
         ->getJson('/api/v1/org/users')
         ->assertForbidden();
+
+    expect(ActiveOrgTenant::id())->toBe('company');
 });
 
 test('demo seeder backfills memberships for org users', function () {

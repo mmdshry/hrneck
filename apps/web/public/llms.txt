@@ -22,8 +22,7 @@ Security awareness training platform for MSPs and organizations.
 - Organization admin: /org
 - Training hub: /org/training
 - Training campaigns: /org/training/campaigns
-- Targets and groups: /org/targets
-- Users: /org/users
+- Employees (with login roles) and groups: /org/targets
 - Roles: /org/roles
 - Reports: /org/reports
 - Report export: /org/reports/export
@@ -32,13 +31,13 @@ Security awareness training platform for MSPs and organizations.
 - Checklist instances: /org/checklists/instances
 - Ticketing queue: /org/ticketing
 - Ticketing desks: /org/ticketing/desks
-- Ticketing KB: /org/ticketing/kb
+- Knowledge base: /org/kb
 - Ticketing email: /org/ticketing/email
 - Ticketing reports: /org/ticketing/reports
 - Ticketing search: /org/ticketing/search
 - Service portal tickets: /portal/tickets
 - Service portal KB: /portal/kb
-- Learner portal: /learn
+- Employee dashboard (My courses, My tickets, Knowledge base): /portal
 - Platform Filament admin: /admin (API host)
 
 ## Local development hosts

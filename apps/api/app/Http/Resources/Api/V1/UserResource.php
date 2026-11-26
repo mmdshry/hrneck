@@ -2,6 +2,8 @@
 
 namespace App\Http\Resources\Api\V1;
 
+use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
+use App\Domains\Subscriptions\Support\TenantEntitlements;
 use App\Domains\TargetsGroups\Models\Target;
 use App\Domains\TargetsGroups\Support\ResolveActiveTarget;
 use App\Models\Tenant;
@@ -75,6 +77,17 @@ class UserResource extends JsonResource
             setPermissionsTeamId($previousTeam);
         }
 
+        if ($includePermissions && $actingInTenant) {
+            // Expose the same list the Gate uses so the SPA never disagrees with the API.
+            $permissions = array_values(array_unique(array_merge(
+                $permissions,
+                OrgPermissionCatalog::staffTenantPermissionsFor($this->resource),
+            )));
+        }
+
+        $hasOrgAccess = $includePermissions
+            && array_intersect($permissions, OrgPermissionCatalog::workspacePermissions()) !== [];
+
         $hasAvatar = filled($this->avatar_path);
         $viewerId = $request->user()?->id;
         $selfStream = $hasAvatar && (
@@ -84,6 +97,11 @@ class UserResource extends JsonResource
         );
 
         $targetFields = $this->linkedTargetFields($activeTenantId);
+
+        // Plan and usage are only exposed on auth routes (like permissions), not on user lists.
+        $subscription = $includePermissions && is_string($activeTenantId) && $activeTenantId !== ''
+            ? app(TenantEntitlements::class)->summary($activeTenantId)
+            : null;
 
         $memberships = $this->resource->memberships
             ->filter(fn (TenantMembership $m): bool => $m->isActive())
@@ -117,14 +135,17 @@ class UserResource extends JsonResource
                 : null,
             'locale' => AppLocale::normalize(is_string($this->locale) ? $this->locale : null),
             'mfa_enabled' => (bool) $this->mfa_enabled,
+            'mfa_totp_enabled' => is_string($this->mfa_secret) && $this->mfa_secret !== '',
             'roles' => $roles,
             'permissions' => $permissions,
+            'has_org_access' => $hasOrgAccess,
             'is_platform_staff' => $isPlatformStaff,
             'staff_tenant_id' => $actingInTenant ? $staffTenantId : null,
             'acting_in_tenant' => $actingInTenant,
             'memberships' => $memberships,
             'needs_org_selection' => $this->resource->needsOrgSelection(),
             'active_tenant_id' => ActiveOrgTenant::id(),
+            'subscription' => $subscription,
         ];
     }
 

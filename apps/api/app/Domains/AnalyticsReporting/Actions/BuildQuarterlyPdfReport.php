@@ -2,8 +2,8 @@
 
 namespace App\Domains\AnalyticsReporting\Actions;
 
-use Barryvdh\DomPDF\Facade\Pdf;
-use Illuminate\Support\Facades\DB;
+use App\Domains\AnalyticsReporting\Support\ReportPdf;
+use App\Support\OrgTimezone;
 use Illuminate\Support\Facades\Storage;
 
 class BuildQuarterlyPdfReport
@@ -35,8 +35,7 @@ class BuildQuarterlyPdfReport
         $includeTraining = $options['include_training'] ?? true;
         $timezone = $options['timezone'] ?? null;
         if (! is_string($timezone) || trim($timezone) === '') {
-            $stored = DB::table('organization_settings')->value('timezone');
-            $timezone = is_string($stored) && $stored !== '' ? $stored : 'UTC';
+            $timezone = OrgTimezone::current();
         }
 
         if ($scope === 'user') {
@@ -59,8 +58,7 @@ class BuildQuarterlyPdfReport
             $relative = 'reports/'.(tenant('id') ?: 'central').'/'.$safePeriodKey.'-'.$scope.'.pdf';
         }
 
-        $pdf = Pdf::loadHTML($html)->setPaper('a4', 'landscape');
-        Storage::disk('local')->put($relative, $pdf->output());
+        Storage::disk('local')->put($relative, ReportPdf::render($html));
 
         return [
             'path' => $relative,

@@ -21,7 +21,7 @@ export const trainingGuide: GuideModule = {
   ],
   openInAppHref: "/org/training",
   overview:
-    "Kurse enthält die Bibliothek (Artikel-, Video- und PDF-Lektionen plus Quizzes). Schulung weist einen oder mehrere Kurse Mitarbeitenden und/oder Gruppen zu, führt Kampagnen aus, die beim Start eine einmalige E-Mail-Erinnerung pro Empfänger einreihen (über SMTP und Sendeprofile), und prüft den Fortschritt pro Lektion mit CSV- oder PDF-Export. Lernende konsumieren zugewiesene Inhalte im Lernerportal unter /learn—nicht in der Org-Warteschlange. Eine sekundäre Beispiel-Liste unter /org/campaigns existiert für schnelle Demos; der Operator-Workflow liegt unter Schulung → Kampagnen.",
+    "Kurse enthält die Bibliothek (Artikel-, Video- und PDF-Lektionen plus Quizzes). Schulung weist einen oder mehrere Kurse Mitarbeitenden und/oder Gruppen zu, führt Kampagnen aus, die mehrere Kurse enthalten können (Kurse per Drag & Drop hinzufügen und ihre Reihenfolge festlegen) und beim Start pro Empfänger eine E-Mail-Erinnerung mit allen Kursen einreihen (über SMTP und Sendeprofile), und prüft den Fortschritt pro Lektion mit CSV- oder PDF-Export. Lernende konsumieren zugewiesene Inhalte auf dem Mitarbeiter-Dashboard unter /portal—nicht in der Org-Warteschlange. Eine sekundäre Beispiel-Liste unter /org/campaigns existiert für schnelle Demos; der Operator-Workflow liegt unter Schulung → Kampagnen.",
   example: {
     title: "Acme Finance Q4-Awareness-Kampagne",
     narrative:
@@ -35,12 +35,12 @@ export const trainingGuide: GuideModule = {
     },
     {
       title: "Inhalt zuweisen",
-      body: "Wählen Sie unter Schulung einen oder mehrere Kurse und weisen Sie sie Mitarbeitenden und/oder Gruppen zu. Lernende sehen Einschreibungen in /learn nach der Zuweisung.",
+      body: "Wählen Sie unter Schulung einen oder mehrere Kurse und weisen Sie sie Mitarbeitenden und/oder Gruppen zu. Lernende sehen Einschreibungen auf /portal nach der Zuweisung.",
       href: "/org/training",
     },
     {
       title: "Kampagne erstellen",
-      body: "Benennen Sie die Kampagne, wählen Sie Inhalt, wählen Sie group_ids und/oder Targets und starten Sie. Der Start reiht einen Erinnerungsjob pro Empfänger ein—es gibt keinen wöchentlichen Erinnerungsrhythmus. Bestätigen Sie zuerst SMTP und das Sendeprofil.",
+      body: "Benennen Sie die Kampagne, wählen Sie einen oder mehrere Kurse, wählen Sie group_ids und/oder Targets und starten Sie. Der Start reiht pro Empfänger eine E-Mail-Erinnerung mit allen Kursen der Kampagne ein—es gibt keinen wöchentlichen Erinnerungsrhythmus. Bestätigen Sie zuerst SMTP und das Sendeprofil.",
       href: "/org/training/campaigns",
     },
     {
@@ -90,19 +90,24 @@ export const trainingGuide: GuideModule = {
           body: "Laden Sie den Viewing Report als CSV für Tabellenkalkulationen oder PDF für Stakeholder-Packs herunter. Kombinieren Sie mit Berichten für org-weite Zeitpläne.",
         },
         {
-          title: "Lernende zu /learn senden",
+          title: "Lernende zu /portal senden",
           body: "Operatoren bleiben in /org/training. Lernende öffnen das Lernerportal zum Lesen, Ansehen, Abschließen und Quizzen. Siehe Guide Lernerportal.",
-          href: "/learn",
+          href: "/portal",
         },
       ],
     },
     {
       title: "Kampagnen und Erinnerungen",
-      body: "Kampagnen bündeln Inhalt + Zielgruppe + eine einmalige Erinnerung beim Start. Status umfassen draft, scheduled, running, completed, cancelled und archived.",
+      body: "Kampagnen bündeln einen oder mehrere Kurse + Zielgruppe + eine einmalige Erinnerung beim Start. Status umfassen draft, scheduled, running, completed, cancelled und archived.",
       steps: [
         {
           title: "Von Schulung → Kampagnen starten",
-          body: "Benennen Sie die Welle, hängen Sie Kursinhalt an, wählen Sie Gruppen/Mitarbeitende und starten Sie. Jeder Empfänger erhält einen Erinnerungsjob—keinen wiederkehrenden Wochenrhythmus.",
+          body: "Benennen Sie die Welle, fügen Sie einen oder mehrere Kurse hinzu, wählen Sie Gruppen/Mitarbeitende und starten Sie. Jeder Empfänger erhält eine E-Mail-Erinnerung mit allen Kursen der Welle—keinen wiederkehrenden Wochenrhythmus.",
+          href: "/org/training/campaigns",
+        },
+        {
+          title: "Kurse in der Kampagne anordnen",
+          body: "Ziehen Sie einen Kurs aus der Kursbibliothek auf eine Kampagne oder klicken Sie auf „Hinzufügen“. Ziehen Sie Zeilen oder nutzen Sie die Schaltflächen nach oben und unten, um die Reihenfolge festzulegen, die Lernende sehen. Kurse lassen sich nur ändern, solange die Kampagne ein Entwurf oder geplant ist; eine Kampagne gilt als abgeschlossen, wenn alle ihre Kurse beendet sind.",
           href: "/org/training/campaigns",
         },
         {

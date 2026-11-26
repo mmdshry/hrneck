@@ -8,7 +8,7 @@ export const reportingGuide: GuideModule = {
   keywords: ["reports", "pdf", "csv", "schedule", "export", "analytics", "archive"],
   openInAppHref: "/org/reports",
   overview:
-    "Reporting covers summary dashboards plus detailed tabs (company, users, targets, campaigns, training, checklists, ticketing) with CSV download. Schedule monthly/weekly/quarterly email reports, export quarterly PDFs from the calendar UI, and browse archives (pruned after six months).",
+    "Reporting covers summary dashboards plus detailed tabs (company, users, targets, campaigns, training, checklists, ticketing) with CSV download. Each CSV stops at 5,000 rows and shows a warning when it does. Schedule monthly or quarterly email reports (weekly is CSV only), choosing which section each email carries, export quarterly PDFs from the calendar UI, and browse archives (pruned after six months). The Training tab counts enrollments, while the PDF counts each assignment's latest assessment outcome, so the two totals can differ.",
   example: {
     title: "Board pack for Q4",
     narrative:
@@ -26,7 +26,7 @@ export const reportingGuide: GuideModule = {
     },
     {
       title: "Schedule email reports",
-      body: "Configure monthly, weekly, or quarterly cadences so stakeholders receive CSV automatically.",
+      body: "Configure monthly, weekly (CSV only), or quarterly cadences and pick the section each email carries, so stakeholders receive that CSV automatically.",
       href: "/org/reports",
     },
     {

@@ -7,6 +7,7 @@ use App\Domains\Checklists\Actions\AssignAutoChecklistPacks;
 use App\Domains\IdentityAccess\Actions\ProvisionEmployeePair;
 use App\Domains\Realtime\Support\LiveTopics;
 use App\Domains\Realtime\Support\PublishLive;
+use App\Domains\Subscriptions\Support\TenantEntitlements;
 use App\Domains\TargetsGroups\Models\Department;
 use App\Domains\TargetsGroups\Models\Target;
 use App\Domains\TargetsGroups\Support\TargetCsvHeaderAliases;
@@ -22,6 +23,7 @@ final class CommitTargetCsvImport
         private readonly LogOrgActivity $audit,
         private readonly TargetCsvParser $parser,
         private readonly RecalculateTargetRisk $recalculateRisk,
+        private readonly TenantEntitlements $entitlements,
     ) {}
 
     /**
@@ -48,6 +50,10 @@ final class CommitTargetCsvImport
 
         $analysis = $this->analyze->handle($absolutePath, $columnMap);
         $tenantId = (string) tenant('id');
+        $this->entitlements->assertCanCreateTargetsForEmails(
+            $tenantId,
+            array_map(fn (array $ready): string => (string) $ready['email'], $analysis['ready_rows']),
+        );
         $created = 0;
         $updated = 0;
         $autoAssigned = 0;
@@ -81,7 +87,6 @@ final class CommitTargetCsvImport
                 'employment_type',
                 'hire_date',
                 'preferred_language',
-                'timezone',
                 'external_id',
             ] as $field) {
                 if (isset($mapped[$field])) {

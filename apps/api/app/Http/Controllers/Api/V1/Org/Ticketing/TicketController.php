@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1\Org\Ticketing;
 
 use App\Domains\Audit\Actions\LogOrgActivity;
+use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
 use App\Domains\Realtime\Support\LiveTopics;
 use App\Domains\Realtime\Support\PublishLive;
 use App\Domains\Ticketing\Actions\ConvertTicketToKb;
@@ -31,7 +32,9 @@ class TicketController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $query = SdTicket::query()->with(['desk', 'stage', 'status', 'priority']);
+        $query = SdTicket::query()
+            ->visibleTo($request->user())
+            ->with(['desk', 'stage', 'status', 'priority']);
 
         if ($request->boolean('archived')) {
             $query->archived();
@@ -130,18 +133,18 @@ class TicketController extends Controller
         return response()->json(['data' => TicketingPayload::ticket($ticket, detailed: true)], 201);
     }
 
-    public function show(int $ticket): JsonResponse
+    public function show(Request $request, int $ticket): JsonResponse
     {
-        $model = SdTicket::query()
-            ->with(['desk', 'stage', 'status', 'priority', 'severity', 'category', 'notes', 'tasks', 'attachments', 'links'])
-            ->findOrFail($ticket);
+        $model = $this->visibleTicket($request, $ticket, [
+            'desk', 'stage', 'status', 'priority', 'severity', 'category', 'notes', 'tasks', 'attachments', 'links',
+        ]);
 
         return response()->json(['data' => TicketingPayload::ticket($model, detailed: true)]);
     }
 
     public function update(Request $request, int $ticket, UpdateTicket $action, LogOrgActivity $audit): JsonResponse
     {
-        $model = SdTicket::query()->findOrFail($ticket);
+        $model = $this->visibleTicket($request, $ticket);
         $data = $request->validate([
             'summary' => ['sometimes', 'string', 'max:500'],
             'description' => ['nullable', 'string'],
@@ -180,6 +183,9 @@ class TicketController extends Controller
         ]);
 
         $ids = array_map('intval', $data['ids']);
+        $referencedIds = isset($data['primary_id']) ? [...$ids, (int) $data['primary_id']] : $ids;
+        $this->assertTicketsVisible($request, $referencedIds);
+
         $result = match ($data['action']) {
             'archive' => ['affected' => $bulk->archive($ids)],
             'unarchive' => ['affected' => $bulk->unarchive($ids)],
@@ -216,7 +222,7 @@ class TicketController extends Controller
 
     public function copy(Request $request, int $ticket, ManageTicketBulk $bulk): JsonResponse
     {
-        $model = SdTicket::query()->with('notes')->findOrFail($ticket);
+        $model = $this->visibleTicket($request, $ticket, ['notes']);
         $data = $request->validate([
             'desk_id' => ['required', 'integer'],
             'link' => ['sometimes', 'boolean'],
@@ -242,7 +248,7 @@ class TicketController extends Controller
 
     public function convertToKb(Request $request, int $ticket, ConvertTicketToKb $action): JsonResponse
     {
-        $model = SdTicket::query()->findOrFail($ticket);
+        $model = $this->visibleTicket($request, $ticket);
         $data = $request->validate([
             'publish' => ['sometimes', 'boolean'],
         ]);
@@ -257,7 +263,7 @@ class TicketController extends Controller
 
     public function addNote(Request $request, int $ticket): JsonResponse
     {
-        $model = SdTicket::query()->findOrFail($ticket);
+        $model = $this->visibleTicket($request, $ticket);
         $data = $request->validate([
             'body' => ['required', 'string'],
             'is_public' => ['sometimes', 'boolean'],
@@ -282,7 +288,7 @@ class TicketController extends Controller
 
     public function addTask(Request $request, int $ticket): JsonResponse
     {
-        $model = SdTicket::query()->findOrFail($ticket);
+        $model = $this->visibleTicket($request, $ticket);
         $data = $request->validate([
             'title' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
@@ -308,6 +314,7 @@ class TicketController extends Controller
 
     public function updateTask(Request $request, int $ticket, int $task): JsonResponse
     {
+        $this->visibleTicket($request, $ticket);
         $model = SdTicketTask::query()->where('ticket_id', $ticket)->findOrFail($task);
         $data = $request->validate([
             'title' => ['sometimes', 'string', 'max:255'],
@@ -334,7 +341,7 @@ class TicketController extends Controller
 
     public function uploadAttachment(Request $request, int $ticket, ConvertUploadedImageToWebp $toWebp): JsonResponse
     {
-        $model = SdTicket::query()->findOrFail($ticket);
+        $model = $this->visibleTicket($request, $ticket);
         $request->validate([
             'file' => [
                 'required',
@@ -379,8 +386,9 @@ class TicketController extends Controller
         return response()->json(['data' => $attachment], 201);
     }
 
-    public function downloadAttachment(int $ticket, int $attachment): StreamedResponse
+    public function downloadAttachment(Request $request, int $ticket, int $attachment): StreamedResponse
     {
+        $this->visibleTicket($request, $ticket);
         $model = SdTicketAttachment::query()->where('ticket_id', $ticket)->findOrFail($attachment);
 
         return Storage::disk($model->disk)->download($model->path, $model->original_name);
@@ -393,7 +401,10 @@ class TicketController extends Controller
             'ids.*' => ['integer'],
         ]);
 
-        return response()->json(['data' => $io->export(array_map('intval', $data['ids']))]);
+        $ids = array_map('intval', $data['ids']);
+        $this->assertTicketsVisible($request, $ids);
+
+        return response()->json(['data' => $io->export($ids)]);
     }
 
     public function import(Request $request, ImportExportTickets $io, CreateTicket $create): JsonResponse
@@ -434,6 +445,39 @@ class TicketController extends Controller
         );
 
         return response()->json(['data' => $prefs]);
+    }
+
+    /**
+     * @param  list<string>  $with
+     */
+    private function visibleTicket(Request $request, int $ticket, array $with = []): SdTicket
+    {
+        return SdTicket::query()
+            ->visibleTo($request->user())
+            ->with($with)
+            ->findOrFail($ticket);
+    }
+
+    /**
+     * Bulk and merge actions may only touch tickets the caller can already see.
+     *
+     * @param  list<int>  $ids
+     */
+    private function assertTicketsVisible(Request $request, array $ids): void
+    {
+        if ($request->user()?->can(OrgPermissionCatalog::TICKETING_VIEW_ALL) === true) {
+            return;
+        }
+
+        $uniqueIds = array_values(array_unique($ids));
+        $visibleCount = SdTicket::query()
+            ->visibleTo($request->user())
+            ->whereIn('id', $uniqueIds)
+            ->count();
+
+        if ($visibleCount !== count($uniqueIds)) {
+            abort(404);
+        }
     }
 
     private function publishTicketLive(SdTicket $ticket): void

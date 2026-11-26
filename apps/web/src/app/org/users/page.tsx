@@ -1,15 +1,21 @@
-import { getTranslations } from "next-intl/server";
-import { UsersClient } from "./users-client";
+import { redirect } from "next/navigation";
 
-export const instant = false;
+type UsersRedirectPageProps = {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
 
-export async function generateMetadata() {
-  const t = await getTranslations("org.users");
-  return {
-    title: t("title"),
-    description: t("description"),
-  };
-}
-export default function UsersPage() {
-  return <UsersClient />;
+/**
+ * Employee management lives at /org/targets. Keep old /org/users links working
+ * by forwarding them, including query params such as ?tenant=.
+ */
+export default async function UsersRedirectPage({ searchParams }: UsersRedirectPageProps) {
+  const params = await searchParams;
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (typeof value === "string") {
+      query.set(key, value);
+    }
+  }
+  const suffix = query.toString();
+  redirect(suffix ? `/org/targets?${suffix}` : "/org/targets");
 }

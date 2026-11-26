@@ -30,7 +30,7 @@ export function notificationHref(item: UserNotificationItem): string {
   }
   switch (item.type) {
     case "training_assigned":
-      return "/learn";
+      return "/portal";
     case "checklist_assigned":
       return "/org/checklists/instances";
     case "ticket_assigned":

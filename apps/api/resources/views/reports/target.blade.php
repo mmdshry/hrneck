@@ -1,8 +1,4 @@
 @php
-    $wordmarkFile = resource_path('images/hrneck-wordmark.png');
-    $wordmarkSrc = is_file($wordmarkFile)
-        ? 'data:image/png;base64,'.base64_encode((string) file_get_contents($wordmarkFile))
-        : null;
     $tones = [
         'no_action' => '#334155',
         'incomplete' => '#B45309',
@@ -10,113 +6,27 @@
         'passed' => '#047857',
     ];
     $isSingle = $report['mode'] === 'single';
+    $preparedFor = __('reports.prepared_for', ['brand' => $report['brand'], 'organization' => $report['organization']]);
+    $generatedAt = __('reports.generated_at', ['datetime' => $report['generated_at']]);
+    $wordmarkSrc = \App\Domains\AnalyticsReporting\Support\ReportPdf::wordmarkDataUri();
 @endphp
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
 <head>
   <meta charset="utf-8">
   <title>{{ $report['title'] }}</title>
-  <style>
-    @page { margin: 72px 28px 52px 28px; }
-    html, body { background: #F8FAFC; }
-    body { font-family: DejaVu Sans, sans-serif; font-size: 10px; color: #0F172A; }
-    h1 { font-size: 22px; margin: 8px 0 4px; color: #083A6D; font-weight: normal; }
-    h2 { font-size: 14px; margin: 0; color: #083A6D; font-weight: normal; }
-    h3 { font-size: 11px; margin: 0 0 8px; color: #334155; font-weight: normal; }
-    p { margin: 0 0 6px; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { vertical-align: middle; }
-    .header {
-      position: fixed;
-      top: -56px;
-      left: 0;
-      right: 0;
-      height: 44px;
-      background: #F8FAFC;
-      border-bottom: 1px solid #E2E8F0;
-      padding-bottom: 6px;
-    }
-    .header td { border: none; }
-    .header-title { text-align: right; color: #334155; font-size: 12px; }
-    .footer {
-      position: fixed;
-      bottom: -38px;
-      left: 0;
-      right: 0;
-      background: #F8FAFC;
-      border-top: 1px solid #E2E8F0;
-      color: #64748B;
-      font-size: 9px;
-      padding-top: 8px;
-      line-height: 1.35;
-    }
-    .page { page-break-before: always; }
-    .cover { padding-top: 28px; }
-    .cover-card { background: #FFFFFF; border: 1px solid #E2E8F0; }
-    .cover-card td { border: none; background: #FFFFFF; padding: 28px 32px; }
-    .spark { height: 3px; background: #F76B13; width: 48px; margin: 16px 0 0; }
-    .muted { color: #64748B; font-size: 9px; }
-    .section-head td { border: none; padding-bottom: 10px; }
-    .cards td {
-      width: 25%;
-      background: #FFFFFF;
-      border: 1px solid #E2E8F0;
-      padding: 14px 16px;
-    }
-    .big { font-size: 20px; color: #0F172A; line-height: 1; margin: 4px 0 2px; }
-    .status-label { font-size: 10px; color: #334155; margin: 4px 0 0; }
-    .count-line { font-size: 8px; color: #64748B; margin: 0 0 6px; }
-    .legend { margin-top: 10px; font-size: 9px; color: #64748B; line-height: 1.4; }
-    .profile { background: #FFFFFF; border: 1px solid #E2E8F0; }
-    .profile td { border: none; padding: 10px 12px; width: 33%; }
-    .data { margin-top: 8px; background: #FFFFFF; }
-    .data th {
-      background: #FFFFFF;
-      color: #083A6D;
-      border: none;
-      border-bottom: 1px solid #083A6D;
-      padding: 6px 4px;
-      font-size: 8px;
-      font-weight: normal;
-      text-align: left;
-    }
-    .data td {
-      background: #FFFFFF;
-      border: none;
-      border-bottom: 1px solid #E2E8F0;
-      padding: 5px 4px;
-      text-align: left;
-      vertical-align: top;
-    }
-    .toc td { border: none; border-bottom: 1px solid #F1F5F9; padding: 9px 4px; }
-    .toc-num { width: 36px; color: #F76B13; }
-    .empty { margin-top: 16px; color: #64748B; }
-  </style>
+  @include('reports.partials.styles')
 </head>
 <body>
-  <div class="header">
-    <table cellspacing="0" cellpadding="0">
-      <tr>
-        <td style="width: 160px; border: none;">
-          @if($wordmarkSrc)
-            <img src="{{ $wordmarkSrc }}" alt="HRneck" width="148" height="35">
-          @endif
-        </td>
-        <td class="header-title">{{ $report['title'] }}</td>
-      </tr>
-    </table>
-  </div>
-
-  <div class="footer">
-    {{ __('reports.prepared_for', ['brand' => $report['brand'], 'organization' => $report['organization']]) }}
-    {{ __('reports.confidential') }}
-    {{ __('reports.generated_at', ['datetime' => $report['generated_at']]) }}
-  </div>
+  @include('reports.partials.chrome', [
+      'headerTitle' => $report['title'],
+      'footerLines' => [$preparedFor, __('reports.confidential').' '.$generatedAt],
+  ])
 
   <div class="cover">
     <table class="cover-card" cellspacing="0" cellpadding="0">
       <tr>
-        <td style="width: 46%;">
+        <td class="cover-brand">
           @if($wordmarkSrc)
             <img src="{{ $wordmarkSrc }}" alt="HRneck" width="300" height="70">
           @endif
@@ -128,7 +38,8 @@
           @if($isSingle && $report['employee'])
             <p>{{ $report['employee']['name'] }} &lt;{{ $report['employee']['email'] }}&gt;</p>
           @endif
-          <p class="muted">{{ __('reports.prepared_for', ['brand' => $report['brand'], 'organization' => $report['organization']]) }}</p>
+          <p class="muted">{{ $preparedFor }}</p>
+          <p class="muted">{{ $generatedAt }}</p>
         </td>
       </tr>
     </table>
@@ -137,8 +48,8 @@
   <div class="page">
     <table class="section-head" cellspacing="0" cellpadding="0">
       <tr>
-        <td style="width: 22px; border: none;">@include('reports.partials.icon', ['name' => 'summary', 'size' => 16])</td>
-        <td style="padding-left: 8px; border: none;"><h2>{{ __('reports.contents') }}</h2></td>
+        <td class="section-icon">@include('reports.partials.icon', ['name' => 'summary', 'size' => 16])</td>
+        <td class="section-title"><h2>{{ __('reports.contents') }}</h2></td>
       </tr>
     </table>
     <table class="toc" cellspacing="0" cellpadding="0">
@@ -157,8 +68,8 @@
     <div class="page">
       <table class="section-head" cellspacing="0" cellpadding="0">
         <tr>
-          <td style="width: 22px; border: none;">@include('reports.partials.icon', ['name' => 'summary', 'size' => 16])</td>
-          <td style="padding-left: 8px; border: none;"><h2>{{ __('reports.employee_section') }}</h2></td>
+          <td class="section-icon">@include('reports.partials.icon', ['name' => 'summary', 'size' => 16])</td>
+          <td class="section-title"><h2>{{ __('reports.employee_section') }}</h2></td>
         </tr>
       </table>
       @if($report['employee'])
@@ -181,8 +92,8 @@
   <div class="page">
     <table class="section-head" cellspacing="0" cellpadding="0">
       <tr>
-        <td style="width: 22px; border: none;">@include('reports.partials.icon', ['name' => 'summary', 'size' => 16])</td>
-        <td style="padding-left: 8px; border: none;">
+        <td class="section-icon">@include('reports.partials.icon', ['name' => 'summary', 'size' => 16])</td>
+        <td class="section-title">
           <h2>{{ __('reports.summary_section_alt', ['number' => $isSingle ? '02' : '01']) }}</h2>
           <div class="muted">{{ $report['period_label'] }}</div>
         </td>
@@ -194,7 +105,7 @@
       <tr>
         @foreach($report['status_order'] as $key)
           @php $color = $tones[$key]; @endphp
-          <td>
+          <td style="border-top: 3px solid {{ $color }};">
             @include('reports.partials.icon', ['name' => $key, 'size' => 18, 'color' => $color])
             <div class="status-label">{{ $report['status_labels'][$key] }}</div>
             <div class="big">{{ $report['summary']['percents'][$key] }}%</div>
@@ -214,8 +125,8 @@
     <div class="page">
       <table class="section-head" cellspacing="0" cellpadding="0">
         <tr>
-          <td style="width: 22px; border: none;">@include('reports.partials.icon', ['name' => 'training', 'size' => 16])</td>
-          <td style="padding-left: 8px; border: none;"><h2>{{ __('reports.assignments_section') }}</h2></td>
+          <td class="section-icon">@include('reports.partials.icon', ['name' => 'training', 'size' => 16])</td>
+          <td class="section-title"><h2>{{ __('reports.assignments_section') }}</h2></td>
         </tr>
       </table>
       @if(count($report['assignments']) === 0)
@@ -251,8 +162,8 @@
     <div class="page">
       <table class="section-head" cellspacing="0" cellpadding="0">
         <tr>
-          <td style="width: 22px; border: none;">@include('reports.partials.icon', ['name' => 'training', 'size' => 16])</td>
-          <td style="padding-left: 8px; border: none;"><h2>{{ __('reports.employees_section') }}</h2></td>
+          <td class="section-icon">@include('reports.partials.icon', ['name' => 'training', 'size' => 16])</td>
+          <td class="section-title"><h2>{{ __('reports.employees_section') }}</h2></td>
         </tr>
       </table>
       @if($report['truncated'])

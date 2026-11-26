@@ -2,7 +2,6 @@
 
 namespace App\Domains\Realtime\Support;
 
-use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Support\StaffTenant;
@@ -32,8 +31,8 @@ final class LiveChannelGate
             return false;
         }
 
-        $permission = LiveTopics::permissionFor($topic);
-        if ($permission === null) {
+        $permissions = LiveTopics::permissionsFor($topic);
+        if ($permissions === []) {
             return false;
         }
 
@@ -41,7 +40,13 @@ final class LiveChannelGate
         setPermissionsTeamId($tenantId);
 
         try {
-            return $user->can($permission) || $user->hasRole(OrgPermissionCatalog::ORG_ADMIN);
+            foreach ($permissions as $permission) {
+                if ($user->can($permission)) {
+                    return true;
+                }
+            }
+
+            return false;
         } finally {
             setPermissionsTeamId($previous);
         }

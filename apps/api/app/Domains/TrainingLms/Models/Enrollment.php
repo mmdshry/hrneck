@@ -2,6 +2,7 @@
 
 namespace App\Domains\TrainingLms\Models;
 
+use App\Domains\Campaigns\Models\TrainingAssignment;
 use App\Domains\TargetsGroups\Models\Target;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -15,12 +16,15 @@ use Illuminate\Support\Carbon;
  * @property int $progress
  * @property Carbon|null $opened_at
  * @property Carbon|null $completed_at
+ * @property Carbon|null $attested_at
+ * @property bool $attestation_pending
  * @property string $source
  */
 class Enrollment extends Model
 {
     protected $fillable = [
         'course_id', 'target_id', 'status', 'progress', 'opened_at', 'completed_at', 'source',
+        'attested_at', 'attestation_pending',
     ];
 
     protected function casts(): array
@@ -28,6 +32,8 @@ class Enrollment extends Model
         return [
             'opened_at' => 'datetime',
             'completed_at' => 'datetime',
+            'attested_at' => 'datetime',
+            'attestation_pending' => 'boolean',
         ];
     }
 
@@ -47,5 +53,11 @@ class Enrollment extends Model
     public function lessonProgress(): HasMany
     {
         return $this->hasMany(LessonProgress::class);
+    }
+
+    /** @return HasMany<TrainingAssignment, $this> */
+    public function assignments(): HasMany
+    {
+        return $this->hasMany(TrainingAssignment::class);
     }
 }

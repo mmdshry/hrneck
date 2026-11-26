@@ -10,7 +10,8 @@ import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
 import { useDataTableQuery } from "@/hooks/use-data-table-query";
-import { liveStatusLabel, useLiveTopic } from "@/hooks/use-live-topic";
+import { useOrgTimezone } from "@/hooks/use-org-timezone";
+import { liveStatusLabel, useLiveStatusLabels, useLiveTopic } from "@/hooks/use-live-topic";
 import { api, ensureCsrf, fetchSessionUser } from "@/lib/api";
 import { serializeDataTableQuery } from "@/lib/data-table-query";
 import { notificationsLiveChannel } from "@/lib/live-topics";
@@ -25,6 +26,8 @@ import {
   paginationQuery,
   type PageSize,
 } from "@/lib/pagination";
+import { formatDateTime } from "@/lib/format-datetime";
+import { matchesCells } from "@/lib/table-filter";
 import { resolveTenant } from "@/lib/tenant";
 import { toastError, toastSuccess } from "@/lib/toast";
 import { cn } from "@/lib/utils";
@@ -46,23 +49,6 @@ const emptyNotificationsMeta = (
   unread_count: 0,
 });
 
-function matchesCells(
-  q: string,
-  columnFilters: Record<string, string>,
-  cells: Record<string, string>,
-): boolean {
-  const needle = q.trim().toLowerCase();
-  if (needle && !Object.values(cells).join(" ").toLowerCase().includes(needle)) {
-    return false;
-  }
-  for (const [key, raw] of Object.entries(columnFilters)) {
-    const value = raw.trim().toLowerCase();
-    if (!value) continue;
-    if (!String(cells[key] ?? "").toLowerCase().includes(value)) return false;
-  }
-  return true;
-}
-
 function notificationCells(item: UserNotificationItem): Record<string, string> {
   return {
     title: item.title,
@@ -74,6 +60,7 @@ function notificationCells(item: UserNotificationItem): Record<string, string> {
 export function NotificationsClient() {
   const t = useTranslations("org.notifications");
   const tCommon = useTranslations("common");
+  const orgTimeZone = useOrgTimezone();
   const router = useRouter();
   const [userId, setUserId] = useState<number | null>(null);
   const [tenant, setTenant] = useState<string | null>(null);
@@ -207,7 +194,8 @@ export function NotificationsClient() {
     tableQuery.debounced,
   ]);
 
-  const statusLabel = liveStatusLabel(status);
+  const liveLabels = useLiveStatusLabels();
+  const statusLabel = liveStatusLabel(status, liveLabels);
 
   async function markAllRead() {
     if (meta.unread_count === 0) return;
@@ -297,7 +285,7 @@ export function NotificationsClient() {
       id: "created_at",
       header: tCommon("whenLabel"),
       filter: "none",
-      cell: (item) => (item.created_at ? new Date(item.created_at).toLocaleString() : "—"),
+      cell: (item) => (item.created_at ? formatDateTime(item.created_at, orgTimeZone) : "—"),
     },
     {
       id: "actions",

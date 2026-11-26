@@ -22,9 +22,9 @@ test('campaign auto-completes when all recipients are done', function () {
         'name' => 'Complete me',
         'type' => 'training',
         'status' => 'running',
-        'course_id' => $courseId,
         'starts_at' => now(),
     ]);
+    $campaign->courses()->attach($courseId, ['sort_order' => 0]);
 
     CampaignRecipient::query()->create([
         'campaign_id' => $campaign->id,
@@ -51,8 +51,8 @@ test('cancelled campaign skips reminder job send', function () {
         'name' => 'Cancelled wave',
         'type' => 'training',
         'status' => 'cancelled',
-        'course_id' => $courseId,
     ]);
+    $campaign->courses()->attach($courseId, ['sort_order' => 0]);
 
     $enrollment = Enrollment::query()->firstOrCreate(
         ['course_id' => $courseId, 'target_id' => $targetId],
@@ -65,7 +65,7 @@ test('cancelled campaign skips reminder job send', function () {
         'status' => 'pending',
     ]);
 
-    (new SendTrainingReminderJob($recipient->id, $enrollment->id))->handle();
+    (new SendTrainingReminderJob($recipient->id))->handle();
 
     expect($recipient->fresh()->status)->toBe('pending');
     Mail::assertNothingSent();

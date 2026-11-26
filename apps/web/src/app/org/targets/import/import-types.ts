@@ -11,7 +11,6 @@ export const PLATFORM_FIELDS = [
   "hire_date",
   "manager_email",
   "preferred_language",
-  "timezone",
   "external_id",
 ] as const;
 
@@ -66,23 +65,6 @@ export type ImportCommitResult = {
 };
 
 export type WizardStep = "upload" | "map" | "preview" | "result";
-
-export const FIELD_LABELS: Record<PlatformField, string> = {
-  email: "Email",
-  first_name: "First name",
-  last_name: "Last name",
-  department: "Department",
-  job_title: "Job title",
-  employee_number: "Employee number",
-  phone: "Phone",
-  location: "Location",
-  employment_type: "Employment type",
-  hire_date: "Hire date",
-  manager_email: "Manager email",
-  preferred_language: "Preferred language",
-  timezone: "Timezone",
-  external_id: "External ID",
-};
 
 export function emptyColumnMap(): ColumnMap {
   return PLATFORM_FIELDS.reduce((acc, field) => {

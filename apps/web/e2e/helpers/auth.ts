@@ -24,7 +24,8 @@ export async function loginAs(
   await passwordInput.fill("");
   await passwordInput.pressSequentially(password, { delay: 15 });
   await expect(emailInput).toHaveValue(email);
-  await page.getByRole("button", { name: /continue/i }).click();
+  // Exact match: the login page also has "Continue with Google/Microsoft" buttons.
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
 }
 
 export async function loginAsOrgAdmin(page: Page): Promise<void> {

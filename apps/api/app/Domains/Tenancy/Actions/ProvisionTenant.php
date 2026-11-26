@@ -4,6 +4,7 @@ namespace App\Domains\Tenancy\Actions;
 
 use App\Domains\IdentityAccess\Actions\SeedRbacCatalog;
 use App\Domains\Realtime\Support\PublishLive;
+use App\Domains\Subscriptions\Support\TenantEntitlements;
 use App\Models\Tenant;
 use Database\Seeders\TenantSampleSeeder;
 use Illuminate\Support\Facades\Artisan;
@@ -57,6 +58,8 @@ class ProvisionTenant
             'updated_at' => now(),
         ]);
 
+        app(TenantEntitlements::class)->assignDefaultPlan($slug);
+
         DB::statement("CREATE DATABASE IF NOT EXISTS `{$dbName}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
         Artisan::call('tenants:migrate', ['--tenants' => [$slug], '--force' => true]);
         Artisan::call('tenants:seed', [
@@ -66,6 +69,7 @@ class ProvisionTenant
         ]);
 
         app(SeedRbacCatalog::class)->ensureOrgAdminRole($slug);
+        app(SeedRbacCatalog::class)->ensureTemplateRoles($slug);
 
         $tenant = Tenant::query()->findOrFail($slug)->load('domains');
         PublishLive::msp();

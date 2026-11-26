@@ -2,23 +2,23 @@ import type { GuideModule } from "@/lib/guides/types";
 
 export const usersRolesGuide: GuideModule = {
   slug: "users-roles",
-  title: "Benutzer & Rollen",
+  title: "Mitarbeitende & Rollen",
   summary:
-    "Laden Sie Org-Operatoren und Lernende ein, erstellen Sie benutzerdefinierte Rollen und mappen Sie den Berechtigungskatalog—einschließlich Ticketing-Presets.",
-  keywords: ["benutzer", "rollen", "rbac", "berechtigungen", "sd_admin", "learner", "zugang"],
-  openInAppHref: "/org/users",
+    "Verwalten Sie Mitarbeitende und ihre Anmelde-Rollen, erstellen Sie benutzerdefinierte Rollen und mappen Sie den Berechtigungskatalog—einschließlich Ticketing-Presets.",
+  keywords: ["benutzer", "mitarbeitende", "rollen", "rbac", "berechtigungen", "sd_admin", "learner", "zugang"],
+  openInAppHref: "/org/targets",
   overview:
-    "Org-Login-Benutzer umfassen Operatoren (org_admin und benutzerdefinierte Rollen) und Mitarbeitende. Jeder Mitarbeitende (Target) ist mit einem Benutzer gepaart, der typischerweise die Rolle learner hat, damit er sich bei /learn und dem Serviceportal anmelden kann. Nutzen Sie Benutzer, um Personen einzuladen, und Rollen, um Berechtigungen über Schulung, Checklisten, Ticketing, Berichte, Einstellungen und Ankündigungen zusammenzustellen. Ticketing liefert Preset-Rollen wie sd_admin, sd_technician, sd_user und kb_admin. Plattform-Staff-Rollen (platform_super_admin / platform_agent) sind Peers zueinander—keine Hierarchie über Org-Rollen—und betreten einen Tenant über MSP-Kontext.",
+    "Anmeldekonten und Mitarbeitende sind eine Liste unter Mitarbeitende. Jeder Mitarbeitende hat eine Anmeldung, und seine Rolle (zum Beispiel learner, org_admin oder eine benutzerdefinierte Rolle) wird in der Zeile des Mitarbeitenden angezeigt, wo Sie sie ändern können. Ein neuer Mitarbeitender erhält standardmäßig die Rolle learner, damit er sein Dashboard unter /portal öffnen kann. Nutzen Sie Rollen, um Berechtigungen über Schulung, Checklisten, Ticketing, Berichte, Einstellungen und Ankündigungen zusammenzustellen. Ticketing liefert Preset-Rollen wie sd_admin, sd_technician, sd_user und kb_admin. Plattform-Staff-Rollen (platform_super_admin / platform_agent) sind Peers zueinander—keine Hierarchie über Org-Rollen—und betreten einen Tenant über MSP-Kontext.",
   example: {
     title: "Service-Desk-Techniker-Rolle",
     narrative:
-      "Admin erstellt die Rolle „SD Technician“ mit org.ticketing.tickets und verwandten Desk-Berechtigungen, lädt lee@acme.test ein und prüft, dass Lee Incidents triageieren, aber Branding unter Einstellungen nicht ändern kann. Separat erhält eine Neueinstellung unter Mitarbeitende einen gepaarten Learner-Benutzer und kann /learn öffnen, ohne als Org-Operator zu erscheinen.",
+      "Admin erstellt die Rolle „SD Technician“ mit org.ticketing.tickets und verwandten Desk-Berechtigungen, fügt lee@acme.test als Mitarbeitenden mit dieser Rolle hinzu und prüft, dass Lee Incidents triageieren, aber Branding unter Einstellungen nicht ändern kann. Eine neue Einstellung mit der Standardrolle learner öffnet /portal und zeigt ihre Kurse ohne Operator-Zugriff.",
   },
   steps: [
     {
-      title: "Bestehende Benutzer prüfen",
-      body: "Bestätigen Sie, wer bereits org_admin, learner oder benutzerdefinierte Rollen im Tenant hat.",
-      href: "/org/users",
+      title: "Mitarbeitende und ihre Rollen prüfen",
+      body: "Unter Mitarbeitende zeigt die Spalte Rolle die Rolle jeder Anmeldung. Prüfen Sie, wer bereits org_admin, learner oder benutzerdefinierte Rollen im Tenant hat.",
+      href: "/org/targets",
     },
     {
       title: "Rollen öffnen",
@@ -30,34 +30,34 @@ export const usersRolesGuide: GuideModule = {
       body: "Nutzen Sie sd_*/kb_admin-Presets, wenn die Person nur Service-Desk-Umfang braucht.",
     },
     {
-      title: "Operator einladen oder auf Mitarbeiterpaarung setzen",
-      body: "Erstellen Sie einen Operator unter Benutzer mit der richtigen Rolle, oder fügen Sie einen Mitarbeitenden hinzu, damit ProvisionEmployeePair den gepaarten Learner-Benutzer/Login anlegt.",
+      title: "Mitarbeitenden mit der richtigen Rolle anlegen",
+      body: "Legen Sie unter Mitarbeitende einen Mitarbeitenden an und wählen Sie seine Rolle (Standard ist learner). Die Anmeldung wird automatisch erstellt und eingeladen; für Operatoren wählen Sie eine Rolle mit nur den nötigen Berechtigungen.",
     },
     {
       title: "Least Privilege prüfen",
-      body: "Melden Sie sich als dieser Benutzer an (oder prüfen Sie Berechtigungen), um sicherzustellen, dass Einstellungen und Benutzer für Nicht-Admins gesperrt bleiben. MFA bleibt für jeden angemeldeten Org-Benutzer verfügbar.",
+      body: "Melden Sie sich als dieser Benutzer an (oder prüfen Sie Berechtigungen), um sicherzustellen, dass Einstellungen und Mitarbeitende für Nicht-Admins gesperrt bleiben. MFA bleibt für jeden angemeldeten Org-Benutzer verfügbar.",
     },
   ],
   diagram: {
     title: "Zugangsmodell",
     nodes: [
-      { id: "user", label: "Benutzer (Login)" },
+      { id: "user", label: "Anmeldung (Login)" },
       { id: "role", label: "Rolle" },
       { id: "perms", label: "Berechtigungen" },
       { id: "modules", label: "Org-Module" },
-      { id: "target", label: "Target / Mitarbeitender" },
+      { id: "target", label: "Mitarbeitender" },
     ],
     edges: [
       { from: "user", to: "role" },
       { from: "role", to: "perms" },
       { from: "perms", to: "modules" },
-      { from: "target", to: "user", label: "gepaarter Learner" },
+      { from: "target", to: "user", label: "verknüpfte Anmeldung" },
     ],
   },
   mock: {
-    chromeTitle: "Acme · Rollen",
+    chromeTitle: "Acme · Mitarbeitende",
     stats: [
-      { label: "Benutzer", value: "9" },
+      { label: "Mitarbeitende", value: "9" },
       { label: "Benutzerdefinierte Rollen", value: "4" },
       { label: "Presets", value: "sd_*" },
     ],
@@ -69,11 +69,11 @@ export const usersRolesGuide: GuideModule = {
     rows: [
       { title: "lee@acme.test", meta: "SD Technician" },
       { title: "mira@acme.test", meta: "org_admin" },
-      { title: "maya@acme.test", meta: "learner · gepaartes Target" },
+      { title: "maya@acme.test", meta: "learner" },
     ],
     annotations: [
       { label: "Katalog", note: "Berechtigungen werden auf /api/v1/org/* durchgesetzt." },
-      { label: "Mitarbeitende", note: "Mitarbeitende sind Login-Benutzer über Target↔User-Paarung (learner)." },
+      { label: "Mitarbeitende", note: "Jeder Mitarbeitende hat eine Anmeldung; ihre Rolle wird in der Mitarbeitenden-Liste gesetzt." },
     ],
   },
   related: ["ticketing", "settings", "getting-started", "targets-groups"],

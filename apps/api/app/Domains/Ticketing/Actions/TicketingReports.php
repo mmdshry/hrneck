@@ -13,6 +13,9 @@ use Illuminate\Support\Collection;
 
 class TicketingReports
 {
+    /** Maximum tickets in the CSV and PDF exports. Larger sets are cut and flagged to the client. */
+    public const ROW_CAP = 5000;
+
     /**
      * @return array<string, mixed>
      */
@@ -76,6 +79,19 @@ class TicketingReports
         return $named;
     }
 
+    /**
+     * Whether the ticket set is larger than ROW_CAP, so the CSV and PDF stop before the last tickets.
+     */
+    public function truncated(?int $deskId = null): bool
+    {
+        $query = SdTicket::query()->active();
+        if ($deskId) {
+            $query->where('desk_id', $deskId);
+        }
+
+        return $query->count() > self::ROW_CAP;
+    }
+
     public function csv(?int $deskId = null): string
     {
         $lines = ['number,desk,summary,stage,priority,status,sla_response_breached,sla_resolve_breached,created_at'];
@@ -117,7 +133,7 @@ class TicketingReports
         }
 
         $rows = [];
-        foreach ($query->limit(5000)->get() as $t) {
+        foreach ($query->limit(self::ROW_CAP)->get() as $t) {
             $rows[] = [
                 'number' => (string) $t->number,
                 'desk' => (string) ($t->desk?->name ?? ''),

@@ -68,30 +68,20 @@ class FanOutAnnouncement
         return $announcement;
     }
 
+    /**
+     * Any role other than the learner baseline means an organization member (back office).
+     * Learners and role-less members land in the portal.
+     */
     private function announcementLinkFor(User $user, string $tenantId): string
     {
         setPermissionsTeamId($tenantId);
         try {
-            $roles = $user->getRoleNames()->values()->all();
-            $isLearnerOnly = $roles === [OrgPermissionCatalog::LEARNER]
-                || ($roles === [] && $user->can(OrgPermissionCatalog::TICKETING_PORTAL));
-            $hasOrgAccess = false;
-            foreach ($roles as $role) {
-                if ($role !== OrgPermissionCatalog::LEARNER) {
-                    $hasOrgAccess = true;
-                    break;
-                }
-            }
-            if ($hasOrgAccess) {
-                return '/org';
-            }
-            if ($isLearnerOnly || $user->can(OrgPermissionCatalog::TICKETING_PORTAL)) {
-                return '/portal';
-            }
+            $hasOrgRole = $user->getRoleNames()
+                ->contains(fn (string $role): bool => $role !== OrgPermissionCatalog::LEARNER);
         } finally {
             setPermissionsTeamId(null);
         }
 
-        return '/portal';
+        return $hasOrgRole ? '/org' : '/portal';
     }
 }

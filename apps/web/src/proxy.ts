@@ -2,14 +2,15 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import {
   canAccessMsp,
+  defaultPostLoginPath,
   resolvePostLoginPath,
   type OrgMembership,
   type PostLoginUser,
   type StaffGateUser,
 } from "@/lib/session";
 
-const PROTECTED = ["/msp", "/org", "/learn", "/portal"];
-const LOGIN_FLOW = ["/login/mfa", "/login/forgot", "/login/reset"];
+const PROTECTED = ["/msp", "/org", "/portal"];
+const LOGIN_FLOW = ["/login/mfa", "/login/forgot", "/login/reset", "/login/sso"];
 
 function isProtected(pathname: string): boolean {
   return PROTECTED.some(
@@ -64,6 +65,7 @@ type MeUser = {
   is_platform_staff?: unknown;
   memberships?: unknown;
   needs_org_selection?: unknown;
+  has_org_access?: unknown;
 };
 
 function staffGateUser(user: MeUser): StaffGateUser {
@@ -96,6 +98,7 @@ function postLoginUser(user: MeUser): PostLoginUser {
     tenant_id: typeof user.tenant_id === "string" ? user.tenant_id : null,
     memberships,
     needs_org_selection: user.needs_org_selection === true,
+    has_org_access: user.has_org_access === true,
   };
 }
 
@@ -154,7 +157,7 @@ export async function proxy(request: NextRequest) {
       return NextResponse.redirect(login);
     }
     if (isMspPath(pathname) && !canAccessMsp(staffGateUser(user))) {
-      return NextResponse.redirect(new URL("/org", request.url));
+      return NextResponse.redirect(new URL(defaultPostLoginPath(postLoginUser(user)), request.url));
     }
   }
 
@@ -175,7 +178,6 @@ export const config = {
   matcher: [
     "/msp/:path*",
     "/org/:path*",
-    "/learn/:path*",
     "/portal/:path*",
     "/login",
     "/login/:path*",

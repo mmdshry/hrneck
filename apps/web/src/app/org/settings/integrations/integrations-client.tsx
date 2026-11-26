@@ -6,7 +6,7 @@ import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
-import { liveStatusLabel, useLiveTopic } from "@/hooks/use-live-topic";
+import { liveStatusLabel, useLiveStatusLabels, useLiveTopic } from "@/hooks/use-live-topic";
 import { api, ensureCsrf } from "@/lib/api";
 import { resolveTenant } from "@/lib/tenant";
 
@@ -55,7 +55,8 @@ export function IntegrationsClient() {
       .finally(() => setLoading(false));
   }, [refreshFromApi]);
 
-  const statusLabel = liveStatusLabel(status);
+  const liveLabels = useLiveStatusLabels();
+  const statusLabel = liveStatusLabel(status, liveLabels);
 
   const statusOptions = [
     { label: tCommon("connected"), value: "connected" },
@@ -65,7 +66,11 @@ export function IntegrationsClient() {
 
   function detailsText(row: Integration): string {
     if (row.id === "smtp") {
-      return `${String(row.details.host)}:${String(row.details.port)} · from ${String(row.details.from)}`;
+      return t("smtpDetails", {
+        host: String(row.details.host),
+        port: String(row.details.port),
+        from: String(row.details.from),
+      });
     }
     return String(row.details.message ?? t("comingWhenCredentials"));
   }

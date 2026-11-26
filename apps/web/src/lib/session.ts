@@ -5,6 +5,36 @@ export type OrgMembership = {
   department?: string | null;
 };
 
+export type SubscriptionStatus = "trial" | "active" | "suspended" | "expired";
+
+export type SubscriptionUsageItem = {
+  used: number;
+  /** Null when the plan does not limit this resource. */
+  limit: number | null;
+  over_limit: boolean;
+};
+
+/** Plan, status and usage for the active organization, from /auth/me. */
+export type SessionSubscription = {
+  plan_name: string | null;
+  status: SubscriptionStatus | null;
+  effective_status: SubscriptionStatus | null;
+  /** True when org writes are blocked (expired, suspended, or a trial/term that has ended). */
+  read_only: boolean;
+  /** Trial end while trialing, term end while active. */
+  ends_at: string | null;
+  over_limit: boolean;
+  usage: {
+    employees: SubscriptionUsageItem;
+    users: SubscriptionUsageItem;
+  };
+  /** Plan feature flags the organization workspace and employee experience depend on. */
+  features?: {
+    learner_portal: boolean;
+    knowledge_base?: boolean;
+  };
+};
+
 export type SessionUser = {
   id: number;
   name: string;
@@ -18,14 +48,19 @@ export type SessionUser = {
   avatar_path?: string | null;
   roles: string[];
   permissions: string[];
+  /** True when the user holds any organization console permission (`/org`), not only the employee portal. */
+  has_org_access?: boolean;
   is_platform_staff: boolean;
   mfa_enabled?: boolean;
+  /** True when an authenticator app (TOTP) is connected; passkeys are tracked separately. */
+  mfa_totp_enabled?: boolean;
   locale?: string | null;
   staff_tenant_id?: string | null;
   acting_in_tenant?: boolean;
   memberships?: OrgMembership[];
   needs_org_selection?: boolean;
   active_tenant_id?: string | null;
+  subscription?: SessionSubscription | null;
 };
 
 export type OrgMembershipMatch =
@@ -38,34 +73,26 @@ export type StaffGateUser = Pick<SessionUser, "is_platform_staff">;
 
 export type PostLoginUser = Pick<
   SessionUser,
-  "is_platform_staff" | "tenant_id" | "memberships" | "needs_org_selection"
+  | "is_platform_staff"
+  | "tenant_id"
+  | "memberships"
+  | "needs_org_selection"
+  | "has_org_access"
 >;
 
-/** Mirrors OrgPermissionCatalog::staffTenantPermissions() (excludes roles/settings). */
-export const STAFF_TENANT_PERMISSIONS = [
-  "org.users.manage",
-  "org.targets.manage",
-  "org.departments.manage",
-  "org.groups.manage",
-  "org.campaigns.manage",
-  "org.training.manage",
-  "org.checklists.manage",
-  "org.ticketing.tickets",
-  "org.ticketing.admin",
-  "org.ticketing.kb",
-  "org.ticketing.reports",
-  "org.ticketing.portal",
-  "org.reports.view",
-  "org.reports.export",
-  "org.announcements.manage",
-] as const;
-
+/**
+ * The API is the single source of truth: while acting in a tenant, `permissions`
+ * already contains exactly what the Gate allows (see UserResource /
+ * OrgPermissionCatalog::staffTenantPermissionsFor).
+ */
 export function hasPermission(user: SessionUser | null, permission: string): boolean {
   if (!user) return false;
-  if (user.acting_in_tenant) {
-    return (STAFF_TENANT_PERMISSIONS as readonly string[]).includes(permission);
-  }
   return user.permissions.includes(permission);
+}
+
+/** True when the user holds at least one of the listed permissions (e.g. VIEW or MANAGE). */
+export function hasAnyPermission(user: SessionUser | null, permissions: readonly string[]): boolean {
+  return permissions.some((permission) => hasPermission(user, permission));
 }
 
 export function canAccessMsp(user: StaffGateUser): boolean {
@@ -85,7 +112,9 @@ export function defaultPostLoginPath(user: PostLoginUser): string {
   if (user.needs_org_selection) {
     return "/select-org";
   }
-  return "/org";
+  // Org admins land in the organization console; employees (learners, or users without
+  // console permissions) land in the employee dashboard at /portal.
+  return user.has_org_access === true ? "/org" : "/portal";
 }
 
 function isMspPath(path: string): boolean {

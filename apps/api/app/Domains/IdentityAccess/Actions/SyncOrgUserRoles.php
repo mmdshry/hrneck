@@ -3,6 +3,7 @@
 namespace App\Domains\IdentityAccess\Actions;
 
 use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
+use App\Domains\Subscriptions\Support\TenantEntitlements;
 use App\Models\Role;
 use App\Models\Tenant;
 use App\Models\User;
@@ -14,6 +15,7 @@ class SyncOrgUserRoles
     public function __construct(
         private readonly SeedRbacCatalog $rbac,
         private readonly ProvisionEmployeePair $provision,
+        private readonly TenantEntitlements $entitlements,
     ) {}
 
     /**
@@ -27,6 +29,7 @@ class SyncOrgUserRoles
             ]);
         }
 
+        $this->entitlements->assertCanGrantEmployeeTarget($tenantId, $user->email, $user->id);
         if (in_array(OrgPermissionCatalog::LEARNER, $roleNames, true)) {
             $this->rbac->ensureLearnerRole($tenantId);
         }
@@ -47,20 +50,18 @@ class SyncOrgUserRoles
 
         setPermissionsTeamId(null);
 
-        if (in_array(OrgPermissionCatalog::LEARNER, $roleNames, true)) {
-            $was = tenant('id');
-            if ($was !== $tenantId) {
-                $tenant = Tenant::query()->find($tenantId);
-                if ($tenant) {
-                    Tenancy::initialize($tenant);
-                }
+        $was = tenant('id');
+        if ($was !== $tenantId) {
+            $tenant = Tenant::query()->find($tenantId);
+            if ($tenant) {
+                Tenancy::initialize($tenant);
             }
-            try {
-                $this->provision->ensureTargetForLearner($user, $tenantId);
-            } finally {
-                if ($was !== $tenantId) {
-                    Tenancy::end();
-                }
+        }
+        try {
+            $this->provision->ensureTargetForAccount($user, $tenantId);
+        } finally {
+            if ($was !== $tenantId) {
+                Tenancy::end();
             }
         }
 

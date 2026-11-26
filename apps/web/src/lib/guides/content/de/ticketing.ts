@@ -22,7 +22,7 @@ export const ticketingGuide: GuideModule = {
   ],
   openInAppHref: "/org/ticketing",
   overview:
-    "Das Ticketing-Modul deckt ITIL-Service-Desk-Grundlagen für Operatoren unter /org/ticketing ab: Desks, Tickets mit Notizen/Aufgaben/Anhängen, Bulk-Aktionen, Verfahren und Eskalation, SLA-Richtlinien, IMAP-E-Mail-Reader, KB-Artikel (einschließlich Ticket→KB-Konvertierung), Search All, Präferenzen und CSV/PDF/JSON-Berichte. Mitarbeitende reichen Arbeit im separaten Serviceportal (/portal) ein und verfolgen sie—siehe diesen Guide für Endnutzer-Schritte. Berechtigungen teilen sich in org.ticketing.tickets, .admin, .kb, .reports und .portal, mit Seed-Rollen sd_* / kb_admin.",
+    "Das Ticketing-Modul deckt ITIL-Service-Desk-Grundlagen für Operatoren unter /org/ticketing ab: Desks, Tickets mit Notizen/Aufgaben/Anhängen, Bulk-Aktionen, Verfahren und Eskalation, SLA-Richtlinien, IMAP-E-Mail-Reader, KB-Artikel (einschließlich Ticket→KB-Konvertierung), Search All, Präferenzen und CSV/PDF/JSON-Berichte. Mitarbeitende reichen Arbeit im separaten Serviceportal (/portal) ein und verfolgen sie—siehe diesen Guide für Endnutzer-Schritte. Berechtigungen teilen sich in org.ticketing.tickets, .admin, .reports und .portal, mit Seed-Rollen sd_* / kb_admin. KB-Artikel haben einen eigenen Bereich (/org/kb) mit den Berechtigungen org.kb.view und org.kb.manage.",
   example: {
     title: "Phishing-Meldung wird KB-Artikel",
     narrative:
@@ -46,7 +46,7 @@ export const ticketingGuide: GuideModule = {
     {
       title: "Wissen veröffentlichen und exportieren",
       body: "Konvertieren Sie gelöste Tickets in KB, prüfen Sie Search All / Portal-Sichtbarkeit und exportieren Sie dann CSV/PDF- oder JSON-Pakete.",
-      href: "/org/ticketing/kb",
+      href: "/org/kb",
     },
   ],
   sections: [
@@ -125,7 +125,7 @@ export const ticketingGuide: GuideModule = {
         {
           title: "Artikel erstellen und veröffentlichen",
           body: "Erstellen, bearbeiten, veröffentlichen/zurückziehen oder löschen Sie KB-Artikel. Unveröffentlichte Entwürfe bleiben vom Mitarbeiterportal fern.",
-          href: "/org/ticketing/kb",
+          href: "/org/kb",
         },
         {
           title: "Ticket → KB konvertieren",

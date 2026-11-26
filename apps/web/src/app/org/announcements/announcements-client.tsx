@@ -1,17 +1,17 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useTranslations } from "next-intl";
+import { useOrgTimezone } from "@/hooks/use-org-timezone";
+import { formatDateTime } from "@/lib/format-datetime";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
 import { useDataTableQuery } from "@/hooks/use-data-table-query";
-import { liveStatusLabel, useLiveTopic } from "@/hooks/use-live-topic";
+import { liveStatusLabel, useLiveStatusLabels, useLiveTopic } from "@/hooks/use-live-topic";
 import { api, ensureCsrf, fetchSessionUser } from "@/lib/api";
 import { serializeDataTableQuery } from "@/lib/data-table-query";
 import { orgLiveChannel } from "@/lib/live-topics";
@@ -25,40 +25,20 @@ import {
   type PaginationMeta,
 } from "@/lib/pagination";
 import { hasPermission, type SessionUser } from "@/lib/session";
+import { matchesCells } from "@/lib/table-filter";
 import { resolveTenant } from "@/lib/tenant";
 import { toastError, toastSuccess } from "@/lib/toast";
-
-type Announcement = {
-  id: number;
-  title: string;
-  body: string;
-  published_at?: string | null;
-};
+import type { Announcement } from "./announcement-types";
+import { PublishAnnouncementDialog } from "./publish-announcement-dialog";
 
 type AnnouncementsPayload = {
   data: Announcement[];
 };
 
-function matchesCells(
-  q: string,
-  columnFilters: Record<string, string>,
-  cells: Record<string, string>,
-): boolean {
-  const needle = q.trim().toLowerCase();
-  if (needle && !Object.values(cells).join(" ").toLowerCase().includes(needle)) {
-    return false;
-  }
-  for (const [key, raw] of Object.entries(columnFilters)) {
-    const value = raw.trim().toLowerCase();
-    if (!value) continue;
-    if (!String(cells[key] ?? "").toLowerCase().includes(value)) return false;
-  }
-  return true;
-}
-
 export function AnnouncementsClient() {
   const t = useTranslations("org.announcements");
   const tCommon = useTranslations("common");
+  const orgTimeZone = useOrgTimezone();
   const tenant = resolveTenant();
   const channel = tenant ? orgLiveChannel(tenant, "announcements") : null;
   const [session, setSession] = useState<SessionUser | null>(null);
@@ -67,10 +47,8 @@ export function AnnouncementsClient() {
   const [meta, setMeta] = useState<PaginationMeta>(emptyMeta());
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState<PageSize>(DEFAULT_PAGE_SIZE);
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
   const [loaded, setLoaded] = useState(false);
-  const [publishing, setPublishing] = useState(false);
+  const [publishOpen, setPublishOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Announcement | null>(null);
   const tableQuery = useDataTableQuery();
   const filters = useMemo(
@@ -188,7 +166,8 @@ export function AnnouncementsClient() {
     tableQuery.debounced,
   ]);
 
-  const statusLabel = liveStatusLabel(status);
+  const liveLabels = useLiveStatusLabels();
+  const statusLabel = liveStatusLabel(status, liveLabels);
 
   async function afterMutation() {
     if (liveRows === null) {
@@ -196,32 +175,13 @@ export function AnnouncementsClient() {
     }
   }
 
-  async function onPublish(event: FormEvent) {
-    event.preventDefault();
-    setPublishing(true);
-    try {
-      await ensureCsrf();
-      const tenantSlug = resolveTenant();
-      const res = (await api("/api/v1/org/announcements", {
-        method: "POST",
-        tenant: tenantSlug,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, body }),
-      })) as { data?: Announcement };
-      const created = res.data;
-      setTitle("");
-      setBody("");
-      setPage(1);
-      if (created && liveRows !== null) {
-        setLiveRows([created, ...liveRows.filter((row) => row.id !== created.id)]);
-      } else {
-        await refreshFromApi(1, perPage, filters);
-      }
-      toastSuccess(t("announcementPublished"));
-    } catch (err) {
-      toastError(err instanceof Error ? err.message : t("publishFailed"));
-    } finally {
-      setPublishing(false);
+  async function onPublished(created: Announcement | undefined) {
+    setPublishOpen(false);
+    setPage(1);
+    if (created && liveRows !== null) {
+      setLiveRows([created, ...liveRows.filter((row) => row.id !== created.id)]);
+    } else {
+      await refreshFromApi(1, perPage, filters);
     }
   }
 
@@ -259,7 +219,7 @@ export function AnnouncementsClient() {
       id: "published_at",
       header: tCommon("published"),
       filter: "none",
-      cell: (row) => (row.published_at ? new Date(row.published_at).toLocaleString() : "—"),
+      cell: (row) => (row.published_at ? formatDateTime(row.published_at, orgTimeZone) : "—"),
     },
     {
       id: "actions",
@@ -274,7 +234,7 @@ export function AnnouncementsClient() {
           size="compact"
           onClick={() => setPendingDelete(row)}
         >
-          Delete
+          {tCommon("delete")}
         </Button>
       ),
     },
@@ -291,7 +251,7 @@ export function AnnouncementsClient() {
           title={t("title")}
           description={t("description")}
         />
-        <EmptyState title={"You need org.announcements.manage to publish announcements."} />
+        <EmptyState title={t("noPermission")} />
       </div>
     );
   }
@@ -303,38 +263,14 @@ export function AnnouncementsClient() {
         description={
           statusLabel ? `${t("description")} · ${statusLabel}` : t("description")
         }
+        actions={
+          <Button type="button" onClick={() => setPublishOpen(true)}>
+            {t("newAnnouncement")}
+          </Button>
+        }
       />
-      
 
-      <form onSubmit={onPublish} className="mt-8 space-y-4">
-        <div className="space-y-1">
-          <Label htmlFor="announcement-title">Title</Label>
-          <Input
-            id="announcement-title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            required
-            maxLength={190}
-          />
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="announcement-body">{tCommon("message")}</Label>
-          <textarea
-            id="announcement-body"
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            required
-            maxLength={5000}
-            rows={5}
-            className="w-full rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
-          />
-        </div>
-        <Button type="submit" disabled={publishing}>
-          {publishing ? t("publishing") : t("publish")}
-        </Button>
-      </form>
-
-      <section className="mt-10" aria-label={t("recentCaption")}>
+      <section className="mt-8" aria-label={t("recentCaption")}>
         <h2 className="text-lg font-medium">{t("recentCaption")}</h2>
         <DataTable
           className="mt-4"
@@ -360,14 +296,25 @@ export function AnnouncementsClient() {
         />
       </section>
 
+      {publishOpen ? (
+        <PublishAnnouncementDialog
+          onClose={() => setPublishOpen(false)}
+          onPublished={onPublished}
+        />
+      ) : null}
+
       <ConfirmDialog
         open={pendingDelete !== null}
         onOpenChange={(open) => {
           if (!open) setPendingDelete(null);
         }}
         title={t("deleteAnnouncement")}
-        description={`Delete announcement “${pendingDelete?.title}”?`}
+        description={t("deleteAnnouncementDescription", { title: pendingDelete?.title ?? "" })}
         confirmLabel={tCommon("delete")}
+        cancelLabel={tCommon("cancel")}
+        workingLabel={tCommon("working")}
+        errorFallback={tCommon("deleteFailed")}
+        closeLabel={tCommon("close")}
         variant="destructive"
         onConfirm={async () => {
           if (!pendingDelete) return;

@@ -1,6 +1,7 @@
 <?php
 
 return [
+    'page_of' => 'Página :current de :total',
     'prepared_for' => 'Informe de :brand preparado para :organization.',
     'confidential' => 'Este informe contiene información confidencial; el uso no autorizado está estrictamente prohibido.',
     'generated_at' => 'Informe generado el :datetime.',
@@ -105,6 +106,7 @@ return [
     'col_quiz' => 'Cuestionario',
     'no_enrollment_rows' => 'No hay filas de inscripción para los filtros actuales.',
     'truncated_footer' => 'Se muestran las primeras :max filas. Descargue el CSV para la exportación completa.',
+    'row_cap_reached' => 'Solo se incluyen las primeras :max filas. Reduzca el periodo o el departamento para ver el resto.',
 
     'icon_no_action' => 'Sin acción',
     'icon_incomplete' => 'Incompleto',

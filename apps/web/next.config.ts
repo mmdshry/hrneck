@@ -44,6 +44,17 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async redirects() {
+    return [
+      // Login accounts and employees are one list now (Employees), with roles shown per row.
+      { source: "/org/users", destination: "/org/targets", permanent: false },
+      // The learner portal is the employee dashboard now; query strings (course, enrollment, target) carry over.
+      { source: "/learn", destination: "/portal", permanent: false },
+      { source: "/learn/:path*", destination: "/portal", permanent: false },
+      // Knowledge base is its own workspace section with its own permissions.
+      { source: "/org/ticketing/kb", destination: "/org/kb", permanent: false },
+    ];
+  },
   async rewrites() {
     return [
       { source: "/api/:path*", destination: `${apiOrigin}/api/:path*` },

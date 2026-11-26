@@ -15,10 +15,15 @@ export const authGuide: GuideModule = {
     "vérification",
     "session",
     "totp",
+    "sso",
+    "google",
+    "microsoft",
+    "passkey",
+    "clé d'accès",
   ],
   openInAppHref: "/login",
   overview:
-    "HRNECK utilise des sessions par cookie sur les hôtes tenant ({slug}.hrneck.test) et l'alias de l'app. La connexion prend en charge se souvenir de moi, un filtre de vérification e-mail (les utilisateurs créés par un admin sont généralement déjà vérifiés), le MFA TOTP avec codes de récupération à usage unique, et les flux oubli/réinitialisation/changement de mot de passe. La configuration et la désactivation du MFA se trouvent sous Paramètres → MFA pour les opérateurs connectés. Le personnel plateforme et les utilisateurs org partagent les mêmes pages de connexion mais atterrissent sur /msp ou /org selon le rôle. Changer le mot de passe efface tout contexte de tenant personnel.",
+    "HRNECK utilise des sessions par cookie sur les hôtes tenant ({slug}.hrneck.test) et l'alias de l'app. La connexion prend en charge se souvenir de moi, un filtre de vérification e-mail (les utilisateurs créés par un admin sont généralement déjà vérifiés), Continuer avec Google ou Microsoft pour les comptes déjà créés par un administrateur, le MFA TOTP ou les clés d'accès comme second facteur avec codes de récupération à usage unique, et les flux oubli/réinitialisation/changement de mot de passe. La configuration, les clés d'accès et la désactivation du MFA se trouvent sous Paramètres → MFA pour les opérateurs connectés. Le personnel plateforme et les utilisateurs org partagent les mêmes pages de connexion mais atterrissent sur /msp ou /org selon le rôle. Changer le mot de passe efface tout contexte de tenant personnel.",
   example: {
     title: "L'admin org récupère l'accès avant le lancement",
     narrative:
@@ -32,11 +37,11 @@ export const authGuide: GuideModule = {
     },
     {
       title: "Connectez-vous",
-      body: "E-mail et mot de passe avec option se souvenir de moi. Les e-mails non vérifiés sont bloqués jusqu'à la fin de la vérification.",
+      body: "Utilisez e-mail et mot de passe avec option se souvenir de moi, ou Continuer avec Google ou Microsoft lorsque ce bouton apparaît. Les e-mails non vérifiés sont bloqués jusqu'à la fin de la vérification.",
     },
     {
       title: "Validez le MFA lorsqu'il est demandé",
-      body: "Saisissez le code TOTP sur /login/mfa. Si vous perdez l'authenticator, utilisez un code de récupération à usage unique, puis réenregistrez le MFA.",
+      body: "Sur /login/mfa, saisissez le code de votre application d'authentification, ou choisissez Se connecter avec une clé d'accès si vous en avez ajouté une. Si vous perdez les deux, utilisez un code de récupération à usage unique, puis réenregistrez le MFA.",
       href: "/login/mfa",
     },
     {
@@ -46,7 +51,7 @@ export const authGuide: GuideModule = {
     },
     {
       title: "Gérez le MFA dans Paramètres",
-      body: "Les opérateurs connectés configurent, confirment ou désactivent le MFA et consultent les codes de récupération sous Paramètres → MFA.",
+      body: "Les opérateurs connectés configurent, confirment ou désactivent le MFA, ajoutent ou suppriment des clés d'accès et consultent les codes de récupération. Supprimer une clé d'accès demande votre mot de passe. Désactiver le MFA demande votre mot de passe et un code ou une clé d'accès, et supprime toutes les clés d'accès.",
       href: "/org/settings/mfa",
     },
   ],
@@ -60,11 +65,24 @@ export const authGuide: GuideModule = {
         },
         {
           title: "Personnel plateforme",
-          body: "platform_super_admin / platform_agent utilisent /msp et entrent éventuellement dans un tenant. Le MFA Filament utilise les mêmes colonnes d'authenticator sur admin.hrneck.test.",
+          body: "platform_super_admin / platform_agent utilisent /msp et entrent éventuellement dans un tenant. Le MFA Filament sur admin.hrneck.test ne prend en charge qu'une application d'authentification. Les clés d'accès n'y sont pas encore proposées.",
         },
         {
           title: "Apprenants et utilisateurs du portail",
-          body: "Mêmes pages de connexion ; après création de session ils ouvrent /learn ou /portal selon les permissions et l'inscription.",
+          body: "Mêmes pages de connexion ; après création de session ils ouvrent /org (admins org) ou /portal (tableau de bord employé) selon leurs permissions.",
+        },
+      ],
+    },
+    {
+      title: "Options de connexion",
+      steps: [
+        {
+          title: "Google ou Microsoft (SSO)",
+          body: "La page de connexion n'affiche Continuer avec Google ou Continuer avec Microsoft que si votre organisation a configuré ce fournisseur. Le SSO fonctionne uniquement pour les comptes déjà créés par un administrateur : il ne crée jamais d'utilisateur et ne relie un compte existant par e-mail que si le fournisseur confirme cette adresse. Votre fournisseur d'identité gère le MFA, donc l'invite MFA de HRNECK n'apparaît pas après le SSO. La connexion par mot de passe reste disponible à côté du SSO.",
+        },
+        {
+          title: "Clés d'accès",
+          body: "Une clé d'accès, comme celle de cet appareil ou une clé de sécurité, peut être votre second facteur sur /login/mfa, à côté de l'application d'authentification. Ajoutez des clés d'accès sous Paramètres → MFA. Le premier facteur ajouté active le MFA et affiche les codes de récupération une seule fois : conservez-les. Les clés d'accès nécessitent une connexion sécurisée (https:// ou localhost) et ne fonctionnent pas sur un domaine personnalisé de tenant.",
         },
       ],
     },
@@ -100,7 +118,7 @@ export const authGuide: GuideModule = {
     },
     rows: [
       { title: "/login", meta: "E-mail + mot de passe" },
-      { title: "/login/mfa", meta: "TOTP · codes de récupération" },
+      { title: "/login/mfa", meta: "TOTP · clé d'accès · codes de récupération" },
       { title: "/login/forgot", meta: "E-mail de réinitialisation" },
     ],
     annotations: [

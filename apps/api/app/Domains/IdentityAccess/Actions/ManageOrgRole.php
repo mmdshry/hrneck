@@ -35,18 +35,9 @@ class ManageOrgRole
     {
         $this->assertNotReserved($name);
         $this->assertKnownPermissions($permissionNames);
+        $this->assertNameAvailable($tenantId, $name);
 
         setPermissionsTeamId($tenantId);
-
-        if (Role::query()
-            ->where(config('permission.column_names.team_foreign_key'), $tenantId)
-            ->where('name', $name)
-            ->exists()) {
-            setPermissionsTeamId(null);
-            throw ValidationException::withMessages([
-                'name' => ['A role with this name already exists in the organization.'],
-            ]);
-        }
 
         $role = Role::create([
             'name' => $name,
@@ -74,7 +65,8 @@ class ManageOrgRole
         }
 
         if ($name !== null) {
-            $this->assertNotReserved($name, $role->id);
+            $this->assertNotReserved($name);
+            $this->assertNameAvailable($tenantId, $name, $role->id);
         }
 
         $this->assertKnownPermissions($permissionNames);
@@ -118,7 +110,7 @@ class ManageOrgRole
         }
     }
 
-    private function assertNotReserved(string $name, ?int $ignoreId = null): void
+    private function assertNotReserved(string $name): void
     {
         $reserved = [
             ...OrgPermissionCatalog::platformRoles(),
@@ -133,10 +125,23 @@ class ManageOrgRole
                 'name' => ['This role name is reserved.'],
             ]);
         }
+    }
 
-        if ($ignoreId === null && $name === OrgPermissionCatalog::ORG_ADMIN) {
-            // Creating another org_admin via custom create is blocked; use ensure seed instead.
-            // Allow sync of existing org_admin via update path only.
+    /**
+     * Role names are unique per organization; a rename or create must not collide with another role.
+     */
+    private function assertNameAvailable(string $tenantId, string $name, ?int $ignoreRoleId = null): void
+    {
+        $nameTaken = Role::query()
+            ->where(config('permission.column_names.team_foreign_key'), $tenantId)
+            ->where('name', $name)
+            ->when($ignoreRoleId !== null, fn ($query) => $query->whereKeyNot($ignoreRoleId))
+            ->exists();
+
+        if ($nameTaken) {
+            throw ValidationException::withMessages([
+                'name' => ['A role with this name already exists in the organization.'],
+            ]);
         }
     }
 

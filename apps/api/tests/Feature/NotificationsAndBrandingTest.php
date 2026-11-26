@@ -259,9 +259,9 @@ test('training reminder skips email when target opted out', function () {
         'name' => 'Opt-out wave',
         'type' => 'training',
         'status' => 'running',
-        'course_id' => $courseId,
         'starts_at' => now(),
     ]);
+    $campaign->courses()->attach($courseId, ['sort_order' => 0]);
 
     $enrollment = Enrollment::query()->firstOrCreate(
         ['course_id' => $courseId, 'target_id' => $target->id],
@@ -274,7 +274,7 @@ test('training reminder skips email when target opted out', function () {
         'status' => 'pending',
     ]);
 
-    (new SendTrainingReminderJob($recipient->id, $enrollment->id))->handle();
+    (new SendTrainingReminderJob($recipient->id))->handle();
 
     expect($recipient->fresh()->status)->toBe('pending');
     Mail::assertNothingSent();

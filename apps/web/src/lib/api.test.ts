@@ -80,6 +80,7 @@ describe("csrf and session dedupe", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     clearCookies();
+    window.localStorage.removeItem("hrneck_tenant");
   });
 
   it("does not request a csrf cookie when XSRF-TOKEN is already set", async () => {
@@ -151,6 +152,25 @@ describe("csrf and session dedupe", () => {
     await signOut();
     await fetchSessionUser();
 
+    expect(urls.filter((url) => url.includes("/auth/me"))).toHaveLength(2);
+  });
+
+  it("loads /auth/me again when the organization changes", async () => {
+    document.cookie = "XSRF-TOKEN=already-set; path=/";
+    window.localStorage.setItem("hrneck_tenant", "itneck");
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", (input: RequestInfo | URL) => {
+      urls.push(requestUrl(input));
+      return Promise.resolve(jsonResponse({ data: sessionUser }));
+    });
+    const { fetchSessionUser } = await import("./api");
+
+    await fetchSessionUser();
+    await fetchSessionUser();
+    expect(urls.filter((url) => url.includes("/auth/me"))).toHaveLength(1);
+
+    window.localStorage.setItem("hrneck_tenant", "company");
+    await fetchSessionUser();
     expect(urls.filter((url) => url.includes("/auth/me"))).toHaveLength(2);
   });
 
@@ -247,5 +267,71 @@ describe("csrf and session dedupe", () => {
     expect(await fetchSessionUser()).toBeNull();
     expect(await fetchSessionUser()).toBeNull();
     expect(calls).toBe(2);
+  });
+});
+
+
+describe("session subscription", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    clearCookies();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    clearCookies();
+  });
+
+  it("keeps plan, status and usage from /auth/me and drops malformed values", async () => {
+    document.cookie = "XSRF-TOKEN=already-set; path=/";
+    vi.stubGlobal("fetch", () =>
+      Promise.resolve(
+        jsonResponse({
+          data: {
+            ...sessionUser,
+            subscription: {
+              plan_name: "Growth",
+              status: "active",
+              effective_status: "bogus",
+              read_only: true,
+              ends_at: "2026-12-31T00:00:00+00:00",
+              over_limit: true,
+              usage: {
+                employees: { used: "4", limit: 3, over_limit: true },
+                users: { used: 1, limit: null, over_limit: false },
+              },
+            },
+          },
+        }),
+      ),
+    );
+    const { fetchSessionUser } = await import("./api");
+
+    const user = await fetchSessionUser();
+
+    expect(user?.subscription).toEqual({
+      plan_name: "Growth",
+      status: "active",
+      effective_status: null,
+      read_only: true,
+      ends_at: "2026-12-31T00:00:00+00:00",
+      over_limit: true,
+      usage: {
+        employees: { used: 4, limit: 3, over_limit: true },
+        users: { used: 1, limit: null, over_limit: false },
+      },
+    });
+  });
+
+  it("leaves subscription out when /auth/me sends none", async () => {
+    document.cookie = "XSRF-TOKEN=already-set; path=/";
+    vi.stubGlobal("fetch", () =>
+      Promise.resolve(jsonResponse({ data: sessionUser })),
+    );
+    const { fetchSessionUser } = await import("./api");
+
+    const user = await fetchSessionUser();
+
+    expect(user).not.toHaveProperty("subscription");
   });
 });

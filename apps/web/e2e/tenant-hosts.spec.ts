@@ -37,7 +37,7 @@ test.describe("tenant host shells", () => {
     await page.getByRole("button", { name: /continue/i }).click();
     await page.waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: 20_000 });
 
-    await page.goto("/learn");
+    await page.goto("/portal");
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     await expect(
       page.getByText(/learner portal|security fundamentals|progress|assigned/i).first(),

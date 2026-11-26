@@ -30,7 +30,6 @@ test('creating a target links user_id and stores profile fields', function () {
             'email' => 'manager.boss@example.test',
             'first_name' => 'Boss',
             'last_name' => 'Manager',
-            'timezone' => 'UTC',
         ])
         ->assertCreated();
 
@@ -49,7 +48,6 @@ test('creating a target links user_id and stores profile fields', function () {
             'location' => 'Iran/Tehran',
             'employment_type' => 'full_time',
             'preferred_language' => 'fa',
-            'timezone' => 'Asia/Tehran',
             'manager_target_id' => $managerId,
             'risk_score' => 40,
             'risk_tier' => 'high',
@@ -86,7 +84,6 @@ test('updating a target ignores client risk fields and rejects invalid locations
         ->withHeader('X-Tenant', 'itneck')
         ->postJson('/api/v1/org/targets', [
             'email' => 'profile.update@example.test',
-            'timezone' => 'UTC',
             'location' => 'Iran/Tehran',
             'preferred_language' => 'es',
         ])
@@ -128,8 +125,8 @@ test('csv import accepts extended headers and manager_email', function () {
     Tenancy::end();
 
     $csv = implode("\n", [
-        'email,first_name,last_name,department,job_title,employee_number,phone,location,employment_type,hire_date,manager_email,preferred_language,timezone,external_id,risk_score,risk_tier',
-        'csv.report@example.test,Csv,Report,Security,Engineer,E-200,+1000,Iran/Tehran,contractor,2025-11-01,csv.manager@example.test,en,UTC,ext-200,12,low',
+        'email,first_name,last_name,department,job_title,employee_number,phone,location,employment_type,hire_date,manager_email,preferred_language,external_id,risk_score,risk_tier',
+        'csv.report@example.test,Csv,Report,Security,Engineer,E-200,+1000,Iran/Tehran,contractor,2025-11-01,csv.manager@example.test,en,ext-200,12,low',
         '',
     ]);
     $file = UploadedFile::fake()->createWithContent('targets.csv', $csv);
@@ -299,7 +296,6 @@ test('employee cannot be their own manager', function () {
         ->postJson('/api/v1/org/targets', [
             'email' => 'self.manager@example.test',
             'first_name' => 'Self',
-            'timezone' => 'UTC',
         ])
         ->assertCreated();
 

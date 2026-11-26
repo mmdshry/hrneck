@@ -2,14 +2,20 @@
 
 namespace App\Http\Controllers\Api\V1\Org;
 
+use App\Domains\AnalyticsReporting\Support\ReportPdf;
 use App\Domains\Audit\Actions\LogOrgActivity;
 use App\Domains\Campaigns\Actions\LaunchTrainingCampaign;
 use App\Domains\Campaigns\Actions\ResolveCampaignAudience;
+use App\Domains\Campaigns\Actions\ResolveEnrollmentAccess;
+use App\Domains\Campaigns\Actions\ScheduleTrainingLaunch;
+use App\Domains\Campaigns\Actions\SyncCampaignCourses;
 use App\Domains\Campaigns\Models\Campaign;
+use App\Domains\Campaigns\Support\CampaignWindow;
 use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
 use App\Domains\Realtime\Support\LiveTopics;
 use App\Domains\Realtime\Support\PublishLive;
 use App\Domains\TargetsGroups\Support\ResolveActiveTarget;
+use App\Domains\TrainingLms\Actions\RecordTrainingAttestation;
 use App\Domains\TrainingLms\Actions\SyncEnrollmentProgress;
 use App\Domains\TrainingLms\Models\Course;
 use App\Domains\TrainingLms\Models\Enrollment;
@@ -22,7 +28,6 @@ use App\Http\Controllers\Controller;
 use App\Support\ApiPagination;
 use App\Support\ListQuery;
 use App\Support\Storage\AssertTenantStoragePath;
-use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -108,7 +113,7 @@ class TrainingController extends Controller
     public function destroyCourse(int $course, LogOrgActivity $audit): JsonResponse
     {
         $model = Course::query()->findOrFail($course);
-        if (Campaign::query()->where('course_id', $model->id)->exists()) {
+        if (Campaign::query()->whereHas('courses', fn ($query) => $query->where('courses.id', $model->id))->exists()) {
             throw ValidationException::withMessages([
                 'course' => ['This course is still used by a campaign. Archive or delete that campaign first.'],
             ]);
@@ -242,13 +247,12 @@ class TrainingController extends Controller
             if ($targetId === null) {
                 $this->abortWithoutLearnerProfile();
             }
-            abort_unless(
-                Enrollment::query()
-                    ->where('target_id', $targetId)
-                    ->where('course_id', $model->course_id)
-                    ->exists(),
-                403,
-            );
+            $enrollment = Enrollment::query()
+                ->where('target_id', $targetId)
+                ->where('course_id', $model->course_id)
+                ->first();
+            abort_unless($enrollment !== null, 403);
+            $this->assertEnrollmentAvailable($enrollment);
         }
 
         abort_unless($model->media_disk_path && Storage::disk($this->trainingDisk())->exists($model->media_disk_path), 404);
@@ -420,10 +424,10 @@ class TrainingController extends Controller
             'generatedAt' => now()->toIso8601String(),
         ])->render();
 
-        $pdf = Pdf::loadHTML($html)->setPaper('a4', 'landscape');
+        $pdf = ReportPdf::render($html);
 
         return response()->streamDownload(function () use ($pdf): void {
-            echo $pdf->output();
+            echo $pdf;
         }, 'training-viewing-report.pdf', [
             'Content-Type' => 'application/pdf',
         ]);
@@ -433,6 +437,8 @@ class TrainingController extends Controller
         Request $request,
         LaunchTrainingCampaign $train,
         ResolveCampaignAudience $audience,
+        ScheduleTrainingLaunch $schedule,
+        SyncCampaignCourses $syncCourses,
         LogOrgActivity $audit,
     ): JsonResponse {
         $data = $request->validate([
@@ -456,11 +462,18 @@ class TrainingController extends Controller
             'group_ids' => ['required_without:target_ids', 'array'],
             'group_ids.*' => ['integer'],
             'is_remedial' => ['sometimes', 'boolean'],
+            'starts_at' => ['nullable', 'date'],
+            'expires_at' => ['nullable', 'date'],
             'launch' => ['sometimes', 'boolean'],
         ]);
 
         $targetIds = $audience->handle($data['target_ids'] ?? [], $data['group_ids'] ?? []);
+        $groupIds = array_map(intval(...), $data['group_ids'] ?? []);
         $shouldLaunch = $request->boolean('launch', true);
+        $startsAt = CampaignWindow::parse($data['starts_at'] ?? null);
+        $expiresAt = CampaignWindow::parse($data['expires_at'] ?? null);
+        CampaignWindow::assertOrdered($startsAt, $expiresAt);
+        $deferred = $shouldLaunch && CampaignWindow::startsLater($startsAt);
         $courses = collect();
 
         if (! empty($data['content'])) {
@@ -536,21 +549,21 @@ class TrainingController extends Controller
                 'type' => 'training',
                 'status' => 'draft',
                 'is_remedial' => $request->boolean('is_remedial'),
-                'course_id' => $course->id,
+                'starts_at' => $startsAt,
+                'expires_at' => $expiresAt,
             ]);
+            $campaign = $syncCourses->handle($campaign, [(int) $course->id]);
 
-            if ($shouldLaunch) {
-                $campaign = $train->handle(
-                    $campaign,
-                    $targetIds,
-                    array_map(intval(...), $data['group_ids'] ?? []),
-                );
+            if ($deferred) {
+                $campaign = $schedule->handle($campaign, $targetIds, $groupIds);
+            } elseif ($shouldLaunch) {
+                $campaign = $train->handle($campaign, $targetIds, $groupIds);
             }
 
-            $campaigns->push($campaign->load(['recipients', 'course.lessons']));
+            $campaigns->push($campaign->load(['recipients', 'courses.lessons']));
         }
 
-        if (! $shouldLaunch) {
+        if (! $shouldLaunch || $deferred) {
             PublishLive::metricsBundle();
         }
 
@@ -567,8 +580,7 @@ class TrainingController extends Controller
 
         $payload = [
             'campaign' => $primaryCampaign,
-            'course' => $primaryCampaign?->course?->load('lessons')
-                ?? $primaryCourse?->load('lessons'),
+            'course' => $primaryCourse?->loadMissing('lessons'),
             'assigned_target_ids' => $targetIds,
         ];
 
@@ -585,29 +597,48 @@ class TrainingController extends Controller
         $data = $request->validate([
             'enrollment_id' => ['required', 'integer'],
             'assignment_id' => ['sometimes', 'nullable', 'integer'],
-            'progress' => ['required', 'integer', 'min:0', 'max:100'],
         ]);
 
         $assignmentId = isset($data['assignment_id']) ? (int) $data['assignment_id'] : null;
         $enrollment = $this->ownedEnrollment($request, (int) $data['enrollment_id']);
+        $this->assertEnrollmentAvailable($enrollment);
         $sync->markOpened($enrollment, $assignmentId);
-        $enrollment->forceFill([
-            'progress' => $data['progress'],
-            'status' => $data['progress'] >= 100 ? 'completed' : 'in_progress',
-            'completed_at' => $data['progress'] >= 100 ? now() : null,
-        ])->save();
 
-        if ($data['progress'] >= 100) {
-            $sync->recompute($enrollment->fresh() ?? $enrollment, $assignmentId);
-        }
+        // Completion is derived from lessons, required quizzes and the attestation.
+        // A client-supplied progress value cannot mark the course complete.
+        $enrollment = $sync->recompute(
+            $enrollment->fresh(['course.lessons', 'course.quizzes', 'target']) ?? $enrollment,
+            $assignmentId,
+        );
 
         PublishLive::metricsBundle(throttled: true);
-        $fresh = $enrollment->fresh(['target']);
-        if ($fresh?->target?->email) {
-            PublishLive::learnForTargetEmail((string) $fresh->target->email);
+        if ($enrollment->target?->email) {
+            PublishLive::learnForTargetEmail((string) $enrollment->target->email);
         }
 
-        return response()->json(['data' => $fresh]);
+        return response()->json(['data' => $enrollment]);
+    }
+
+    public function attest(Request $request, RecordTrainingAttestation $attestation): JsonResponse
+    {
+        $data = $request->validate([
+            'enrollment_id' => ['required', 'integer'],
+            'accepted' => ['required', 'accepted'],
+            'assignment_id' => ['sometimes', 'nullable', 'integer'],
+        ]);
+
+        $assignmentId = isset($data['assignment_id']) ? (int) $data['assignment_id'] : null;
+        $enrollment = $this->ownedEnrollment($request, (int) $data['enrollment_id']);
+        $this->assertEnrollmentAvailable($enrollment);
+
+        $enrollment = $attestation->handle($enrollment, $request->ip(), $request->userAgent(), $assignmentId);
+
+        PublishLive::metricsBundle(throttled: true);
+        if ($enrollment->target?->email) {
+            PublishLive::learnForTargetEmail((string) $enrollment->target->email);
+        }
+
+        return response()->json(['data' => $enrollment]);
     }
 
     public function updateLessonProgress(Request $request, SyncEnrollmentProgress $sync): JsonResponse
@@ -623,7 +654,9 @@ class TrainingController extends Controller
         ]);
 
         $assignmentId = isset($data['assignment_id']) ? (int) $data['assignment_id'] : null;
-        $enrollment = $this->ownedEnrollment($request, (int) $data['enrollment_id'])->load('course.lessons');
+        $enrollment = $this->ownedEnrollment($request, (int) $data['enrollment_id']);
+        $this->assertEnrollmentAvailable($enrollment);
+        $enrollment->load('course.lessons');
         $lesson = Lesson::query()->where('course_id', $enrollment->course_id)->findOrFail($data['lesson_id']);
 
         $sync->markOpened($enrollment, $assignmentId);
@@ -709,6 +742,20 @@ class TrainingController extends Controller
             }
         }
 
+        $enrollment = null;
+        if (! empty($data['enrollment_id'])) {
+            $enrollment = $this->ownedEnrollment($request, (int) $data['enrollment_id']);
+        }
+        if (! $enrollment) {
+            $enrollment = Enrollment::query()
+                ->where('course_id', $quiz->course_id)
+                ->where('target_id', $targetId)
+                ->first();
+        }
+        if ($enrollment) {
+            $this->assertEnrollmentAvailable($enrollment);
+        }
+
         $correct = 0;
         $mcqTotal = 0;
         foreach ($quiz->questions as $index => $question) {
@@ -732,16 +779,6 @@ class TrainingController extends Controller
             'started_at' => $startedAt,
         ]);
 
-        $enrollment = null;
-        if (! empty($data['enrollment_id'])) {
-            $enrollment = $this->ownedEnrollment($request, (int) $data['enrollment_id']);
-        }
-        if (! $enrollment) {
-            $enrollment = Enrollment::query()
-                ->where('course_id', $quiz->course_id)
-                ->where('target_id', $targetId)
-                ->first();
-        }
         if ($enrollment) {
             $assignmentId = isset($data['assignment_id']) ? (int) $data['assignment_id'] : null;
             $sync->markOpened($enrollment, $assignmentId);
@@ -839,7 +876,7 @@ class TrainingController extends Controller
         $courseId = $request->integer('course_id') ?: null;
 
         $query = Enrollment::query()
-            ->with(['course.lessons', 'course.quizzes.questions', 'lessonProgress', 'target'])
+            ->with(['course.lessons', 'course.quizzes.questions', 'lessonProgress', 'target', 'assignments.campaign'])
             ->where('target_id', $targetId)
             ->latest();
 
@@ -847,7 +884,14 @@ class TrainingController extends Controller
             $query->where('course_id', $courseId);
         }
 
-        return response()->json(['data' => $query->get()]);
+        $enrollments = $query->get();
+        $access = app(ResolveEnrollmentAccess::class);
+        $enrollments->each(function (Enrollment $enrollment) use ($access): void {
+            $enrollment->setAttribute('availability', $access->handle($enrollment)->value);
+            $enrollment->makeHidden('assignments');
+        });
+
+        return response()->json(['data' => $enrollments]);
     }
 
     private function abortWithoutLearnerProfile(): never
@@ -860,6 +904,14 @@ class TrainingController extends Controller
     private function ownedTargetId(Request $request): ?int
     {
         return app(ResolveActiveTarget::class)->idForUser($request->user());
+    }
+
+    private function assertEnrollmentAvailable(Enrollment $enrollment): void
+    {
+        $message = app(ResolveEnrollmentAccess::class)->handle($enrollment)->message();
+        if ($message !== null) {
+            abort(response()->json(['message' => $message], 403));
+        }
     }
 
     private function ownedEnrollment(Request $request, int $enrollmentId): Enrollment

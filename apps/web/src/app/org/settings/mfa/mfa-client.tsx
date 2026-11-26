@@ -1,115 +1,108 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useEffect, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
+import { useClientSnapshot } from "@/hooks/use-client-snapshot";
 import { api, ensureCsrf, fetchSessionUser } from "@/lib/api";
+import { formatDateTime } from "@/lib/format-datetime";
 import type { SessionUser } from "@/lib/session";
-import { toastError, toastSuccess } from "@/lib/toast";
+import { toastError } from "@/lib/toast";
+import { checkPasskeySupport, type PasskeyCheck } from "@/lib/webauthn";
+import { AddPasskeyDialog } from "./add-passkey-dialog";
+import { ChangePasswordDialog } from "./change-password-dialog";
+import { DisableMfaDialog } from "./disable-mfa-dialog";
+import { RemovePasskeyDialog } from "./remove-passkey-dialog";
+import { TotpSetupWizard, type TotpSetup } from "./totp-setup-wizard";
 
-type Setup = {
-  secret: string;
-  otpauth_url: string;
-  qr_svg: string;
+type Passkey = {
+  id: number;
+  name: string;
+  created_at: string | null;
+  last_used_at: string | null;
 };
+
+/** Personal security timestamps follow the viewer's clock, unlike org data which uses the tenant zone. */
+function browserTimeZone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
 
 export function MfaSetupClient() {
   const t = useTranslations("account");
   const tCommon = useTranslations("common");
   const tNav = useTranslations("nav");
+  const locale = useLocale();
   const [user, setUser] = useState<SessionUser | null>(null);
-  const [setup, setSetup] = useState<Setup | null>(null);
-  const [code, setCode] = useState("");
-  const [disablePassword, setDisablePassword] = useState("");
-  const [disableCode, setDisableCode] = useState("");
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [newPasswordConfirmation, setNewPasswordConfirmation] = useState("");
-  const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
+  const [setup, setSetup] = useState<TotpSetup | null>(null);
+  const [startingSetup, setStartingSetup] = useState(false);
+  const [passkeys, setPasskeys] = useState<Passkey[] | null>(null);
+  /** null when the list loaded; otherwise the server's reason, or "" when none was given. */
+  const [passkeysError, setPasskeysError] = useState<string | null>(null);
+  const passkeyCheck = useClientSnapshot<PasskeyCheck>(
+    checkPasskeySupport,
+    () => "pending",
+  );
+  const [addingPasskey, setAddingPasskey] = useState(false);
+  const [removingPasskey, setRemovingPasskey] = useState<Passkey | null>(null);
+  const [disablingMfa, setDisablingMfa] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
 
   useEffect(() => {
     void fetchSessionUser()
       .then(setUser)
       .catch(() => setUser(null));
+    void api<{ data: Passkey[] }>("/api/v1/auth/passkeys")
+      .then((res) => {
+        setPasskeys(res.data);
+        setPasskeysError(null);
+      })
+      .catch((err: unknown) =>
+        setPasskeysError(err instanceof Error ? err.message : ""),
+      );
   }, []);
 
-  async function begin() {
-    setRecoveryCodes(null);
+  async function refreshUser() {
+    setUser(await fetchSessionUser());
+  }
+
+  async function loadPasskeys() {
+    try {
+      const res = await api<{ data: Passkey[] }>("/api/v1/auth/passkeys");
+      setPasskeys(res.data);
+      setPasskeysError(null);
+    } catch (err) {
+      setPasskeysError(err instanceof Error ? err.message : "");
+    }
+  }
+
+  async function reloadAccountState() {
+    await Promise.all([loadPasskeys(), refreshUser()]);
+  }
+
+  function formatWhen(value: string | null): string {
+    return formatDateTime(value, browserTimeZone(), locale);
+  }
+
+  async function beginTotpSetup() {
+    setStartingSetup(true);
     try {
       await ensureCsrf();
-      const res = await api<Setup>("/api/v1/auth/mfa/setup", { method: "POST" });
+      const res = await api<TotpSetup>("/api/v1/auth/mfa/setup", {
+        method: "POST",
+      });
       setSetup(res);
     } catch (err) {
       toastError(err instanceof Error ? err.message : t("setupFailed"));
+    } finally {
+      setStartingSetup(false);
     }
   }
 
-  async function confirm(event: FormEvent) {
-    event.preventDefault();
-    try {
-      await ensureCsrf();
-      const res = await api<{ recovery_codes?: string[] }>("/api/v1/auth/mfa/confirm", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code }),
-      });
-      setRecoveryCodes(Array.isArray(res.recovery_codes) ? res.recovery_codes : []);
-      setSetup(null);
-      setCode("");
-      toastSuccess(t("mfaConfirmed"));
-      const refreshed = await fetchSessionUser();
-      setUser(refreshed);
-    } catch (err) {
-      toastError(err instanceof Error ? err.message : t("confirmFailed"));
-    }
-  }
-
-  async function disable(event: FormEvent) {
-    event.preventDefault();
-    try {
-      await ensureCsrf();
-      await api("/api/v1/auth/mfa/disable", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: disablePassword, code: disableCode }),
-      });
-      setDisablePassword("");
-      setDisableCode("");
-      setRecoveryCodes(null);
-      toastSuccess(t("mfaDisabled"));
-      const refreshed = await fetchSessionUser();
-      setUser(refreshed);
-    } catch (err) {
-      toastError(err instanceof Error ? err.message : t("disableFailed"));
-    }
-  }
-
-  async function changePassword(event: FormEvent) {
-    event.preventDefault();
-    try {
-      await ensureCsrf();
-      await api("/api/v1/auth/password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          current_password: currentPassword,
-          password: newPassword,
-          password_confirmation: newPasswordConfirmation,
-        }),
-      });
-      setCurrentPassword("");
-      setNewPassword("");
-      setNewPasswordConfirmation("");
-      toastSuccess(t("passwordUpdated"));
-    } catch (err) {
-      toastError(err instanceof Error ? err.message : t("passwordUpdateFailed"));
-    }
-  }
+  const hasPasskeys = (passkeys?.length ?? 0) > 0;
+  const canDisableWithPasskey = passkeyCheck === "supported" && hasPasskeys;
 
   return (
     <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-8 sm:px-6">
@@ -133,124 +126,172 @@ export function MfaSetupClient() {
         <LanguageSwitcher variant="list" />
       </section>
 
-      <section className="mt-8 space-y-4">
-        <h2 className="font-[family-name:var(--font-display)] text-xl">{t("mfaHeading")}</h2>
+      <section className="mt-8 space-y-8">
+        <h2 className="font-[family-name:var(--font-display)] text-xl">
+          {t("mfaHeading")}
+        </h2>
         <p className="text-sm text-[var(--muted-foreground)]">
           {t("status", {
-            status: user?.mfa_enabled ? tCommon("enabled") : tCommon("notEnabled"),
+            status: user?.mfa_enabled
+              ? tCommon("enabled")
+              : tCommon("notEnabled"),
           })}
         </p>
-        {!user?.mfa_enabled ? (
-          <Button type="button" onClick={() => void begin()}>
-            {t("generateQr")}
-          </Button>
-        ) : null}
-        {setup ? (
-          <div className="space-y-4">
-            <div
-              role="img"
-              aria-label={t("authenticatorQr")}
-              className="inline-block rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 shadow-[var(--shadow-sm)]"
-              dangerouslySetInnerHTML={{ __html: setup.qr_svg }}
-            />
-            <p className="text-sm text-[var(--muted-foreground)] break-all">
-              {t("secret", { secret: setup.secret })}
+
+        <div className="space-y-4">
+          <h3 className="text-base font-medium">
+            {t("authenticatorAppHeading")}
+          </h3>
+          {user?.mfa_totp_enabled ? (
+            <p className="text-sm text-[var(--muted-foreground)]">
+              {t("authenticatorAppConnected")}
             </p>
-            <form onSubmit={confirm} className="flex flex-wrap items-end gap-2">
-              <div className="min-w-[200px] flex-1 space-y-1">
-                <Label htmlFor="mfa-code" className="text-[var(--muted-foreground)]">
-                  {t("code")}
-                </Label>
-                <Input
-                  id="mfa-code"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  autoComplete="one-time-code"
-                />
-              </div>
-              <Button type="submit" variant="secondary">
-                {t("confirm")}
+          ) : (
+            <Button
+              type="button"
+              disabled={startingSetup}
+              onClick={() => void beginTotpSetup()}
+            >
+              {t("generateQr")}
+            </Button>
+          )}
+        </div>
+
+        <div className="space-y-4">
+          <h3 className="text-base font-medium">{t("passkeysHeading")}</h3>
+          <p className="text-sm text-[var(--muted-foreground)]">
+            {t("passkeysDescription")}
+          </p>
+
+          {passkeysError !== null ? (
+            <div
+              role="alert"
+              className="flex flex-wrap items-center gap-3 text-sm text-[var(--destructive)]"
+            >
+              <span>
+                {t("passkeysLoadFailed")}
+                {passkeysError ? ` ${passkeysError}` : ""}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => void loadPasskeys()}
+              >
+                {t("passkeysRetry")}
               </Button>
-            </form>
-          </div>
-        ) : null}
-        {recoveryCodes && recoveryCodes.length > 0 ? (
-          <div className="rounded-[var(--radius)] border border-[var(--success)]/40 bg-[var(--success)]/10 px-[var(--space-md)] py-[var(--space-sm)] text-sm text-[var(--success)]">
-            <p className="font-medium">{t("recoveryCodes")}</p>
-            <ul className="mt-2 list-disc pl-5 font-mono text-xs">
-              {recoveryCodes.map((item) => (
-                <li key={item}>{item}</li>
+            </div>
+          ) : null}
+
+          {passkeys && passkeys.length === 0 && passkeysError === null ? (
+            <p className="text-sm text-[var(--muted-foreground)]">
+              {t("passkeysEmpty")}
+            </p>
+          ) : null}
+
+          {hasPasskeys ? (
+            <ul className="space-y-3">
+              {passkeys?.map((passkey) => (
+                <li
+                  key={passkey.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-[var(--space-md)]"
+                >
+                  <div className="min-w-0 space-y-1">
+                    <p className="font-medium">{passkey.name}</p>
+                    <p className="text-xs text-[var(--muted-foreground)]">
+                      {t("passkeyCreatedAt", {
+                        date: formatWhen(passkey.created_at),
+                      })}
+                      {" · "}
+                      {passkey.last_used_at
+                        ? t("passkeyLastUsedAt", {
+                            date: formatWhen(passkey.last_used_at),
+                          })
+                        : t("passkeyNeverUsed")}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setRemovingPasskey(passkey)}
+                  >
+                    {t("passkeyRemove")}
+                  </Button>
+                </li>
               ))}
             </ul>
-          </div>
-        ) : null}
-        {user?.mfa_enabled ? (
-          <form onSubmit={disable} className="mt-4 grid max-w-md gap-3">
-            <p className="text-sm text-[var(--muted-foreground)]">
-              {t("disableHint")}
-            </p>
-            <div className="space-y-1">
-              <Label htmlFor="disable-password">{t("password")}</Label>
-              <Input
-                id="disable-password"
-                type="password"
-                value={disablePassword}
-                onChange={(e) => setDisablePassword(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="disable-code">{t("authenticatorOrRecovery")}</Label>
-              <Input
-                id="disable-code"
-                value={disableCode}
-                onChange={(e) => setDisableCode(e.target.value)}
-                required
-              />
-            </div>
-            <Button type="submit" variant="secondary">
-              {t("disableMfa")}
+          ) : null}
+
+          {passkeyCheck === "pending" ? null : passkeyCheck === "supported" ? (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setAddingPasskey(true)}
+            >
+              {t("addPasskey")}
             </Button>
-          </form>
+          ) : (
+            <p className="text-sm text-[var(--muted-foreground)]">
+              {passkeyCheck === "insecure"
+                ? t("passkeysNeedHttps")
+                : t("passkeysUnsupported")}
+            </p>
+          )}
+        </div>
+
+        {user?.mfa_enabled ? (
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setDisablingMfa(true)}
+          >
+            {t("disableMfa")}
+          </Button>
         ) : null}
       </section>
 
       <section className="mt-12 space-y-4">
-        <h2 className="font-[family-name:var(--font-display)] text-xl">{t("changePassword")}</h2>
-        <form onSubmit={changePassword} className="grid max-w-md gap-3">
-          <div className="space-y-1">
-            <Label htmlFor="current-password">{t("currentPassword")}</Label>
-            <Input
-              id="current-password"
-              type="password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              required
-            />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="new-password">{t("newPassword")}</Label>
-            <Input
-              id="new-password"
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              required
-            />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="new-password-confirmation">{t("confirmNewPassword")}</Label>
-            <Input
-              id="new-password-confirmation"
-              type="password"
-              value={newPasswordConfirmation}
-              onChange={(e) => setNewPasswordConfirmation(e.target.value)}
-              required
-            />
-          </div>
-          <Button type="submit">{t("updatePassword")}</Button>
-        </form>
+        <h2 className="font-[family-name:var(--font-display)] text-xl">
+          {t("changePassword")}
+        </h2>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => setChangingPassword(true)}
+        >
+          {t("changePassword")}
+        </Button>
       </section>
+
+      {setup ? (
+        <TotpSetupWizard
+          setup={setup}
+          onConfirmed={refreshUser}
+          onClose={() => setSetup(null)}
+        />
+      ) : null}
+      {addingPasskey ? (
+        <AddPasskeyDialog
+          onClose={() => setAddingPasskey(false)}
+          onAdded={reloadAccountState}
+        />
+      ) : null}
+      {removingPasskey ? (
+        <RemovePasskeyDialog
+          passkey={removingPasskey}
+          onClose={() => setRemovingPasskey(null)}
+          onRemoved={reloadAccountState}
+        />
+      ) : null}
+      {disablingMfa ? (
+        <DisableMfaDialog
+          canUsePasskey={canDisableWithPasskey}
+          onClose={() => setDisablingMfa(false)}
+          onDisabled={reloadAccountState}
+        />
+      ) : null}
+      {changingPassword ? (
+        <ChangePasswordDialog onClose={() => setChangingPassword(false)} />
+      ) : null}
     </div>
   );
 }

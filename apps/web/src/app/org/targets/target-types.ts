@@ -29,7 +29,6 @@ export type Target = {
   location?: string | null;
   employment_type?: string | null;
   preferred_language?: string | null;
-  timezone?: string | null;
   status?: string | null;
   external_id?: string | null;
   avatar_path?: string | null;
@@ -42,6 +41,8 @@ export type Target = {
   notification_opt_out?: boolean | null;
   joined_via?: string | null;
   user_id?: number | null;
+  /** Role names of the linked login in this organization (empty when it has none or no login). */
+  account_roles?: string[] | null;
   groups?: Array<{ id: number; name: string }>;
 };
 
@@ -58,30 +59,15 @@ export type TargetFormState = {
   location: string;
   employment_type: string;
   preferred_language: string;
-  timezone: string;
   external_id: string;
   notification_opt_out: boolean;
   status: string;
 };
 
-export const EMPLOYMENT_TYPE_OPTIONS = [
-  { label: "Full time", value: "full_time" },
-  { label: "Part time", value: "part_time" },
-  { label: "Contractor", value: "contractor" },
-  { label: "Intern", value: "intern" },
-];
-
-export const RISK_TIER_OPTIONS = [
-  { label: "Unknown", value: "unknown" },
-  { label: "Low", value: "low" },
-  { label: "Medium", value: "medium" },
-  { label: "High", value: "high" },
-];
-
 export const PREFERRED_LANGUAGE_OPTIONS = localeOptions;
 
 export const CSV_HEADERS =
-  "email,first_name,last_name,department,job_title,employee_number,phone,location,employment_type,hire_date,manager_email,preferred_language,timezone,external_id";
+  "email,first_name,last_name,department,job_title,employee_number,phone,location,employment_type,hire_date,manager_email,preferred_language,external_id";
 
 export function languageLabel(code: string | null | undefined): string {
   if (!code) {
@@ -105,7 +91,6 @@ export function emptyTargetForm(): TargetFormState {
     location: "",
     employment_type: "",
     preferred_language: "",
-    timezone: "UTC",
     external_id: "",
     notification_opt_out: false,
     status: "active",
@@ -131,7 +116,6 @@ export function formFromTarget(target: Target): TargetFormState {
         ? language
         : normalizeLocale(language)
       : "",
-    timezone: target.timezone?.trim() || "UTC",
     external_id: target.external_id ?? "",
     notification_opt_out: Boolean(target.notification_opt_out),
     status: target.status ?? "active",
@@ -152,7 +136,6 @@ export function payloadFromForm(form: TargetFormState, options?: { includeStatus
     location: form.location.trim() || null,
     employment_type: form.employment_type || null,
     preferred_language: form.preferred_language.trim() || null,
-    timezone: form.timezone.trim() || "UTC",
     external_id: form.external_id.trim() || null,
     notification_opt_out: form.notification_opt_out,
   };

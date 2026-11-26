@@ -1,6 +1,7 @@
 <?php
 
 return [
+    'page_of' => 'Page :current sur :total',
     'prepared_for' => 'Rapport :brand préparé pour :organization.',
     'confidential' => 'Ce rapport contient des informations confidentielles ; toute utilisation non autorisée est strictement interdite.',
     'generated_at' => 'Rapport généré le :datetime.',
@@ -105,6 +106,7 @@ return [
     'col_quiz' => 'Quiz',
     'no_enrollment_rows' => 'Aucune ligne d’inscription pour les filtres actuels.',
     'truncated_footer' => 'Affichage des :max premières lignes. Téléchargez le CSV pour l’export complet.',
+    'row_cap_reached' => 'Seules les :max premières lignes sont incluses. Réduisez la période ou le service pour voir le reste.',
 
     'icon_no_action' => 'Aucune action',
     'icon_incomplete' => 'Incomplet',

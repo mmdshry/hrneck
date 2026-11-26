@@ -22,7 +22,7 @@ export const checklistsGuide: GuideModule = {
   ],
   openInAppHref: "/org/checklists",
   overview:
-    "Checklists are internal HR workflows—not learner content and never shown in /learn. Admins design flexible templates, copy the five system HR templates, bundle packs (for example a Welcome Pack), connect instances to employees, and fill them as operators. On save you choose whether a new template schema applies to open instances or only to new ones. Published packs can auto-assign when a new employee is created. Every answer change lands in the tenant activity log.",
+    "Checklists are internal HR workflows—not learner content and never shown on /portal. Admins design flexible templates, copy the five system HR templates, bundle packs (for example a Welcome Pack), connect instances to employees, and fill them as operators. On save you choose whether a new template schema applies to open instances or only to new ones. Published packs can auto-assign when a new employee is created. Every answer change lands in the tenant activity log.",
   example: {
     title: "New hire Welcome Pack",
     narrative:

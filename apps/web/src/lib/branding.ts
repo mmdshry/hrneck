@@ -3,6 +3,8 @@ export type OrgBranding = {
   primary_color?: string | null;
   logo_path?: string | null;
   logo_url?: string | null;
+  /** Organization (tenant) timezone; all recorded times are shown in this zone. */
+  timezone?: string | null;
 };
 
 const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Domains\IdentityAccess\Models\WebauthnCredential;
 use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
 use App\Support\ActiveOrgTenant;
 use Database\Factories\UserFactory;
@@ -57,14 +58,57 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
             return false;
         }
 
+        return $this->hasGlobalPlatformRole(OrgPermissionCatalog::platformRoles());
+    }
+
+    public function isPlatformSuperAdmin(): bool
+    {
+        if ($this->belongsToAnyTenant()) {
+            return false;
+        }
+
+        return $this->hasGlobalPlatformRole(OrgPermissionCatalog::PLATFORM_SUPER_ADMIN);
+    }
+
+    /**
+     * Platform roles are global (team id null). Spatie caches the roles relation per instance, and
+     * any permission check under a tenant team (for example Spatie's own Gate::before) loads a relation
+     * that omits them. Drop that cache so the check always reads the global team, then restore both.
+     *
+     * @param  string|list<string>  $roles
+     */
+    private function hasGlobalPlatformRole(string|array $roles): bool
+    {
         $previous = getPermissionsTeamId();
         setPermissionsTeamId(null);
+        $this->unsetRelation('roles');
 
         try {
-            return $this->hasAnyRole(OrgPermissionCatalog::platformRoles());
+            return $this->hasRole($roles);
         } finally {
+            $this->unsetRelation('roles');
             setPermissionsTeamId($previous);
         }
+    }
+
+    /**
+     * Key used for password-reset and invite tokens. Organization logins can share an email,
+     * so the tenant is part of the key; platform staff keep the plain email.
+     */
+    public function getEmailForPasswordReset(): string
+    {
+        $email = (string) $this->email;
+
+        return $this->tenant_id !== null ? $this->tenant_id.'|'.$email : $email;
+    }
+
+    /**
+     * @param  Builder<User>  $query
+     * @return Builder<User>
+     */
+    public function scopeWithEmail(Builder $query, string $email): Builder
+    {
+        return $query->whereRaw('LOWER(email) = ?', [strtolower(trim($email))]);
     }
 
     public function isOrgUser(): bool
@@ -166,6 +210,18 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
         return $this->hasMany(TenantMembership::class);
     }
 
+    /** @return HasMany<UserIdentity, $this> */
+    public function identities(): HasMany
+    {
+        return $this->hasMany(UserIdentity::class);
+    }
+
+    /** @return HasMany<WebauthnCredential, $this> */
+    public function webauthnCredentials(): HasMany
+    {
+        return $this->hasMany(WebauthnCredential::class);
+    }
+
     /** @param  Builder<static>  $query */
     public function scopeInTenant(Builder $query, string $tenantId, bool $activeOnly = true): Builder
     {
@@ -192,11 +248,14 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
     public function saveAppAuthenticationSecret(#[SensitiveParameter] ?string $secret): void
     {
         if ($secret === null || $secret === '') {
+            // Removing the authenticator app must not drop a still-active passkey factor.
+            $hasPasskeys = $this->webauthnCredentials()->exists();
+
             $this->forceFill([
                 'mfa_secret' => null,
-                'mfa_enabled' => false,
-                'mfa_confirmed_at' => null,
-                'mfa_recovery_codes' => null,
+                'mfa_enabled' => $hasPasskeys,
+                'mfa_confirmed_at' => $hasPasskeys ? $this->mfa_confirmed_at : null,
+                'mfa_recovery_codes' => $hasPasskeys ? $this->mfa_recovery_codes : null,
             ])->save();
 
             return;

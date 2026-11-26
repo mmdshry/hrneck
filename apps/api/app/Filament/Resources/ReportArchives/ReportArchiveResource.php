@@ -7,6 +7,7 @@ use App\Domains\AnalyticsReporting\Models\ReportArchive;
 use App\Filament\Concerns\RequiresFilamentTenant;
 use App\Filament\Resources\ReportArchives\Pages\ManageReportArchives;
 use App\Support\FilamentTenant;
+use App\Support\OrgTimezone;
 use App\Support\TimezoneOptions;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
@@ -72,7 +73,7 @@ class ReportArchiveResource extends Resource
                             ->options(TimezoneOptions::all())
                             ->searchable()
                             ->required()
-                            ->default('UTC'),
+                            ->default(fn (): string => OrgTimezone::current()),
                         Toggle::make('include_training')->default(true),
                     ])
                     ->action(function (array $data): void {
@@ -80,7 +81,7 @@ class ReportArchiveResource extends Resource
                             $data['period_key'],
                             $data['scope'],
                             [
-                                'timezone' => $data['timezone'] ?? 'UTC',
+                                'timezone' => $data['timezone'] ?? OrgTimezone::current(),
                                 'include_training' => (bool) ($data['include_training'] ?? true),
                             ],
                         );
@@ -91,7 +92,7 @@ class ReportArchiveResource extends Resource
                             'period_key' => $data['period_key'],
                             'format' => 'pdf',
                             'disk_path' => $result['path'],
-                            'timezone' => $data['timezone'] ?? 'UTC',
+                            'timezone' => $data['timezone'] ?? OrgTimezone::current(),
                             'options' => [
                                 'include_training' => (bool) ($data['include_training'] ?? true),
                             ],

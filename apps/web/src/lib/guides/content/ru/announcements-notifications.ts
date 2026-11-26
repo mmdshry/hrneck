@@ -18,7 +18,7 @@ export const announcementsNotificationsGuide: GuideModule = {
   example: {
     title: "Уведомление об обязательном обучении",
     narrative:
-      "После запуска Security Awareness Q4 Мира публикует «Завершите обучение по фишингу к пятнице», и операторы Finance видят и объявление, и отдельные уведомления о назначенном обучении в колокольчике со ссылками на /learn или прогресс кампании.",
+      "После запуска Security Awareness Q4 Мира публикует «Завершите обучение по фишингу к пятнице», и операторы Finance видят и объявление, и отдельные уведомления о назначенном обучении в колокольчике со ссылками на /portal или прогресс кампании.",
   },
   steps: [
     {
@@ -66,7 +66,7 @@ export const announcementsNotificationsGuide: GuideModule = {
       progress: 100,
     },
     rows: [
-      { title: "Обучение назначено · Phishing Essentials", meta: "Глубокая ссылка · /learn" },
+      { title: "Обучение назначено · Phishing Essentials", meta: "Глубокая ссылка · /portal" },
       { title: "Тикет назначен · INC-1842", meta: "Глубокая ссылка · тикетинг" },
       { title: "Чек-лист назначен · IT-доступ", meta: "Глубокая ссылка · инстанции" },
     ],

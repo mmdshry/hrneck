@@ -100,12 +100,22 @@ test('org can create course lesson upload media and track lesson progress', func
         ])
         ->assertOk()
         ->assertJsonPath('data.lesson_progress.status', 'completed')
-        ->assertJsonPath('data.enrollment.status', 'completed')
-        ->assertJsonPath('data.enrollment.progress', 100);
+        ->assertJsonPath('data.enrollment.status', 'in_progress')
+        ->assertJsonPath('data.enrollment.progress', 100)
+        ->assertJsonPath('data.enrollment.attestation_pending', true);
 
     Tenancy::initialize($this->tenant);
     expect(LessonProgress::query()->where('enrollment_id', $enrollment->id)->where('status', 'completed')->count())->toBe(1);
     Tenancy::end();
+
+    asMatchingLearner($this, $targetEmail, 'Lesson Learner')
+        ->postJson('/api/v1/org/training/attestation', [
+            'enrollment_id' => $enrollment->id,
+            'accepted' => true,
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.status', 'completed')
+        ->assertJsonPath('data.attestation_pending', false);
 });
 
 test('lesson media_disk_path outside training prefix is rejected', function () {
@@ -171,8 +181,8 @@ test('video progress completes at eighty percent and quiz pass syncs campaign re
         'name' => 'Video wave',
         'type' => 'training',
         'status' => 'running',
-        'course_id' => $course->id,
     ]);
+    $campaign->courses()->attach($course->id, ['sort_order' => 0]);
     $recipient = CampaignRecipient::query()->create([
         'campaign_id' => $campaign->id,
         'target_id' => $target->id,
@@ -216,7 +226,21 @@ test('video progress completes at eighty percent and quiz pass syncs campaign re
         ])
         ->assertOk()
         ->assertJsonPath('data.passed', true)
-        ->assertJsonPath('data.enrollment.status', 'completed');
+        ->assertJsonPath('data.enrollment.status', 'in_progress')
+        ->assertJsonPath('data.enrollment.attestation_pending', true);
+
+    Tenancy::initialize($this->tenant);
+    expect(CampaignRecipient::query()->findOrFail($recipientId)->status)->not->toBe('completed');
+    expect(Enrollment::query()->findOrFail($enrollmentId)->status)->toBe('in_progress');
+    Tenancy::end();
+
+    asMatchingLearner($this, $targetEmail, 'Video Learner')
+        ->postJson('/api/v1/org/training/attestation', [
+            'enrollment_id' => $enrollmentId,
+            'accepted' => true,
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.status', 'completed');
 
     Tenancy::initialize($this->tenant);
     expect(CampaignRecipient::query()->findOrFail($recipientId)->status)->toBe('completed');

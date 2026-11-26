@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use App\Domains\Subscriptions\Models\TenantSubscription;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Stancl\Tenancy\Contracts\TenantWithDatabase;
 use Stancl\Tenancy\Database\Concerns\HasDatabase;
 use Stancl\Tenancy\Database\Concerns\HasDomains;
@@ -56,5 +58,22 @@ class Tenant extends BaseTenant implements TenantWithDatabase
     public function memberships(): HasMany
     {
         return $this->hasMany(TenantMembership::class);
+    }
+
+    /** @return HasOne<TenantSubscription, $this> */
+    public function subscription(): HasOne
+    {
+        return $this->hasOne(TenantSubscription::class, 'tenant_id');
+    }
+
+    /**
+     * The tenant's subscription, or null when none exists yet (subscriptions are created lazily).
+     * Uses the eager-loaded relation when present so list views do not query per row.
+     */
+    public function currentSubscription(): ?TenantSubscription
+    {
+        return $this->relationLoaded('subscription')
+            ? $this->subscription
+            : $this->subscription()->first();
     }
 }

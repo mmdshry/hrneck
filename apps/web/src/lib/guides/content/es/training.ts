@@ -21,7 +21,7 @@ export const trainingGuide: GuideModule = {
   ],
   openInAppHref: "/org/training",
   overview:
-    "Cursos alberga la biblioteca (lecciones de artículo, vídeo y PDF más cuestionarios). Formación asigna uno o más cursos a empleados y/o grupos, ejecuta campañas que encolan un recordatorio por correo de un solo envío por destinatario al lanzar (vía SMTP y perfiles de envío), y revisa el progreso por lección con exportación CSV o PDF. Los alumnos consumen el contenido asignado en el portal del alumno en /learn—no en la cola de la org. Existe una lista de muestra secundaria en /org/campaigns para demos rápidas; el flujo del operador vive en Formación → Campañas.",
+    "Cursos alberga la biblioteca (lecciones de artículo, vídeo y PDF más cuestionarios). Formación asigna uno o más cursos a empleados y/o grupos, ejecuta campañas que pueden incluir varios cursos (arrástrelos y ordene su secuencia) y encolan un recordatorio por correo por destinatario al lanzar con todos los cursos (vía SMTP y perfiles de envío), y revisa el progreso por lección con exportación CSV o PDF. Los alumnos consumen el contenido asignado en el panel del empleado en /portal—no en la cola de la org. Existe una lista de muestra secundaria en /org/campaigns para demos rápidas; el flujo del operador vive en Formación → Campañas.",
   example: {
     title: "Campaña de concienciación Q4 de Finanzas de Acme",
     narrative:
@@ -35,12 +35,12 @@ export const trainingGuide: GuideModule = {
     },
     {
       title: "Asigne contenido",
-      body: "En Formación, seleccione uno o más cursos y asígnelos a empleados y/o grupos. Los alumnos ven las inscripciones en /learn tras la asignación.",
+      body: "En Formación, seleccione uno o más cursos y asígnelos a empleados y/o grupos. Los alumnos ven las inscripciones en /portal tras la asignación.",
       href: "/org/training",
     },
     {
       title: "Cree una campaña",
-      body: "Nombre la campaña, elija contenido, seleccione group_ids y/o targets y lance. El lanzamiento encola un trabajo de recordatorio por destinatario—no hay cadencia semanal de recordatorios. Confirme primero SMTP y el perfil de envío.",
+      body: "Nombre la campaña, elija uno o más cursos, seleccione group_ids y/o targets y lance. El lanzamiento encola un correo de recordatorio por destinatario con todos los cursos de la campaña—no hay cadencia semanal de recordatorios. Confirme primero SMTP y el perfil de envío.",
       href: "/org/training/campaigns",
     },
     {
@@ -90,19 +90,24 @@ export const trainingGuide: GuideModule = {
           body: "Descargue el informe de visionado como CSV para hojas de cálculo o PDF para packs de interesados. Combínelo con Informes para calendarios a escala de la org.",
         },
         {
-          title: "Envíe a los alumnos a /learn",
+          title: "Envíe a los alumnos a /portal",
           body: "Los operadores permanecen en /org/training. Los alumnos abren el portal del alumno para leer, ver, marcar como completado y hacer cuestionarios. Consulte la guía Portal del alumno.",
-          href: "/learn",
+          href: "/portal",
         },
       ],
     },
     {
       title: "Campañas y recordatorios",
-      body: "Las campañas agrupan contenido + audiencia + un recordatorio de un solo envío al lanzar. Los estados incluyen draft, scheduled, running, completed, cancelled y archived.",
+      body: "Las campañas agrupan uno o más cursos + audiencia + un recordatorio de un solo envío al lanzar. Los estados incluyen draft, scheduled, running, completed, cancelled y archived.",
       steps: [
         {
           title: "Lance desde Formación → Campañas",
-          body: "Nombre la oleada, adjunte contenido del curso, seleccione grupos/empleados y lance. Cada destinatario recibe un trabajo de recordatorio—sin cadencia semanal recurrente.",
+          body: "Nombre la oleada, añada uno o más cursos, seleccione grupos/empleados y lance. Cada destinatario recibe un correo de recordatorio con todos los cursos de la oleada—sin cadencia semanal recurrente.",
+          href: "/org/training/campaigns",
+        },
+        {
+          title: "Organice los cursos de la campaña",
+          body: "Arrastre un curso desde la biblioteca de cursos a una campaña o pulse Añadir. Arrastre las filas o use los botones de subir y bajar para definir el orden que verán los alumnos. Los cursos solo se pueden cambiar mientras la campaña esté en borrador o programada; una campaña se completa cuando todos sus cursos están terminados.",
           href: "/org/training/campaigns",
         },
         {

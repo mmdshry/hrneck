@@ -101,18 +101,19 @@ export type AuditEvent = {
   created_at: string | null;
 };
 
-export const ITEM_TYPES: { value: ChecklistItemType; label: string }[] = [
-  { value: "section", label: "Section" },
-  { value: "checkbox", label: "Checkbox" },
-  { value: "short_text", label: "Short text" },
-  { value: "long_text", label: "Long text" },
-  { value: "single_select", label: "Single select" },
-  { value: "multi_select", label: "Multi select" },
-  { value: "date", label: "Date" },
-  { value: "number", label: "Number" },
-  { value: "file", label: "File upload" },
-  { value: "link", label: "Link" },
-  { value: "rich_note", label: "Rich note" },
+/** `labelKey` is a key under `org.checklists`; resolve it with `t(labelKey)` in the UI. */
+export const ITEM_TYPES: { value: ChecklistItemType; labelKey: string }[] = [
+  { value: "section", labelKey: "itemTypeSection" },
+  { value: "checkbox", labelKey: "itemTypeCheckbox" },
+  { value: "short_text", labelKey: "itemTypeShortText" },
+  { value: "long_text", labelKey: "itemTypeLongText" },
+  { value: "single_select", labelKey: "itemTypeSingleSelect" },
+  { value: "multi_select", labelKey: "itemTypeMultiSelect" },
+  { value: "date", labelKey: "itemTypeDate" },
+  { value: "number", labelKey: "itemTypeNumber" },
+  { value: "file", labelKey: "itemTypeFile" },
+  { value: "link", labelKey: "itemTypeLink" },
+  { value: "rich_note", labelKey: "itemTypeRichNote" },
 ];
 
 export const ANSWERABLE = new Set<ChecklistItemType>([

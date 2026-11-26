@@ -41,8 +41,9 @@ class CampaignResource extends Resource
     {
         return $schema->components([
             TextInput::make('name')->required()->maxLength(160),
-            Select::make('course_id')
-                ->label('Course')
+            Select::make('course_ids')
+                ->label('Courses')
+                ->multiple()
                 ->options(fn () => Course::query()->orderBy('title')->pluck('title', 'id'))
                 ->required(),
             Select::make('target_ids')
@@ -65,9 +66,10 @@ class CampaignResource extends Resource
                 TextColumn::make('name')->searchable(),
                 TextColumn::make('type')->badge(),
                 TextColumn::make('status')->badge(),
-                TextColumn::make('course.title')->label('Course'),
+                TextColumn::make('courses.title')->label('Courses')->listWithLineBreaks(),
                 TextColumn::make('recipients_count')->counts('recipients')->label('Recipients'),
                 TextColumn::make('starts_at')->dateTime(),
+                TextColumn::make('expires_at')->dateTime()->placeholder('—'),
             ])
             ->defaultSort('id', 'desc')
             ->recordActions([
@@ -111,7 +113,7 @@ class CampaignResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
-        return parent::getEloquentQuery()->with(['course']);
+        return parent::getEloquentQuery()->with(['courses']);
     }
 
     public static function getPages(): array

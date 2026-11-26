@@ -18,7 +18,7 @@ export const announcementsNotificationsGuide: GuideModule = {
   example: {
     title: "Mandatory training notice",
     narrative:
-      "After launching Security Awareness Q4, Mira publishes “Complete phishing training by Friday”, and Finance operators see both the announcement and individual training-assigned notifications in the bell with links into /learn or campaign progress.",
+      "After launching Security Awareness Q4, Mira publishes “Complete phishing training by Friday”, and Finance operators see both the announcement and individual training-assigned notifications in the bell with links into /portal or campaign progress.",
   },
   steps: [
     {
@@ -66,7 +66,7 @@ export const announcementsNotificationsGuide: GuideModule = {
       progress: 100,
     },
     rows: [
-      { title: "Training assigned · Phishing Essentials", meta: "Deep link · /learn" },
+      { title: "Training assigned · Phishing Essentials", meta: "Deep link · /portal" },
       { title: "Ticket assigned · INC-1842", meta: "Deep link · ticketing" },
       { title: "Checklist assigned · IT access", meta: "Deep link · instances" },
     ],

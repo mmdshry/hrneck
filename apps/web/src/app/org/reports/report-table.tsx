@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useTranslations } from "next-intl";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import type { DataTableFilterState } from "@/lib/data-table-query";
 import type { DataTablePagination } from "@/components/ui/data-table-types";
@@ -20,7 +21,7 @@ export type ReportColumn<T> = {
 export function ReportTable<T extends object>({
   columns,
   rows,
-  empty = "No rows yet.",
+  empty,
   onRowClick,
   mode = "client",
   filterState,
@@ -42,6 +43,7 @@ export function ReportTable<T extends object>({
   toolbarExtra?: ReactNode;
   caption?: string;
 }) {
+  const t = useTranslations("org.reports");
   const mapped: Array<DataTableColumn<T>> = columns.map((col, index) => ({
     id: col.key,
     header: col.header,
@@ -62,7 +64,7 @@ export function ReportTable<T extends object>({
       mode={mode}
       filterState={filterState}
       onFilterStateChange={onFilterStateChange}
-      emptyTitle={empty}
+      emptyTitle={empty ?? t("noRows")}
       onRowClick={onRowClick}
       pagination={pagination}
       loading={loading}

@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
-import { EmptyState } from "@/components/ui/empty-state";
 import { Label } from "@/components/ui/label";
 import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
@@ -12,7 +11,8 @@ import { PageSkeleton } from "@/components/ui/page-skeleton";
 import { Panel } from "@/components/ui/panel";
 import { Select } from "@/components/ui/select";
 import { useDataTableQuery } from "@/hooks/use-data-table-query";
-import { liveStatusLabel, useLiveTopic } from "@/hooks/use-live-topic";
+import { useOrgTimezone } from "@/hooks/use-org-timezone";
+import { liveStatusLabel, useLiveStatusLabels, useLiveTopic } from "@/hooks/use-live-topic";
 import { api, apiOptional, ensureCsrf, fetchSessionUser } from "@/lib/api";
 import { serializeDataTableQuery } from "@/lib/data-table-query";
 import {
@@ -32,16 +32,10 @@ import {
 import { hasPermission, type SessionUser } from "@/lib/session";
 import { resolveTenant } from "@/lib/tenant";
 import { toastSuccess, toastWarning, toastError } from "@/lib/toast";
-import {
-  AudiencePicker,
-  type AudienceGroup,
-  type AudienceTarget,
-} from "./audience-picker";
-import {
-  formatTs,
-  type Course,
-  type EnrollmentRow,
-} from "./training-shared";
+import { AssignContentWizard } from "./assign-content-wizard";
+import { type AudienceGroup, type AudienceTarget } from "./audience-picker";
+import { assignAudiencePayload, type AssignDraft } from "./training-assign-draft";
+import { formatTs, type Course, type EnrollmentRow } from "./training-shared";
 
 type TrainingPayload = {
   courses: Course[];
@@ -92,6 +86,7 @@ export function TrainingHubClient() {
   const t = useTranslations("org.training");
   const tCommon = useTranslations("common");
   const tNav = useTranslations("nav");
+  const orgTimeZone = useOrgTimezone();
   const tenant = resolveTenant();
   const channel = tenant ? orgLiveChannel(tenant, "training") : null;
   const [pickerCourses, setPickerCourses] = useState<Course[]>([]);
@@ -103,9 +98,7 @@ export function TrainingHubClient() {
     useState<PageSize>(DEFAULT_PAGE_SIZE);
   const [targets, setTargets] = useState<AudienceTarget[]>([]);
   const [groups, setGroups] = useState<AudienceGroup[]>([]);
-  const [selectedCourseIds, setSelectedCourseIds] = useState<number[]>([]);
-  const [selectedTargetIds, setSelectedTargetIds] = useState<number[]>([]);
-  const [selectedGroupIds, setSelectedGroupIds] = useState<number[]>([]);
+  const [assignOpen, setAssignOpen] = useState(false);
   const [filterCourseId, setFilterCourseId] = useState<number | "">("");
   const [filterGroupId, setFilterGroupId] = useState<number | "">("");
   const tableQuery = useDataTableQuery();
@@ -149,9 +142,6 @@ export function TrainingHubClient() {
       setPickerCourses(nextCourses);
       setTargets(nextTargets);
       setGroups(nextGroups);
-      setSelectedCourseIds((prev) =>
-        prev.filter((id) => nextCourses.some((course) => course.id === id)),
-      );
     },
     [],
   );
@@ -280,49 +270,25 @@ export function TrainingHubClient() {
     refreshFromApi,
   ]);
 
-  const statusLabel = liveStatusLabel(status);
+  const liveLabels = useLiveStatusLabels();
+  const statusLabel = liveStatusLabel(status, liveLabels);
 
-  function toggleCourse(courseId: number) {
-    setSelectedCourseIds((prev) =>
-      prev.includes(courseId)
-        ? prev.filter((id) => id !== courseId)
-        : [...prev, courseId],
-    );
-  }
-
-  function toggleAllCourses() {
-    if (selectedCourseIds.length === pickerCourses.length) {
-      setSelectedCourseIds([]);
-      return;
-    }
-    setSelectedCourseIds(pickerCourses.map((course) => course.id));
-  }
-
-  async function assignContent() {
-    if (selectedTargetIds.length === 0 && selectedGroupIds.length === 0) {
-      toastWarning(t("selectTargetOrGroup"));
-      return;
-    }
-    if (selectedCourseIds.length === 0) {
-      toastWarning(t("selectCourse"));
-      return;
-    }
-
+  async function assignContent(draft: AssignDraft): Promise<boolean> {
     setBusy(true);
-    
+    let assigned = false;
+
     try {
       await ensureCsrf();
       const tenant = resolveTenant();
       const body: Record<string, unknown> = {
         launch: true,
-        course_ids: selectedCourseIds,
+        course_ids: draft.courseIds,
         name:
-          selectedCourseIds.length === 1
-            ? `Assign course ${selectedCourseIds[0]}`
-            : `Assign ${selectedCourseIds.length} courses`,
+          draft.courseIds.length === 1
+            ? t("assignCourseName", { id: draft.courseIds[0] })
+            : t("assignCoursesName", { count: draft.courseIds.length }),
+        ...assignAudiencePayload(draft),
       };
-      if (selectedTargetIds.length > 0) body.target_ids = selectedTargetIds;
-      if (selectedGroupIds.length > 0) body.group_ids = selectedGroupIds;
 
       const res = await api<{
         data: {
@@ -330,6 +296,7 @@ export function TrainingHubClient() {
           course?: Course;
           courses?: Course[];
           campaigns?: unknown[];
+          campaign?: { status?: string } | null;
         };
       }>("/api/v1/org/training/assign", {
         method: "POST",
@@ -337,12 +304,20 @@ export function TrainingHubClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
+      assigned = true;
 
-      const courseCount = res.data.courses?.length ?? (res.data.course ? 1 : selectedCourseIds.length);
-      toastSuccess(
-        `Assigned ${courseCount} course(s) to ${res.data.assigned_target_ids.length} learner(s).`,
-      );
-      setSelectedCourseIds([]);
+      const courseCount =
+        res.data.courses?.length ?? (res.data.course ? 1 : draft.courseIds.length);
+      if (res.data.campaign?.status === "scheduled") {
+        toastSuccess(t("scheduledNotice"));
+      } else {
+        toastSuccess(
+          t("assignedSummary", {
+            courses: courseCount,
+            learners: res.data.assigned_target_ids.length,
+          }),
+        );
+      }
       if (liveEnrollments === null) {
         await refreshFromApi(enrollmentsPage, enrollmentsPerPage);
       }
@@ -351,6 +326,7 @@ export function TrainingHubClient() {
     } finally {
       setBusy(false);
     }
+    return assigned;
   }
 
   async function exportReport(format: "csv" | "pdf" | "png") {
@@ -383,7 +359,7 @@ export function TrainingHubClient() {
         `training-viewing-report.${format}`,
         accept,
       );
-      toastSuccess(`Viewing report ${format.toUpperCase()} downloaded.`);
+      toastSuccess(t("viewingReportFormatDownloaded", { format: format.toUpperCase() }));
     } catch (err) {
       toastError(err instanceof Error ? err.message : tCommon("exportFailed"));
     } finally {
@@ -412,7 +388,7 @@ export function TrainingHubClient() {
                 {tNav("campaigns")}
               </LinkButton>
             ) : null}
-            <LinkButton href="/learn">{tNav("learnerPortal")}</LinkButton>
+            <LinkButton href="/portal">{tNav("learnerPortal")}</LinkButton>
           </div>
         }
       />
@@ -421,81 +397,28 @@ export function TrainingHubClient() {
       
 
       <Panel className="mt-6 space-y-4 p-5">
-        <div>
-          <h2 className="text-lg font-medium">{t("assignContent")}</h2>
-          <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-            {t("assignContentHint")}
-          </p>
-        </div>
-
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <Label>{tNav("courses")}</Label>
-            {pickerCourses.length > 0 ? (
-              <Button type="button" variant="secondary" onClick={toggleAllCourses}>
-                {selectedCourseIds.length === pickerCourses.length
-                  ? tCommon("clearAll")
-                  : tCommon("selectAll")}
-              </Button>
-            ) : null}
-          </div>
-          {pickerCourses.length === 0 ? (
-            <EmptyState
-              title={t("noCoursesYet")}
-              description={t("noCoursesHint")}
-              action={
-                <LinkButton href="/org/courses">{t("goToCourses")}</LinkButton>
-              }
-            />
-          ) : (
-            <div className="max-h-56 space-y-1 overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] p-3">
-              {pickerCourses.map((course) => {
-                const checked = selectedCourseIds.includes(course.id);
-                return (
-                  <label
-                    key={course.id}
-                    className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-[var(--muted)]"
-                  >
-                    <input
-                      type="checkbox"
-                      className="mt-0.5"
-                      checked={checked}
-                      onChange={() => toggleCourse(course.id)}
-                    />
-                    <span>
-                      <span className="font-medium">{course.title}</span>
-                      <span className="mt-0.5 block text-xs text-[var(--muted-foreground)]">
-                        {t("courseMetaShort", {
-                          minutes: course.duration_minutes,
-                          count: course.lessons?.length ?? 0,
-                        })}
-                      </span>
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          )}
-          {selectedCourseIds.length > 0 ? (
-            <p className="text-xs text-[var(--muted-foreground)]">
-              {t("coursesSelected", { count: selectedCourseIds.length })}
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-medium">{t("assignContent")}</h2>
+            <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+              {t("assignContentHint")}
             </p>
-          ) : null}
+          </div>
+          <Button type="button" onClick={() => setAssignOpen(true)}>
+            {t("assignCourses")}
+          </Button>
         </div>
-
-        <AudiencePicker
-          targets={targets}
-          groups={groups}
-          selectedTargetIds={selectedTargetIds}
-          selectedGroupIds={selectedGroupIds}
-          onChangeTargets={setSelectedTargetIds}
-          onChangeGroups={setSelectedGroupIds}
-        />
-
-        <Button type="button" onClick={() => void assignContent()} disabled={busy}>
-          {t("assignNow")}
-        </Button>
       </Panel>
+
+      <AssignContentWizard
+        open={assignOpen}
+        onOpenChange={setAssignOpen}
+        courses={pickerCourses}
+        targets={targets}
+        groups={groups}
+        busy={busy}
+        onAssign={assignContent}
+      />
 
       <div ref={viewingReportRef} className="mt-6">
         <Panel className="space-y-4 p-5">
@@ -639,7 +562,7 @@ export function TrainingHubClient() {
                   filter: "none",
                   enableSorting: true,
                   filterValue: (row) => row.opened_at,
-                  cell: (row) => formatTs(row.opened_at),
+                  cell: (row) => formatTs(row.opened_at, orgTimeZone),
                 },
                 {
                   id: "completed",
@@ -647,7 +570,7 @@ export function TrainingHubClient() {
                   filter: "none",
                   enableSorting: true,
                   filterValue: (row) => row.completed_at,
-                  cell: (row) => formatTs(row.completed_at),
+                  cell: (row) => formatTs(row.completed_at, orgTimeZone),
                 },
                 {
                   id: "quiz",
@@ -734,13 +657,13 @@ export function TrainingHubClient() {
                           id: "opened_at",
                           header: tCommon("opened"),
                           filter: "none",
-                          cell: (l) => formatTs(l.opened_at),
+                          cell: (l) => formatTs(l.opened_at, orgTimeZone),
                         },
                         {
                           id: "completed_at",
                           header: tCommon("completed"),
                           filter: "none",
-                          cell: (l) => formatTs(l.completed_at),
+                          cell: (l) => formatTs(l.completed_at, orgTimeZone),
                         },
                       ]}
                     />

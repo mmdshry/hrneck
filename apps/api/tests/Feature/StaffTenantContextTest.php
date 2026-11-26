@@ -4,7 +4,6 @@ use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
 use App\Models\Role;
 use App\Models\User;
 use App\Support\StaffTenant;
-use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Hash;
 
 test('platform staff can enter tenant context and call org apis', function () {
@@ -79,7 +78,7 @@ test('password change succeeds for authenticated user', function () {
         ->assertJsonPath('mfa_required', false);
 });
 
-test('staff tenant gate elevates only support permissions and requires matching tenant', function () {
+test('platform super admin gets roles and settings inside an entered tenant and requires matching tenant', function () {
     $staff = platformAdmin();
     $origin = ['Origin' => 'http://hrneck.test'];
 
@@ -96,20 +95,72 @@ test('staff tenant gate elevates only support permissions and requires matching 
     $this->actingAs($staff)
         ->withHeaders($origin + ['X-Tenant' => 'itneck'])
         ->getJson('/api/v1/org/settings')
-        ->assertForbidden();
+        ->assertOk();
 
     $this->actingAs($staff)
         ->withHeaders($origin + ['X-Tenant' => 'itneck'])
         ->getJson('/api/v1/org/roles')
-        ->assertForbidden();
+        ->assertOk();
 
-    expect(Gate::forUser($staff)->allows(OrgPermissionCatalog::SETTINGS_MANAGE))->toBeFalse()
-        ->and(Gate::forUser($staff)->allows(OrgPermissionCatalog::ROLES_MANAGE))->toBeFalse();
+    $permissions = $this->actingAs($staff)
+        ->withHeaders($origin + ['X-Tenant' => 'itneck'])
+        ->getJson('/api/v1/auth/me')
+        ->assertOk()
+        ->json('data.permissions');
+
+    expect($permissions)
+        ->toContain(OrgPermissionCatalog::ROLES_MANAGE)
+        ->toContain(OrgPermissionCatalog::SETTINGS_MANAGE);
 
     $this->actingAs($staff)
         ->withHeaders($origin + ['X-Tenant' => 'company'])
         ->getJson('/api/v1/org/targets')
         ->assertForbidden();
+});
+
+test('platform agent acting in a tenant cannot manage roles or settings', function () {
+    $agent = User::query()->create([
+        'name' => 'Platform Agent',
+        'email' => 'platform-agent-'.uniqid('', true).'@hrneck.test',
+        'password' => Hash::make('DemoPass!234'),
+        'tenant_id' => null,
+    ]);
+    $agent->forceFill(['email_verified_at' => now()])->save();
+
+    setPermissionsTeamId(null);
+    $agent->syncRoles([OrgPermissionCatalog::PLATFORM_AGENT]);
+
+    $origin = ['Origin' => 'http://hrneck.test'];
+
+    $this->actingAs($agent)
+        ->withHeaders($origin)
+        ->postJson('/api/v1/msp/tenants/itneck/enter')
+        ->assertOk();
+
+    $this->actingAs($agent)
+        ->withHeaders($origin + ['X-Tenant' => 'itneck'])
+        ->getJson('/api/v1/org/targets')
+        ->assertOk();
+
+    $this->actingAs($agent)
+        ->withHeaders($origin + ['X-Tenant' => 'itneck'])
+        ->getJson('/api/v1/org/settings')
+        ->assertForbidden();
+
+    $this->actingAs($agent)
+        ->withHeaders($origin + ['X-Tenant' => 'itneck'])
+        ->getJson('/api/v1/org/roles')
+        ->assertForbidden();
+
+    $permissions = $this->actingAs($agent)
+        ->withHeaders($origin + ['X-Tenant' => 'itneck'])
+        ->getJson('/api/v1/auth/me')
+        ->assertOk()
+        ->json('data.permissions');
+
+    expect($permissions)
+        ->not->toContain(OrgPermissionCatalog::ROLES_MANAGE)
+        ->not->toContain(OrgPermissionCatalog::SETTINGS_MANAGE);
 });
 
 test('logout clears staff tenant context', function () {

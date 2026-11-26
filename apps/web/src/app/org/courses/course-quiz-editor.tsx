@@ -1,23 +1,32 @@
 "use client";
 
-import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useWizardLabels } from "@/components/ui/use-wizard-labels";
+import { WizardDialog, type WizardStep } from "@/components/ui/wizard-dialog";
 import { api, ensureCsrf } from "@/lib/api";
 import { resolveTenant } from "@/lib/tenant";
 import { toastError, toastSuccess, toastWarning } from "@/lib/toast";
 import {
   draftToQuizPayload,
   emptyQuizDraft,
-  emptyQuizQuestionDraft,
   quizToDraft,
   type CourseQuiz,
   type QuizDraft,
 } from "../training/training-shared";
+import {
+  findQuizQuestionsIssue,
+  findQuizSettingsIssue,
+  isQuizDraftChanged,
+  type QuizDraftIssue,
+} from "./quiz-draft-rules";
+import {
+  QuizQuestionsStep,
+  QuizReviewStep,
+  QuizSettingsStep,
+} from "./course-quiz-steps";
 
 type Props = {
   courseId: number;
@@ -36,48 +45,95 @@ export function CourseQuizEditor({
 }: Props) {
   const t = useTranslations("org.courses");
   const tCommon = useTranslations("common");
+  const wizardLabels = useWizardLabels({ submit: t("saveQuiz") });
   const [editingId, setEditingId] = useState<number | "new" | null>(null);
   const [draft, setDraft] = useState<QuizDraft>(emptyQuizDraft());
+  const [baseline, setBaseline] = useState<QuizDraft>(emptyQuizDraft());
+  const [deleteTarget, setDeleteTarget] = useState<CourseQuiz | null>(null);
+  const editing = editingId !== null;
 
   function startCreate() {
+    const next = emptyQuizDraft();
     setEditingId("new");
-    setDraft(emptyQuizDraft());
+    setBaseline(next);
+    setDraft(next);
   }
 
   function startEdit(quiz: CourseQuiz) {
+    const next = quizToDraft(quiz);
     setEditingId(quiz.id);
-    setDraft(quizToDraft(quiz));
+    setBaseline(next);
+    setDraft(next);
   }
 
   function cancelEdit() {
     setEditingId(null);
-    setDraft(emptyQuizDraft());
+  }
+
+  function issueMessage(issue: QuizDraftIssue): string {
+    switch (issue.kind) {
+      case "titleRequired":
+        return t("quizTitleRequired");
+      case "noQuestions":
+        return t("addAtLeastOneQuestion");
+      case "promptRequired":
+        return t("quizQuestionPromptRequired", { number: issue.questionNumber });
+      case "optionsRequired":
+        return t("quizQuestionOptionsRequired", { number: issue.questionNumber });
+      default: {
+        const exhaustive: never = issue;
+        return exhaustive;
+      }
+    }
+  }
+
+  function acceptStep(issue: QuizDraftIssue | null): boolean {
+    if (!issue) {
+      return true;
+    }
+    toastWarning(issueMessage(issue));
+    return false;
+  }
+
+  const steps: WizardStep[] = [
+    {
+      id: "settings",
+      title: t("quizStepSettings"),
+      description: t("quizStepSettingsHint"),
+      validate: () => acceptStep(findQuizSettingsIssue(draft)),
+      render: () => <QuizSettingsStep draft={draft} setDraft={setDraft} />,
+    },
+    {
+      id: "questions",
+      title: t("quizStepQuestions"),
+      description: t("quizStepQuestionsHint"),
+      validate: () => acceptStep(findQuizQuestionsIssue(draft)),
+      render: () => <QuizQuestionsStep draft={draft} setDraft={setDraft} />,
+    },
+    {
+      id: "review",
+      title: t("quizStepReview"),
+      description: t("quizStepReviewHint"),
+      validate: () =>
+        acceptStep(findQuizSettingsIssue(draft) ?? findQuizQuestionsIssue(draft)),
+      render: () => <QuizReviewStep draft={draft} />,
+    },
+  ];
+
+  function quizSummary(quiz: CourseQuiz): string {
+    const parts = [
+      t("quizPassSummary", { score: quiz.pass_score }),
+      quiz.is_required ? t("quizRequiredValue") : t("quizOptionalValue"),
+    ];
+    if (quiz.time_limit_seconds) {
+      parts.push(t("quizTimeLimitSeconds", { seconds: quiz.time_limit_seconds }));
+    }
+    parts.push(t("quizQuestionCount", { count: quiz.questions.length }));
+    return parts.join(" · ");
   }
 
   async function saveQuiz() {
     const payload = draftToQuizPayload(draft);
-    if (!payload.title) {
-      toastWarning(t("quizTitleRequired"));
-      return;
-    }
-    if (payload.questions.length === 0) {
-      toastWarning(t("addAtLeastOneQuestion"));
-      return;
-    }
-    for (const [index, question] of payload.questions.entries()) {
-      if (!question.prompt) {
-        toastWarning(`Question ${index + 1} needs a prompt.`);
-        return;
-      }
-      if (
-        question.type === "mcq" &&
-        (!question.options || question.options.length < 2)
-      ) {
-        toastWarning(`Question ${index + 1} needs at least two options (one per line).`);
-        return;
-      }
-    }
-
     setBusy(true);
     try {
       await ensureCsrf();
@@ -123,6 +179,7 @@ export function CourseQuizEditor({
       await onChanged();
     } catch (err) {
       toastError(err instanceof Error ? err.message : t("quizDeleteFailed"));
+      throw err;
     } finally {
       setBusy(false);
     }
@@ -131,22 +188,19 @@ export function CourseQuizEditor({
   return (
     <div className="space-y-3 border-t border-[var(--border)] pt-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-medium">Quizzes</h3>
+        <h3 className="text-sm font-medium">{t("quizzes")}</h3>
         <Button
           type="button"
           variant="secondary"
-          disabled={busy || editingId !== null}
+          disabled={busy || editing}
           onClick={startCreate}
         >
-          Add quiz
+          {t("addQuiz")}
         </Button>
       </div>
 
-      {quizzes.length === 0 && editingId === null ? (
-        <p className="text-sm text-[var(--muted-foreground)]">
-          No quizzes yet. Add an optional exam with multiple-choice and essay
-          questions.
-        </p>
+      {quizzes.length === 0 ? (
+        <p className="text-sm text-[var(--muted-foreground)]">{t("noQuizzes")}</p>
       ) : null}
 
       <ul className="space-y-2">
@@ -157,242 +211,63 @@ export function CourseQuizEditor({
           >
             <div>
               <p className="text-sm font-medium">{quiz.title}</p>
-              <p className="text-xs text-[var(--muted-foreground)]">
-                Pass {quiz.pass_score}%
-                {quiz.is_required ? " · required" : " · optional"}
-                {quiz.time_limit_seconds
-                  ? ` · ${quiz.time_limit_seconds}s limit`
-                  : ""}
-                {` · ${quiz.questions.length} question${quiz.questions.length === 1 ? "" : "s"}`}
-              </p>
+              <p className="text-xs text-[var(--muted-foreground)]">{quizSummary(quiz)}</p>
             </div>
             <div className="flex gap-2">
               <Button
                 type="button"
                 variant="secondary"
-                disabled={busy || editingId !== null}
+                disabled={busy || editing}
                 onClick={() => startEdit(quiz)}
               >
-                Edit
+                {tCommon("edit")}
               </Button>
               <Button
                 type="button"
                 variant="outline"
                 disabled={busy}
-                onClick={() => void deleteQuiz(quiz.id)}
+                onClick={() => setDeleteTarget(quiz)}
               >
-                Delete
+                {tCommon("delete")}
               </Button>
             </div>
           </li>
         ))}
       </ul>
 
-      {editingId !== null ? (
-        <div className="space-y-3 rounded-[var(--radius)] border border-[var(--border)] p-4">
-          <h4 className="text-sm font-medium">
-            {editingId === "new" ? t("newQuiz") : t("editQuiz")}
-          </h4>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1 sm:col-span-2">
-              <Label htmlFor="quiz-title">Title</Label>
-              <Input
-                id="quiz-title"
-                value={draft.title}
-                onChange={(e) =>
-                  setDraft((prev) => ({ ...prev, title: e.target.value }))
-                }
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="quiz-pass">Pass score (%)</Label>
-              <Input
-                id="quiz-pass"
-                type="number"
-                min={1}
-                max={100}
-                value={draft.pass_score}
-                onChange={(e) =>
-                  setDraft((prev) => ({ ...prev, pass_score: e.target.value }))
-                }
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="quiz-time">Time limit (seconds, optional)</Label>
-              <Input
-                id="quiz-time"
-                type="number"
-                min={30}
-                value={draft.time_limit_seconds}
-                onChange={(e) =>
-                  setDraft((prev) => ({
-                    ...prev,
-                    time_limit_seconds: e.target.value,
-                  }))
-                }
-                placeholder={tCommon("noLimit")}
-              />
-            </div>
-            <label className="flex items-center gap-2 text-sm sm:col-span-2">
-              <input
-                type="checkbox"
-                checked={draft.is_required}
-                onChange={(e) =>
-                  setDraft((prev) => ({
-                    ...prev,
-                    is_required: e.target.checked,
-                  }))
-                }
-              />
-              Required to complete the course
-            </label>
-          </div>
+      <WizardDialog
+        open={editing}
+        onOpenChange={(open) => {
+          if (!open) cancelEdit();
+        }}
+        title={editingId === "new" ? t("newQuiz") : t("editQuiz")}
+        steps={steps}
+        onSubmit={saveQuiz}
+        labels={wizardLabels}
+        size="xl"
+        busy={busy}
+        isDirty={editing && isQuizDraftChanged(draft, baseline)}
+      />
 
-          <div className="space-y-3">
-            {draft.questions.map((question, index) => (
-              <div
-                key={index}
-                className="space-y-2 rounded-[var(--radius)] border border-[var(--border)] p-3"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm font-medium">Question {index + 1}</p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="min-h-0 px-2 py-1 text-xs"
-                    disabled={draft.questions.length <= 1}
-                    onClick={() =>
-                      setDraft((prev) => ({
-                        ...prev,
-                        questions: prev.questions.filter((_, i) => i !== index),
-                      }))
-                    }
-                  >
-                    Remove
-                  </Button>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label htmlFor={`q-type-${index}`}>Type</Label>
-                    <Select
-                      id={`q-type-${index}`}
-                      value={question.type}
-                      onChange={(e) =>
-                        setDraft((prev) => ({
-                          ...prev,
-                          questions: prev.questions.map((row, i) =>
-                            i === index
-                              ? {
-                                  ...row,
-                                  type: e.target.value as "mcq" | "essay",
-                                }
-                              : row,
-                          ),
-                        }))
-                      }
-                    >
-                      <option value="mcq">Multiple choice</option>
-                      <option value="essay">Essay (no score)</option>
-                    </Select>
-                  </div>
-                  {question.type === "mcq" ? (
-                    <div className="space-y-1">
-                      <Label htmlFor={`q-correct-${index}`}>
-                        Correct option index (0-based)
-                      </Label>
-                      <Input
-                        id={`q-correct-${index}`}
-                        type="number"
-                        min={0}
-                        value={question.correct_index}
-                        onChange={(e) =>
-                          setDraft((prev) => ({
-                            ...prev,
-                            questions: prev.questions.map((row, i) =>
-                              i === index
-                                ? { ...row, correct_index: e.target.value }
-                                : row,
-                            ),
-                          }))
-                        }
-                      />
-                    </div>
-                  ) : null}
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor={`q-prompt-${index}`}>Prompt</Label>
-                  <Textarea
-                    id={`q-prompt-${index}`}
-                    rows={2}
-                    value={question.prompt}
-                    onChange={(e) =>
-                      setDraft((prev) => ({
-                        ...prev,
-                        questions: prev.questions.map((row, i) =>
-                          i === index ? { ...row, prompt: e.target.value } : row,
-                        ),
-                      }))
-                    }
-                  />
-                </div>
-                {question.type === "mcq" ? (
-                  <div className="space-y-1">
-                    <Label htmlFor={`q-options-${index}`}>
-                      Options (one per line)
-                    </Label>
-                    <Textarea
-                      id={`q-options-${index}`}
-                      rows={3}
-                      value={question.options_text}
-                      onChange={(e) =>
-                        setDraft((prev) => ({
-                          ...prev,
-                          questions: prev.questions.map((row, i) =>
-                            i === index
-                              ? { ...row, options_text: e.target.value }
-                              : row,
-                          ),
-                        }))
-                      }
-                    />
-                  </div>
-                ) : (
-                  <p className="text-xs text-[var(--muted-foreground)]">
-                    Essay answers are collected only and do not affect the pass
-                    score.
-                  </p>
-                )}
-              </div>
-            ))}
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() =>
-                setDraft((prev) => ({
-                  ...prev,
-                  questions: [...prev.questions, emptyQuizQuestionDraft()],
-                }))
-              }
-            >
-              Add question
-            </Button>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" disabled={busy} onClick={() => void saveQuiz()}>
-              {busy ? tCommon("saving") : t("saveQuiz")}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={busy}
-              onClick={cancelEdit}
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
-      ) : null}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        title={t("deleteQuiz")}
+        description={t("deleteQuizConfirm", { title: deleteTarget?.title ?? "" })}
+        confirmLabel={tCommon("delete")}
+        cancelLabel={tCommon("cancel")}
+        workingLabel={tCommon("working")}
+        errorFallback={t("quizDeleteFailed")}
+        variant="destructive"
+        loading={busy}
+        onConfirm={async () => {
+          if (deleteTarget) {
+            await deleteQuiz(deleteTarget.id);
+          }
+        }}
+      />
     </div>
   );
 }

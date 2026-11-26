@@ -60,7 +60,7 @@ class BuildCampaignReport
             });
         }
 
-        $campaigns = $campaignQuery->with(['recipients' => function ($q) use ($departmentId, $from, $to): void {
+        $campaigns = $campaignQuery->with(['courses', 'recipients' => function ($q) use ($departmentId, $from, $to): void {
             if ($departmentId) {
                 $q->whereHas('target', fn (Builder $t) => $t->where('department_id', $departmentId));
             }
@@ -80,7 +80,10 @@ class BuildCampaignReport
         $recipients = $campaigns->flatMap->recipients;
         $recipientTotal = $recipients->count();
 
-        $courseIds = $campaigns->pluck('course_id')->filter()->unique()->values();
+        $courseIds = $campaigns
+            ->flatMap(fn (Campaign $campaign) => $campaign->courses->pluck('id'))
+            ->unique()
+            ->values();
         $enrollmentQuery = Enrollment::query()->whereIn('course_id', $courseIds);
         if ($departmentId) {
             $enrollmentQuery->whereHas('target', fn (Builder $t) => $t->where('department_id', $departmentId));

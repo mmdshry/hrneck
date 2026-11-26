@@ -19,6 +19,8 @@ Production: https://hrneck.com/
 | `admin.hrneck.test` | Filament central |
 | `{slug}.hrneck.test` | Tenant admin + learner |
 
+Use `https://` for the web app (for example `https://itneck.hrneck.test`). Caddy serves HTTPS with a local certificate, and passkeys need a secure context. Run `caddy trust` once in an elevated shell so the browser trusts that certificate. Plain `http://` still works for the rest of the app, but passkeys are unavailable there.
+
 Demo: `admin@hrneck.test` / `DemoPass!234` (platform); `admin@itneck.test` (org). See `apps/api/config/brand.php` and [`docs/auth.md`](docs/auth.md).
 
 ## Quick start (Windows)

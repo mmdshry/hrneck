@@ -8,7 +8,7 @@ import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
 import { Panel } from "@/components/ui/panel";
-import { liveStatusLabel, useLiveTopic } from "@/hooks/use-live-topic";
+import { liveStatusLabel, useLiveStatusLabels, useLiveTopic } from "@/hooks/use-live-topic";
 import { api, ensureCsrf, fetchSessionUser } from "@/lib/api";
 import {
   captureElementPng,
@@ -17,7 +17,7 @@ import {
 import { orgLiveChannel } from "@/lib/live-topics";
 import { hasPermission, type SessionUser } from "@/lib/session";
 import { resolveTenant } from "@/lib/tenant";
-import { toastError, toastSuccess } from "@/lib/toast";
+import { toastError, toastSuccess, toastWarning } from "@/lib/toast";
 
 type Summary = {
   total_open: number;
@@ -102,7 +102,8 @@ export function ReportsClient() {
       .finally(() => setLoading(false));
   }, [liveReady, refreshFromApi, tCommon]);
 
-  const statusLabel = liveStatusLabel(status);
+  const liveLabels = useLiveStatusLabels();
+  const statusLabel = liveStatusLabel(status, liveLabels);
   const dash = tCommon("emDash");
 
   async function exportReport(format: "csv" | "pdf" | "png") {
@@ -121,8 +122,11 @@ export function ReportsClient() {
           ? "/api/v1/org/ticketing/reports/csv"
           : "/api/v1/org/ticketing/reports/pdf";
       const accept = format === "csv" ? "text/csv" : "application/pdf";
-      await downloadAuthenticated(path, `ticketing-report.${format}`, accept);
+      const result = await downloadAuthenticated(path, `ticketing-report.${format}`, accept);
       toastSuccess(t("reportDownloaded", { format: format.toUpperCase() }));
+      if (result.truncated) {
+        toastWarning(t("reportTruncated"));
+      }
     } catch (err) {
       toastError(err instanceof Error ? err.message : tCommon("exportFailed"));
     } finally {

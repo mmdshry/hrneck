@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Domains\Notifications\Mails\BrandedNotificationMail;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Mail;
 
@@ -20,9 +21,11 @@ class SmtpSmokeCommand extends Command
         }
 
         $to = (string) config('brand.support_address', 'support@hrneck.com');
-        Mail::raw('HRNECK SMTP smoke test from '.config('brand.short'), function ($message) use ($to): void {
-            $message->to($to)->subject(config('brand.short').' SMTP smoke');
-        });
+        Mail::to($to)->send(new BrandedNotificationMail(
+            subjectLine: config('brand.short').' SMTP smoke',
+            title: 'SMTP smoke test',
+            lines: ['This is a test email from '.config('brand.short').'. If you can read it, outgoing mail is working.'],
+        ));
 
         $this->info('Smoke email queued/sent to '.$to);
 

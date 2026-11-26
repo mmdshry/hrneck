@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import { formatDateTime } from "@/lib/format-datetime";
 import { resolveTenant } from "@/lib/tenant";
 
 export type LessonContentType = "text" | "video" | "audio" | "document" | "pdf";
@@ -182,10 +183,24 @@ export const emptyQuickContentForm = {
   duration_minutes: "8",
 };
 
-export function formatTs(value?: string | null): string {
+export function formatTs(value: string | null | undefined, timeZone: string): string {
   if (!value) return "—";
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? value : d.toLocaleString();
+  return formatDateTime(value, timeZone) || value;
+}
+
+/** Converts a datetime-local value (browser local time) to ISO 8601 UTC, or undefined when empty. */
+export function datetimeLocalToIso(value: string): string | undefined {
+  if (!value) return undefined;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+}
+
+/** True when both bounds are set and the expiration is not after the start. */
+export function windowIsInverted(startsAt: string, expiresAt: string): boolean {
+  const start = datetimeLocalToIso(startsAt);
+  const expires = datetimeLocalToIso(expiresAt);
+  if (!start || !expires) return false;
+  return Date.parse(expires) <= Date.parse(start);
 }
 
 export function isUploadableContentType(

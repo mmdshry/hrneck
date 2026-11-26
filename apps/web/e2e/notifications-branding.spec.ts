@@ -18,15 +18,17 @@ test.describe("Notifications and branding", () => {
     test.setTimeout(150_000);
     const title = `E2E notice ${Date.now()}`;
     await page.goto("/org/announcements");
-    await expect(page.locator("#announcement-title")).toBeVisible({ timeout: 20_000 });
-    await page.locator("#announcement-title").fill(title);
-    await page.locator("#announcement-body").fill("Automated announcement body.");
+    await page.getByRole("button", { name: "New announcement" }).click({ timeout: 20_000 });
+    const publishDialog = page.getByRole("dialog", { name: "New announcement" });
+    await expect(publishDialog.locator("#announcement-title")).toBeVisible({ timeout: 20_000 });
+    await publishDialog.locator("#announcement-title").fill(title);
+    await publishDialog.locator("#announcement-body").fill("Automated announcement body.");
     // Publishing queues one email per tenant user on the sync queue, so the POST can take 30 s+ locally.
     const publishPromise = page.waitForResponse(
       (res) => res.url().includes("/api/v1/org/announcements") && res.request().method() === "POST",
       { timeout: 120_000 },
     );
-    await page.getByRole("button", { name: "Publish announcement" }).click();
+    await publishDialog.getByRole("button", { name: "Publish announcement" }).click();
     expect((await publishPromise).status()).toBe(201);
     await expect(page.getByText(title).first()).toBeVisible({ timeout: 15_000 });
 

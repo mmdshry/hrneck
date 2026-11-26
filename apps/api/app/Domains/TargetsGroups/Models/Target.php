@@ -22,7 +22,6 @@ use Illuminate\Support\Carbon;
  * @property string|null $employment_type
  * @property int|null $user_id
  * @property string|null $preferred_language
- * @property string|null $timezone
  * @property string $status
  * @property string|null $external_id
  * @property string|null $avatar_path
@@ -54,7 +53,6 @@ class Target extends Model
         'employment_type',
         'user_id',
         'preferred_language',
-        'timezone',
         'status',
         'external_id',
         'avatar_path',

@@ -9,7 +9,9 @@ use App\Domains\TrainingLms\Models\Enrollment;
 use App\Domains\TrainingLms\Models\Lesson;
 use App\Domains\TrainingLms\Models\LessonProgress;
 use App\Models\Tenant;
+use Illuminate\Mail\PendingMail;
 use Illuminate\Support\Facades\Mail;
+use Mockery\MockInterface;
 use Stancl\Tenancy\Facades\Tenancy;
 
 beforeEach(function () {
@@ -96,7 +98,7 @@ test('org can assign multiple courses via course_ids', function () {
     )->toBe(count($courseIds) * count($targetIds));
     expect(
         Campaign::query()
-            ->whereIn('course_id', $courseIds)
+            ->whereHas('courses', fn ($query) => $query->whereIn('courses.id', $courseIds))
             ->where('status', 'running')
             ->count()
     )->toBe(2);
@@ -134,10 +136,17 @@ test('org can assign single article content to targets', function () {
 });
 
 test('assign still succeeds when training reminder SMTP fails', function () {
-    Mail::shouldReceive('raw')
+    /** @var MockInterface&PendingMail $pending */
+    $pending = Mockery::mock(PendingMail::class);
+    $pending->shouldReceive('send')
         ->atLeast()
         ->once()
         ->andThrow(new RuntimeException('SMTP 550 Invalid recipient'));
+
+    Mail::shouldReceive('to')
+        ->atLeast()
+        ->once()
+        ->andReturn($pending);
 
     Tenancy::initialize($this->tenant);
     $targetIds = Target::query()->limit(1)->pluck('id')->all();

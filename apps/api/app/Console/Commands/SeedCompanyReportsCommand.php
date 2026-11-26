@@ -432,11 +432,16 @@ class SeedCompanyReportsCommand extends Command
             'type' => 'training',
             'status' => 'completed',
             'is_remedial' => $remedial,
-            'course_id' => (int) $course->id,
             'starts_at' => $startsAt,
             'ends_at' => sprintf('%s-%02d 18:00:00', $month, min(28, $day + 10)),
             'created_at' => $now,
             'updated_at' => $now,
+        ]);
+
+        DB::table('campaign_course')->insert([
+            'campaign_id' => $campaignId,
+            'course_id' => (int) $course->id,
+            'sort_order' => 0,
         ]);
 
         $enrollmentRows = [];

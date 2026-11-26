@@ -25,7 +25,6 @@ final class TargetCsvRowNormalizer
             'job_title' => $this->nullableString($item['job_title'] ?? null),
             'employee_number' => $this->nullableString($item['employee_number'] ?? null),
             'phone' => $this->nullableString($item['phone'] ?? null, 40),
-            'timezone' => $this->nullableString($item['timezone'] ?? null, 64),
             'external_id' => $this->nullableString($item['external_id'] ?? null),
             'manager_email' => $this->nullableString($item['manager_email'] ?? null),
         ];

@@ -4,10 +4,11 @@ export const learnerPortalGuide: GuideModule = {
   slug: "learner-portal",
   title: "Learner portal",
   summary:
-    "Complete assigned courses, watch lessons with recorded watch time, take quizzes, and follow training notifications in /learn.",
+    "Complete assigned courses, watch lessons with recorded watch time, take quizzes, and follow training notifications from your employee dashboard at /portal.",
   keywords: [
     "learner",
     "learn",
+    "dashboard",
     "quiz",
     "course",
     "enrollment",
@@ -15,13 +16,13 @@ export const learnerPortalGuide: GuideModule = {
     "essay",
     "portal",
   ],
-  openInAppHref: "/learn",
+  openInAppHref: "/portal",
   overview:
-    "The learner portal is where enrolled people consume security-awareness content. Operators assign courses from /org/training; learners sign in on the tenant host and open /learn to see assignments, read articles, watch uploaded or embedded video (watch time is reported), view PDFs, mark lessons complete, and take quizzes with pass scores, optional flags, countdowns, and essay answers. HR checklists never appear here. The notification bell on the learner header surfaces training_assigned events with deep links back into /learn.",
+    "Employees land on their dashboard at /portal after sign-in. My courses lists the security-awareness training assigned to them: operators assign courses from /org/training and learners open each course to see lessons, read articles, watch uploaded or embedded video (watch time is reported), view PDFs, mark lessons complete, and take quizzes with pass scores, optional flags, countdowns, and essay answers. The same dashboard links to My tickets and the Knowledge base. HR checklists never appear here. The notification bell surfaces training_assigned events with deep links back into /portal. The plan can switch My courses off; the rest of the dashboard still works.",
   example: {
     title: "Finance analyst finishes Phishing Essentials",
     narrative:
-      "Maya opens /learn, sees Security Awareness Q4 at 40%, watches Lesson 2 (4 minutes recorded), marks it complete, then takes the required quiz with a 15-minute countdown. She passes at 88%, leaves an essay on “how she would report a lure”, and the org viewing report updates her row before the next reminder fires.",
+      "Maya opens /portal, sees Security Awareness Q4 under My courses at 40%, watches Lesson 2 (4 minutes recorded), marks it complete, then takes the required quiz with a 15-minute countdown. She passes at 88%, leaves an essay on “how she would report a lure”, and the org viewing report updates her row before the next reminder fires.",
   },
   steps: [
     {
@@ -30,9 +31,9 @@ export const learnerPortalGuide: GuideModule = {
       href: "/login",
     },
     {
-      title: "Open /learn",
-      body: "Review assigned courses with status and progress. Only enrollments created by Training assignments or campaigns appear.",
-      href: "/learn",
+      title: "Open your dashboard at /portal",
+      body: "My courses lists assigned training with status and progress. Only enrollments created by Training assignments or campaigns appear. My tickets and Knowledge base are one click away.",
+      href: "/portal",
     },
     {
       title: "Complete lessons",
@@ -44,7 +45,7 @@ export const learnerPortalGuide: GuideModule = {
     },
     {
       title: "Watch the notification bell",
-      body: "New training assignments appear in the learner header bell with a deep link into the course.",
+      body: "New training assignments appear in the bell with a deep link into the course on your dashboard.",
     },
   ],
   sections: [
@@ -66,7 +67,7 @@ export const learnerPortalGuide: GuideModule = {
     title: "Learner path",
     nodes: [
       { id: "assign", label: "Org assigns course" },
-      { id: "learn", label: "/learn list" },
+      { id: "learn", label: "My courses on /portal" },
       { id: "lesson", label: "Lesson" },
       { id: "quiz", label: "Quiz" },
       { id: "report", label: "Org viewing report" },
@@ -97,7 +98,7 @@ export const learnerPortalGuide: GuideModule = {
     ],
     annotations: [
       { label: "Watch time", note: "Video progress reports back to the org viewing report." },
-      { label: "Bell", note: "training_assigned notifications deep-link into /learn." },
+      { label: "Bell", note: "training_assigned notifications deep-link into /portal." },
     ],
   },
   related: ["training", "auth", "announcements-notifications"],
