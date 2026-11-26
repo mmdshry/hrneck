@@ -79,7 +79,7 @@ const PANELS: MockPanel[] = [
     },
     rows: [
       { title: "IT access provisioning", meta: "Due in 2 days · Contoso" },
-      { title: "Offboarding · Northwind", meta: "3 of 9 items remaining" },
+      { title: "Offboarding", meta: "Northwind · 3 of 9 left" },
     ],
   },
   {
@@ -98,7 +98,7 @@ const PANELS: MockPanel[] = [
     },
     rows: [
       { title: "INC-2841 · VPN access", meta: "SLA 4h · Assigned" },
-      { title: "SR-991 · Laptop request", meta: "Service request · New" },
+      { title: "SR-991 · Laptop", meta: "Service request · New" },
     ],
   },
   {
@@ -116,8 +116,8 @@ const PANELS: MockPanel[] = [
       progress: 100,
     },
     rows: [
-      { title: "Weekly campaign digest", meta: "Email · Every Monday" },
-      { title: "Quarterly PDF · Acme Corp", meta: "Export · DomPDF" },
+      { title: "Weekly digest", meta: "Email · Every Monday" },
+      { title: "Quarterly PDF", meta: "Acme Corp · Export" },
     ],
   },
 ];
@@ -320,7 +320,7 @@ export function ProductMock({ className }: { className?: string }) {
                   key={row.title}
                   className="rounded-[var(--radius)] border border-[var(--border)] px-3 py-2.5"
                 >
-                  <p className="truncate text-xs font-medium text-[var(--foreground)]">
+                  <p className="text-xs font-medium leading-snug text-[var(--foreground)]">
                     {row.title}
                   </p>
                   <p className="mt-0.5 text-[0.65rem] text-[var(--muted-foreground)]">

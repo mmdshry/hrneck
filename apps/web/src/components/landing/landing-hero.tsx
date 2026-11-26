@@ -4,8 +4,6 @@ import { useTranslations } from "next-intl";
 import { LinkButton } from "@/components/ui/link-button";
 import { ProductMock } from "@/components/landing/product-mock";
 
-const brand = process.env.NEXT_PUBLIC_BRAND_SHORT ?? "HRNECK";
-
 export function LandingHero() {
   const t = useTranslations("landing");
 
@@ -20,10 +18,7 @@ export function LandingHero() {
       />
       <div className="relative mx-auto grid w-full max-w-6xl gap-14 px-6 pb-16 pt-14 md:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] md:items-center md:gap-16 md:pb-20 md:pt-16">
         <div className="landing-hero-enter flex flex-col gap-8">
-          <p className="font-[family-name:var(--font-display)] text-5xl leading-none tracking-tight text-[var(--foreground)] md:text-6xl lg:text-7xl">
-            {brand}
-          </p>
-          <h1 className="max-w-xl font-[family-name:var(--font-display)] text-2xl leading-snug tracking-tight text-[var(--foreground)] md:text-3xl">
+          <h1 className="max-w-xl font-[family-name:var(--font-display)] text-4xl leading-tight tracking-tight text-[var(--foreground)] md:text-5xl lg:text-6xl">
             {t("heroTitle")}
           </h1>
           <p className="max-w-lg text-lg leading-relaxed text-[var(--muted-foreground)]">

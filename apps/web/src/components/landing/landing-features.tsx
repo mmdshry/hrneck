@@ -7,6 +7,7 @@ import {
   Download,
   GraduationCap,
   KeyRound,
+  Presentation,
   Settings2,
   ShieldAlert,
   Target,
@@ -61,7 +62,7 @@ const FEATURE_KEYS = [
     bodyKey: "featurePdfBody",
   },
   {
-    icon: GraduationCap,
+    icon: Presentation,
     titleKey: "featureLearnerTitle",
     bodyKey: "featureLearnerBody",
   },

@@ -16,7 +16,6 @@ const ANCHOR_HREFS = [
   "#how-it-works",
   "#features",
   "#audiences",
-  "#demo",
 ] as const;
 
 /**
@@ -34,7 +33,6 @@ export function LandingHeader({ homeHref = "" }: { homeHref?: string }) {
     { href: `${homeHref}${ANCHOR_HREFS[0]}`, label: t("howItWorks") },
     { href: `${homeHref}${ANCHOR_HREFS[1]}`, label: t("features") },
     { href: `${homeHref}${ANCHOR_HREFS[2]}`, label: t("whoItsFor") },
-    { href: `${homeHref}${ANCHOR_HREFS[3]}`, label: t("requestDemo") },
   ] as const;
 
   return (
