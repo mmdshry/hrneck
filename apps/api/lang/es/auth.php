@@ -21,4 +21,5 @@ return [
     'password_updated' => 'Contraseña actualizada.',
     'logged_out' => 'Sesión cerrada',
     'sso_handoff_invalid' => 'Este enlace de inicio de sesión ha caducado. Vuelva a iniciar sesión.',
+    'org_choice_invalid' => 'La selección de organización ha caducado. Vuelva a iniciar sesión.',
 ];

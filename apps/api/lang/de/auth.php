@@ -21,4 +21,5 @@ return [
     'password_updated' => 'Passwort aktualisiert.',
     'logged_out' => 'Abgemeldet',
     'sso_handoff_invalid' => 'Dieser Anmeldelink ist abgelaufen. Bitte melden Sie sich erneut an.',
+    'org_choice_invalid' => 'Die Organisationsauswahl ist abgelaufen. Bitte melden Sie sich erneut an.',
 ];

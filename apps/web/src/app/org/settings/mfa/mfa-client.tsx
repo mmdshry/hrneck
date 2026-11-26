@@ -30,7 +30,12 @@ function browserTimeZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
-export function MfaSetupClient() {
+type MfaSetupClientProps = {
+  /** Shows the link back to the organization console settings. The employee portal copy hides it. */
+  showSettingsLink?: boolean;
+};
+
+export function MfaSetupClient({ showSettingsLink = true }: MfaSetupClientProps) {
   const t = useTranslations("account");
   const tCommon = useTranslations("common");
   const tNav = useTranslations("nav");
@@ -110,9 +115,11 @@ export function MfaSetupClient() {
         title={t("securityTitle")}
         description={t("securityDescription")}
         actions={
-          <LinkButton href="/org/settings" variant="secondary">
-            {tNav("settings")}
-          </LinkButton>
+          showSettingsLink ? (
+            <LinkButton href="/org/settings" variant="secondary">
+              {tNav("settings")}
+            </LinkButton>
+          ) : undefined
         }
       />
 

@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { EmptyState } from "@/components/ui/empty-state";
 import { useTranslations } from "next-intl";
 import { useOrgTimezone } from "@/hooks/use-org-timezone";
 import { formatDateTime } from "@/lib/format-datetime";
@@ -24,7 +23,6 @@ import {
   type PageSize,
   type PaginationMeta,
 } from "@/lib/pagination";
-import { hasPermission, type SessionUser } from "@/lib/session";
 import { matchesCells } from "@/lib/table-filter";
 import { resolveTenant } from "@/lib/tenant";
 import { toastError, toastSuccess } from "@/lib/toast";
@@ -41,7 +39,6 @@ export function AnnouncementsClient() {
   const orgTimeZone = useOrgTimezone();
   const tenant = resolveTenant();
   const channel = tenant ? orgLiveChannel(tenant, "announcements") : null;
-  const [session, setSession] = useState<SessionUser | null>(null);
   const [rows, setRows] = useState<Announcement[]>([]);
   const [liveRows, setLiveRows] = useState<Announcement[] | null>(null);
   const [meta, setMeta] = useState<PaginationMeta>(emptyMeta());
@@ -111,18 +108,6 @@ export function AnnouncementsClient() {
   }, [liveError]);
 
   useEffect(() => {
-    void (async () => {
-      try {
-        await ensureCsrf();
-        const me = await fetchSessionUser();
-        setSession(me);
-      } catch {
-        setSession(null);
-      }
-    })();
-  }, []);
-
-  useEffect(() => {
     if (filtersKeyRef.current !== filtersKey) {
       filtersKeyRef.current = filtersKey;
       if (page !== 1) {
@@ -145,7 +130,6 @@ export function AnnouncementsClient() {
       try {
         await ensureCsrf();
         const me = await fetchSessionUser();
-        setSession(me);
         if (me) {
           await refreshFromApi(page, perPage, filters);
         }
@@ -242,18 +226,6 @@ export function AnnouncementsClient() {
 
   if (!loaded) {
     return <PageSkeleton className="max-w-5xl" />;
-  }
-
-  if (session && !hasPermission(session, "org.announcements.manage")) {
-    return (
-      <div className="mx-auto w-full max-w-5xl flex-1 space-y-4 px-4 py-8 sm:px-6">
-        <PageHeader
-          title={t("title")}
-          description={t("description")}
-        />
-        <EmptyState title={t("noPermission")} />
-      </div>
-    );
   }
 
   return (

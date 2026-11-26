@@ -122,6 +122,7 @@ class SsoController extends Controller
             'user_id' => $user->id,
             'next' => $flow['next'],
             'remember' => $flow['remember'],
+            'tenant' => $this->returnOrigins->tenantFor($flow['origin']),
         ]);
 
         return redirect()->away($flow['origin'].'/login/sso/complete?'.http_build_query(['token' => $token]));
@@ -158,7 +159,7 @@ class SsoController extends Controller
             $request->session()->regenerate();
         }
 
-        $this->activeOrg->handle($user);
+        $this->activeOrg->handle($user, $handoff['tenant']);
 
         return response()->json([
             'data' => new UserResource($user),

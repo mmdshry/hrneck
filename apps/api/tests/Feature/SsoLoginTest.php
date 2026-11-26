@@ -1,5 +1,8 @@
 <?php
 
+use App\Domains\IdentityAccess\Actions\CreateOrgUser;
+use App\Domains\IdentityAccess\Actions\EnsureTenantMembership;
+use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
 use App\Domains\IdentityAccess\Support\SsoProvider;
 use App\Models\User;
 use App\Models\UserIdentity;
@@ -184,6 +187,19 @@ test('rejects an unknown state', function () {
         ->assertRedirectContains('/login?sso_error=invalid_state');
 });
 
+test('an SSO sign-in that started on an organization address activates that organization', function () {
+    $user = app(CreateOrgUser::class)->handle('itneck', 'Ana', 'ana@example.com', 'DemoPass!234', [OrgPermissionCatalog::ORG_ADMIN]);
+    app(EnsureTenantMembership::class)->handle($user, 'company');
+    $flow = ssoFakeProvider('google', ssoGoogleUser('ana@example.com'));
+
+    $token = ssoHandoffToken($this, 'google', $flow, 'http://company.hrneck.test');
+
+    $this->withHeader('Origin', 'http://hrneck.test')
+        ->postJson('/api/v1/auth/oauth/exchange', ['token' => $token])
+        ->assertOk()
+        ->assertJsonPath('data.active_tenant_id', 'company');
+});
+
 test('a handoff token can be exchanged only once', function () {
     $user = User::factory()->create(['email' => 'ana@example.com']);
     UserIdentity::factory()->create([
@@ -311,9 +327,9 @@ function ssoCallbackUrl(string $provider, string $state, string $code = 'auth-co
 /**
  * Runs the redirect and callback steps and returns the response of the callback.
  */
-function ssoCallback(TestCase $test, string $provider, stdClass $flow): TestResponse
+function ssoCallback(TestCase $test, string $provider, stdClass $flow, string $returnTo = 'http://hrneck.test'): TestResponse
 {
-    $test->get(ssoStartUrl($provider))->assertRedirect();
+    $test->get(ssoStartUrl($provider, $returnTo))->assertRedirect();
 
     return $test->get(ssoCallbackUrl($provider, $flow->state));
 }
@@ -321,9 +337,9 @@ function ssoCallback(TestCase $test, string $provider, stdClass $flow): TestResp
 /**
  * Runs a successful redirect and callback and returns the one-time handoff token the web app would exchange.
  */
-function ssoHandoffToken(TestCase $test, string $provider, stdClass $flow): string
+function ssoHandoffToken(TestCase $test, string $provider, stdClass $flow, string $returnTo = 'http://hrneck.test'): string
 {
-    $response = ssoCallback($test, $provider, $flow)
+    $response = ssoCallback($test, $provider, $flow, $returnTo)
         ->assertRedirectContains('/login/sso/complete?token=');
 
     parse_str((string) parse_url((string) $response->headers->get('Location'), PHP_URL_QUERY), $query);

@@ -18,7 +18,7 @@ export const mspGuide: GuideModule = {
   ],
   openInAppHref: "/msp",
   overview:
-    "Die MSP-Konsole unter /msp ist nur für Plattform-Mitarbeiter (platform_super_admin und platform_agent). Sie listet Tenant-Organisationen mit Branche, Mitarbeiterband, Status und Schulungsflags und lässt Staff Tenant-Admin öffnen—was einen echten staff_tenant_id-Kontext setzt, damit /org für diesen Kunden lädt. Nutzen Sie Tenant verlassen im Org-Shell-Banner, um zu /msp zurückzukehren. Filament unter admin.hrneck.test/admin ist eine separate Staff-Oberfläche (Gesundheit, Aktivitätsprotokoll, Tenant-Umschalter, tiefere Ops) und wird von diesem Guide nicht abgedeckt.",
+    "Die MSP-Konsole unter /msp ist nur für Plattform-Mitarbeiter (platform_super_admin und platform_agent). Sie listet Tenant-Organisationen mit Branche, Mitarbeiterband, Status und Schulungsflags und lässt Staff Tenant-Admin öffnen—was einen echten staff_tenant_id-Kontext setzt, damit /org für diesen Kunden lädt. Nutzen Sie Tenant verlassen im Org-Shell-Banner, um zu /msp zurückzukehren.",
   example: {
     title: "Staff hilft Acme vor dem Q4-Launch",
     narrative:
@@ -51,15 +51,11 @@ export const mspGuide: GuideModule = {
   ],
   sections: [
     {
-      title: "MSP vs. Filament vs. Org",
+      title: "MSP vs. Org",
       steps: [
         {
           title: "MSP = Verzeichnis + Eintreten",
           body: "Next /msp ist das leichte Staff-Verzeichnis und der Einstieg in die Kunden-Org-UI.",
-        },
-        {
-          title: "Filament = zentrale Ops",
-          body: "admin.hrneck.test/admin ergänzt Plattform-Gesundheit, Aktivitätsprotokoll, Organisations-CRUD und Tenant-Ops-Ressourcen nach einem Filament-Tenant-Wechsel. Kunden sehen Filament nie.",
         },
         {
           title: "Org-Benutzer bleiben auf ihrem Host",

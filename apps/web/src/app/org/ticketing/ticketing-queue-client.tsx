@@ -5,7 +5,6 @@ import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
-import { EmptyState } from "@/components/ui/empty-state";
 import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
@@ -450,15 +449,6 @@ export function TicketingQueueClient() {
 
   if (loading) {
     return <PageSkeleton className="max-w-5xl" />;
-  }
-
-  if (session && !hasPermission(session, "org.ticketing.tickets")) {
-    return (
-      <div className="mx-auto w-full max-w-5xl flex-1 space-y-4 px-4 py-8 sm:px-6">
-        <PageHeader title={t("title")} description={t("description")} />
-        <EmptyState title={t("needTicketsPermission")} />
-      </div>
-    );
   }
 
   return (

@@ -372,6 +372,8 @@
     "selectOrgEmpty": "No organization memberships are available for this account.",
     "selectOrgLoadFailed": "Unable to load organizations.",
     "selectOrgEnterFailed": "Unable to enter that organization.",
+    "selectOrgCurrent": "Actuelle",
+    "selectOrgPasswordPrompt": "Cette organisation a sa propre connexion. Saisissez son mot de passe pour continuer.",
     "passkeyButton": "Se connecter avec une clé d'accès",
     "passkeyDivider": "Ou utilisez un code",
     "recoveryCodeLabel": "Code de récupération",
@@ -380,6 +382,11 @@
     "passkeyFailed": "La clé d'accès n'a pas pu être vérifiée. Réessayez.",
     "passkeyCancelled": "La connexion par clé d'accès a été annulée.",
     "passkeyNeedsHttps": "Les clés d'accès nécessitent une connexion sécurisée. Ouvrez ce site en https://."
+  },
+  "orgNoAccess": {
+    "title": "Accès refusé à cette page",
+    "body": "Votre compte ne dispose pas des autorisations nécessaires pour cette page. Demandez l’accès à un administrateur de l’organisation.",
+    "backToDashboard": "Retour au tableau de bord"
   },
   "account": {
     "securityTitle": "Sécurité",
@@ -702,7 +709,7 @@
       "details": "Details",
       "openModule": "Open module",
       "loadFailed": "Failed to load dashboard metrics",
-      "openTenantFilament": "Open this organization in Filament. Live metrics are for organization users.",
+      "openTenantFromMsp": "Enter this organization from the MSP console to view live metrics.",
       "goToLogin": "Go to login"
     },
     "msp": {
@@ -1883,6 +1890,15 @@
     "unavailable": "L'assistant est temporairement indisponible. Réessayez bientôt.",
     "conversationEnded": "Cette conversation est terminée. Envoyez à nouveau votre message pour en démarrer une nouvelle.",
     "genericError": "Une erreur est survenue. Réessayez."
+  },
+  "legal": {
+    "legalLabel": "Mentions légales",
+    "privacyPolicy": "Politique de confidentialité",
+    "termsOfService": "Conditions d’utilisation",
+    "onThisPage": "Sur cette page",
+    "effectiveDate": "En vigueur depuis le {date}",
+    "precedenceNotice": "Le Business Associate Agreement (BAA) conclu entre HRNECK et votre organisation régit le traitement des informations de santé protégées. Ces pages décrivent nos pratiques et ne remplacent pas le BAA.",
+    "demoConsent": "En envoyant cette demande, vous acceptez notre <privacy>Politique de confidentialité</privacy> et nos <terms>Conditions d’utilisation</terms>."
   },
   "guides": {
     "hubTitle": "Guides",

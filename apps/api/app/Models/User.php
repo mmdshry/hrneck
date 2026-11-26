@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Domains\IdentityAccess\Actions\ListSignInOrganizations;
 use App\Domains\IdentityAccess\Models\WebauthnCredential;
 use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
 use App\Support\ActiveOrgTenant;
@@ -177,25 +178,24 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
         return null;
     }
 
-    public function needsOrgSelection(): bool
+    /**
+     * @param  list<array{tenant_id: string, name: string, requires_password: bool}>  $organizations
+     */
+    public function needsOrgSelection(array $organizations): bool
     {
-        if ($this->isPlatformStaff()) {
+        if ($this->isPlatformStaff() || $organizations === []) {
             return false;
         }
 
-        $active = $this->relationLoaded('memberships')
-            ? $this->memberships->filter(fn (TenantMembership $m): bool => $m->isActive())
-            : $this->memberships()->active()->get();
+        $ownTenantIds = ListSignInOrganizations::ownTenantIds($organizations);
 
-        if ($active->count() <= 1) {
+        if (count($organizations) === 1 && $ownTenantIds !== []) {
             return false;
         }
 
         $sessionId = ActiveOrgTenant::id();
 
-        return ! (is_string($sessionId) && $sessionId !== '' && $active->contains(
-            fn (TenantMembership $m): bool => $m->tenant_id === $sessionId
-        ));
+        return ! (is_string($sessionId) && $sessionId !== '' && in_array($sessionId, $ownTenantIds, true));
     }
 
     /** @return BelongsTo<Tenant, $this> */

@@ -5,6 +5,16 @@ export type OrgMembership = {
   department?: string | null;
 };
 
+/**
+ * An organization the signed-in login can enter. `requires_password` is true for another login with the
+ * same email (its own password, and MFA if enabled); false for a membership of this login.
+ */
+export type SignInOrganization = {
+  tenant_id: string;
+  name: string;
+  requires_password: boolean;
+};
+
 export type SubscriptionStatus = "trial" | "active" | "suspended" | "expired";
 
 export type SubscriptionUsageItem = {
@@ -58,6 +68,7 @@ export type SessionUser = {
   staff_tenant_id?: string | null;
   acting_in_tenant?: boolean;
   memberships?: OrgMembership[];
+  organizations?: SignInOrganization[];
   needs_org_selection?: boolean;
   active_tenant_id?: string | null;
   subscription?: SessionSubscription | null;
@@ -101,6 +112,18 @@ export function canAccessMsp(user: StaffGateUser): boolean {
 
 export function activeMemberships(user: PostLoginUser): OrgMembership[] {
   return (user.memberships ?? []).filter((m) => Boolean(m.tenant_id));
+}
+
+/** Every organization the login can enter. Falls back to memberships when the API sent no list. */
+export function signInOrganizations(user: SessionUser): SignInOrganization[] {
+  if (user.organizations) {
+    return user.organizations;
+  }
+  return activeMemberships(user).map((m) => ({
+    tenant_id: m.tenant_id,
+    name: m.name,
+    requires_password: false,
+  }));
 }
 
 export function defaultPostLoginPath(user: PostLoginUser): string {
@@ -182,6 +205,11 @@ export function matchOrgMembership(
 
   if (user.tenant_id === tenant) {
     return { ok: true };
+  }
+
+  // Another organization login of the same email: the user has to pick it (and give its password).
+  if (signInOrganizations(user).some((org) => org.tenant_id === tenant)) {
+    return { ok: false, kind: "org_selection_required" };
   }
 
   if (memberships.length > 1) {

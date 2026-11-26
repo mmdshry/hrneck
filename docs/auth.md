@@ -6,7 +6,7 @@ HRNECK uses first-party **Laravel Sanctum cookie sessions** (not bearer PATs). T
 
 | Email | Role | Password |
 |-------|------|----------|
-| `admin@hrneck.test` | Platform staff (MSP + Filament) | `DemoPass!234` |
+| `admin@hrneck.test` | Platform staff (MSP) | `DemoPass!234` |
 | `admin@itneck.test` | Org admin (`itneck`) | `DemoPass!234` |
 | `admin@test.test` / `admin@company.test` | Org admins | `DemoPass!234` |
 
@@ -19,7 +19,47 @@ Source of truth: [`apps/api/config/brand.php`](../apps/api/config/brand.php) + [
 3. If MFA is enabled → `{ mfa_required, challenge_token, mfa_methods: { totp, passkey } }` → a second factor: `POST /api/v1/auth/mfa/verify` (authenticator code or recovery code) or the passkey endpoints below
 4. Otherwise session cookie is established; `GET /api/v1/auth/me` returns the user
 
-Unverified emails (`email_verified_at` null) cannot sign in to the SPA. Org users from `CreateOrgUser` and platform users from Filament `persistUser` are verified on create (`forceFill`).
+If one password matches several organization logins, step 2 returns an organization choice instead of a session. See [Organizations per sign-in](#organizations-per-sign-in).
+
+Unverified emails (`email_verified_at` null) cannot sign in to the SPA. Org users from `CreateOrgUser` and platform users from `persistUser` are verified on create (`forceFill`).
+
+## Organizations per sign-in
+
+One person can belong to several organizations. Two shapes are supported, and they can be combined:
+
+- **Memberships:** one login with several `tenant_memberships`.
+- **Separate logins:** one login per organization, all with the same email. `users` keeps `(tenant_id, email)` unique, so one email can have one login per organization.
+
+`GET /api/v1/auth/me` returns `organizations` (`{ tenant_id, name, requires_password }`) and `needs_org_selection`:
+
+- `requires_password: false` is a membership of the signed-in login. It is entered without a password.
+- `requires_password: true` is another login with the same email. It needs that login's password, and its MFA if enabled.
+- Disabled memberships and disabled logins are left out.
+- `needs_org_selection` is false when the user has one organization that is a membership, or when the session already has an active organization from the user's memberships. Otherwise it is true, and the web app opens `/select-org`.
+
+### Choosing at sign-in
+
+When one password matches several organization logins, `POST /api/v1/auth/login` starts no session. It returns a challenge and the list:
+
+```json
+{ "org_choice_required": true, "challenge_token": "…", "organizations": [{ "tenant_id": "itneck", "name": "ITneck" }] }
+```
+
+- The challenge is single-use and expires after 10 minutes. It stores the matching login ids, never the password.
+- The web app keeps it in `sessionStorage` (`org_choice`) and opens `/select-org`, where the user picks an organization without typing the password again.
+- `POST /api/v1/auth/login/org` with `{ challenge_token, tenant }` signs into the chosen login and consumes the challenge. `tenant` must be one of the listed organizations, or the request fails with `org_choice_invalid`.
+- If that login has MFA, the response is `{ mfa_required, challenge_token, mfa_methods }`. The usual second factor completes it. That challenge carries the chosen organization, which becomes active once the factor is accepted.
+- The organization sign-in address (subdomain, or `?tenant=`) is sent as `tenant` on `POST /api/v1/auth/login`. When it names one of the logins, that login is used directly and no list is shown. The named organization becomes the active one when the login can enter it without another password (its own membership, or a membership it already has). A login the user is only a member of, and that has no login at that address, is not found there: sign in at the address of the login's own organization, then pick the other organization on `/select-org`.
+- SSO works the same way: the one-time handoff carries the organization of `return_to` (for example `company` from `company.hrneck.test`), and the exchange makes it active when the account can enter it.
+
+### Switching organization
+
+`/select-org` also switches organizations while signed in:
+
+- A membership of this login: `POST /api/v1/auth/orgs/{tenant}/enter`. No password.
+- Another login with the same email: `POST /api/v1/auth/orgs/{tenant}/switch` with `{ password }`. That login's password is required again, and so is its MFA. The response is either the user, or `mfa_required` and `challenge_token`, which finish with the same second-factor endpoints. Platform staff cannot switch this way. The endpoint is throttled by `auth-login`.
+
+Switching replaces the session with the target login's session. The browser then opens the organization's own subdomain (`tenantWorkspaceUrl`). `SESSION_DOMAIN=.hrneck.test` shares the cookie across tenant subdomains. Local `.env` keeps `SESSION_DOMAIN=null`, so each subdomain has its own session and its own active organization.
 
 ## MFA
 
@@ -50,11 +90,6 @@ Library: `web-auth/webauthn-lib`. Settings live in [`apps/api/config/passkeys.ph
 - `PASSKEY_ALLOWED_ORIGINS` defaults to `FRONTEND_URL`, which is `http://…` locally. For local HTTPS set `PASSKEY_ALLOWED_ORIGINS=https://hrneck.test` in `apps/api/.env`. Otherwise the server rejects every ceremony from `https://`.
 - The RP ID is the base domain, so passkeys do not work on tenant custom domains.
 
-### Known gap
-
-Filament (platform admin panel) does not offer passkeys yet. A platform staff account whose only factor is a passkey is not challenged at Filament login, because the Filament App Authentication step is not required and reads only the TOTP secret. Platform staff should keep an authenticator app enrolled until this is closed.
-
-- Filament admin login uses the same `mfa_*` columns via App Authentication.
 - UI: `/org/settings/mfa` (authenticator app, passkeys, disable). The sign-in challenge is `/login/mfa`.
 
 ## Single sign-on (Google and Microsoft)
@@ -157,13 +192,13 @@ Web `hasPermission` reads only that list; it does not special-case `acting_in_te
 
 - Next `src/proxy.ts` redirects unauthenticated browsers away from `/msp`, `/org`, `/learn`, `/portal`
 - Signed-in visits to `/login` redirect via `/auth/me` to `/msp` (platform) or `/org` (tenant user), unless `?next=` is set
-- `/login/mfa`, `/login/forgot`, `/login/reset`, `/login/sso` stay reachable mid-flow
+- `/login/mfa`, `/login/forgot`, `/login/reset`, `/login/sso` and `/select-org` stay reachable mid-flow
 - API remains the source of truth (`auth:sanctum`, membership, Spatie permissions)
 - `API_ORIGIN` must reach Laravel from the Next server (used by the proxy)
 
 ## Sanctum / session
 
-- Stateful domains: `SANCTUM_STATEFUL_DOMAINS` plus `*.hrneck.com` in production (`config/sanctum.php`); include host+port for every origin you open in local (e.g. `127.0.0.1:3100`)
+- Stateful domains: `SANCTUM_STATEFUL_DOMAINS` plus `*.hrneck.com` in production (`config/sanctum.php`); include host+port for every origin you open in local (e.g. `127.0.0.1:3100`). Local `.env` lists `*.hrneck.test`, so every tenant subdomain is stateful (Sanctum matches patterns with `Str::is`)
 - Prefer `SESSION_ENCRYPT=true` on all environments. Set `SESSION_SECURE_COOKIE=true` only on HTTPS (production). Local `*.hrneck.test` over HTTP must use `SESSION_SECURE_COOKIE=false` (see `.env.example`) or the browser will drop the session cookie after login
 - For shared cookies across `{slug}.hrneck.test`, set `SESSION_DOMAIN=.hrneck.test` (and `.hrneck.com` in production)
 - Login/forgot throttled by `auth-login` (per IP + email), independent of `X-Tenant`

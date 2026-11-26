@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\Api\V1;
 
+use App\Domains\IdentityAccess\Actions\ListSignInOrganizations;
 use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
 use App\Domains\Subscriptions\Support\TenantEntitlements;
 use App\Domains\TargetsGroups\Models\Target;
@@ -118,6 +119,12 @@ class UserResource extends JsonResource
             })
             ->all();
 
+        // Auth routes list the other same-email logins too, so the SPA can offer every organization after sign-in.
+        $organizations = app(ListSignInOrganizations::class)->handle(
+            $this->resource,
+            includeSameEmailLogins: $includePermissions,
+        );
+
         return [
             'id' => $this->id,
             'name' => $this->name,
@@ -143,7 +150,8 @@ class UserResource extends JsonResource
             'staff_tenant_id' => $actingInTenant ? $staffTenantId : null,
             'acting_in_tenant' => $actingInTenant,
             'memberships' => $memberships,
-            'needs_org_selection' => $this->resource->needsOrgSelection(),
+            'organizations' => $organizations,
+            'needs_org_selection' => $this->resource->needsOrgSelection($organizations),
             'active_tenant_id' => ActiveOrgTenant::id(),
             'subscription' => $subscription,
         ];

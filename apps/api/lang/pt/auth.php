@@ -21,4 +21,5 @@ return [
     'password_updated' => 'Palavra-passe atualizada.',
     'logged_out' => 'Sessão terminada',
     'sso_handoff_invalid' => 'Este link de início de sessão expirou. Inicie sessão novamente.',
+    'org_choice_invalid' => 'A escolha da organização expirou. Inicie sessão novamente.',
 ];

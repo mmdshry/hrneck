@@ -183,7 +183,10 @@ class MfaService
         return $plainCodes;
     }
 
-    public function issueChallengeToken(User $user, bool $remember = false): string
+    /**
+     * @param  string|null  $preferredTenantId  Organization to activate once the second factor succeeds.
+     */
+    public function issueChallengeToken(User $user, bool $remember = false, ?string $preferredTenantId = null): string
     {
         $token = Str::random(64);
         cache()->put(
@@ -191,6 +194,7 @@ class MfaService
             [
                 'user_id' => $user->id,
                 'remember' => $remember,
+                'preferred_tenant_id' => $preferredTenantId,
             ],
             now()->addMinutes(10),
         );
@@ -199,7 +203,7 @@ class MfaService
     }
 
     /**
-     * @return array{user: User, remember: bool}|null
+     * @return array{user: User, remember: bool, preferred_tenant_id: string|null}|null
      */
     public function challengeFromToken(string $token): ?array
     {
@@ -213,9 +217,12 @@ class MfaService
             return null;
         }
 
+        $preferredTenantId = $payload['preferred_tenant_id'] ?? null;
+
         return [
             'user' => $user,
             'remember' => (bool) ($payload['remember'] ?? false),
+            'preferred_tenant_id' => is_string($preferredTenantId) && $preferredTenantId !== '' ? $preferredTenantId : null,
         ];
     }
 

@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { EmptyState } from "@/components/ui/empty-state";
 import { toastError } from "@/lib/toast";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
@@ -11,7 +10,7 @@ import { PageSkeleton } from "@/components/ui/page-skeleton";
 import { Panel } from "@/components/ui/panel";
 import { api, ensureCsrf, fetchSessionUser } from "@/lib/api";
 import { paginationQuery } from "@/lib/pagination";
-import { hasAnyPermission, hasPermission, type SessionUser } from "@/lib/session";
+import { hasPermission, type SessionUser } from "@/lib/session";
 import { resolveTenant } from "@/lib/tenant";
 import type { ChecklistPack, ChecklistTemplate } from "../../checklist-types";
 import { PackEditDialog } from "./pack-edit-dialog";
@@ -53,15 +52,6 @@ export function ChecklistPackDetailClient({ packId }: { packId: number }) {
 
   if (loading) {
     return <PageSkeleton className="max-w-5xl" />;
-  }
-
-  if (session && !hasAnyPermission(session, ["org.checklists.view", "org.checklists.manage"])) {
-    return (
-      <div className="mx-auto w-full max-w-5xl flex-1 space-y-4 px-4 py-8 sm:px-6">
-        <PageHeader title={t("checklistPack")} />
-        <EmptyState title={t("needEditPacks")} />
-      </div>
-    );
   }
 
   if (!pack) {

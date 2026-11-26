@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Cache;
  * the callback to the tenant host, where the session cookie is created.
  *
  * @phpstan-type SsoFlow array{provider: string, nonce: string, origin: string, next: ?string, remember: bool}
- * @phpstan-type SsoHandoff array{user_id: int, next: ?string, remember: bool}
+ * @phpstan-type SsoHandoff array{user_id: int, next: ?string, remember: bool, tenant: ?string}
  */
 class SsoFlowStore
 {

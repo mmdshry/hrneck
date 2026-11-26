@@ -23,9 +23,11 @@ const supportEmail =
 const supportPhoneDisplay = "858-740-8878";
 const supportPhoneTel = "+18587408878";
 
-export function LandingFooter() {
+/** `homeHref` prefixes in-page anchors; see LandingHeader. */
+export function LandingFooter({ homeHref = "" }: { homeHref?: string }) {
   const t = useTranslations("landing");
   const tNav = useTranslations("nav");
+  const tLegal = useTranslations("legal");
 
   const links: { href: string; label: string; icon: LucideIcon }[] = useMemo(
     () => [
@@ -33,9 +35,9 @@ export function LandingFooter() {
       { href: "/portal", label: tNav("learnerPortal"), icon: Presentation },
       { href: "/portal/tickets", label: tNav("servicePortal"), icon: Headphones },
       { href: "/login", label: t("signIn"), icon: LogIn },
-      { href: "#demo", label: t("requestDemo"), icon: Mail },
+      { href: `${homeHref}#demo`, label: t("requestDemo"), icon: Mail },
     ],
-    [t, tNav],
+    [t, tNav, homeHref],
   );
 
   return (
@@ -135,9 +137,26 @@ export function LandingFooter() {
           </div>
         </div>
 
-        <p className="mt-12 border-t border-[var(--border)] pt-6 text-center text-sm text-[var(--muted-foreground)]">
-          {t("copyright")}
-        </p>
+        <div className="mt-12 flex flex-col items-center gap-4 border-t border-[var(--border)] pt-6 text-center text-sm text-[var(--muted-foreground)]">
+          <nav
+            aria-label={tLegal("legalLabel")}
+            className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2"
+          >
+            <Link
+              href="/privacy"
+              className="inline-flex min-h-11 items-center text-[var(--link)] underline-offset-4 hover:underline"
+            >
+              {tLegal("privacyPolicy")}
+            </Link>
+            <Link
+              href="/terms"
+              className="inline-flex min-h-11 items-center text-[var(--link)] underline-offset-4 hover:underline"
+            >
+              {tLegal("termsOfService")}
+            </Link>
+          </nav>
+          <p>{t("copyright")}</p>
+        </div>
       </div>
     </footer>
   );

@@ -8,6 +8,7 @@ const assign = vi.fn();
 const toastErrorMock = vi.fn();
 const apiMock = vi.hoisted(() => vi.fn());
 let search = "";
+let hostTenant: string | null = null;
 
 const PROVIDERS_PATH = "/api/v1/auth/oauth/providers";
 
@@ -32,6 +33,7 @@ vi.mock("@/lib/api", () => ({
 
 vi.mock("@/lib/tenant", () => ({
   setTenant: vi.fn(),
+  tenantFromHostname: () => hostTenant,
 }));
 
 vi.mock("@/i18n/set-locale", () => ({
@@ -190,5 +192,112 @@ describe("LoginForm SSO", () => {
 
     expect(toastErrorMock).not.toHaveBeenCalled();
     expect(replace).not.toHaveBeenCalled();
+  });
+});
+
+describe("LoginForm organization choice", () => {
+  const organizations = [
+    { tenant_id: "itneck", name: "ITneck" },
+    { tenant_id: "company", name: "Company" },
+  ];
+
+  beforeEach(() => {
+    search = "";
+    apiMock.mockImplementation(async (path: string) => {
+      if (path === PROVIDERS_PATH) {
+        return { data: [] };
+      }
+      return {
+        org_choice_required: true,
+        challenge_token: "choice-1",
+        organizations,
+      };
+    });
+    vi.stubGlobal("location", {
+      origin: "https://hrneck.test",
+      hostname: "hrneck.test",
+      assign,
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+    sessionStorage.clear();
+  });
+
+  async function submitCredentials() {
+    render(<LoginForm />);
+    fireEvent.change(screen.getByLabelText("email"), { target: { value: "ada@example.test" } });
+    fireEvent.change(screen.getByLabelText("password"), { target: { value: "shared-password" } });
+    fireEvent.submit(screen.getByLabelText("email").closest("form") as HTMLFormElement);
+  }
+
+  it("opens /select-org with the challenge when one password matches several organizations", async () => {
+    await submitCredentials();
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/select-org"));
+    expect(JSON.parse(sessionStorage.getItem("org_choice") ?? "null")).toEqual({
+      challengeToken: "choice-1",
+      organizations,
+    });
+    expect(sessionStorage.getItem("mfa_challenge")).toBeNull();
+  });
+
+  it("keeps the safe next path when it sends the user to /select-org", async () => {
+    search = "next=%2Forg%2Fusers";
+    await submitCredentials();
+
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith("/select-org?next=%2Forg%2Fusers"),
+    );
+  });
+});
+
+describe("LoginForm organization address", () => {
+  beforeEach(() => {
+    search = "";
+    hostTenant = "company";
+    apiMock.mockImplementation(async (path: string) => {
+      if (path === PROVIDERS_PATH) {
+        return { data: [] };
+      }
+      return {
+        data: {
+          email: "ada@example.test",
+          tenant_id: "company",
+          needs_org_selection: false,
+          has_org_access: true,
+          is_platform_staff: false,
+          memberships: [{ tenant_id: "company", name: "Company" }],
+        },
+      };
+    });
+    vi.stubGlobal("location", {
+      origin: "https://company.hrneck.test",
+      hostname: "company.hrneck.test",
+      assign,
+    });
+  });
+
+  afterEach(() => {
+    hostTenant = null;
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  it("sends the organization address with the password and opens that organization", async () => {
+    render(<LoginForm />);
+    fireEvent.change(screen.getByLabelText("email"), { target: { value: "ada@example.test" } });
+    fireEvent.change(screen.getByLabelText("password"), { target: { value: "shared-password" } });
+    fireEvent.submit(screen.getByLabelText("email").closest("form") as HTMLFormElement);
+
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith(
+        "/api/v1/auth/login",
+        expect.objectContaining({ body: expect.stringContaining('"tenant":"company"') }),
+      ),
+    );
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/org"));
   });
 });

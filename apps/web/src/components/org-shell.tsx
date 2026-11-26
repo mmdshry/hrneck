@@ -2,32 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  BarChart3,
-  BookOpen,
-  Building2,
-  ClipboardList,
-  ContactRound,
-  Download,
-  FileText,
-  History,
-  KeyRound,
-  LayoutDashboard,
-  Layers,
-  LogIn,
-  LogOut,
-  Megaphone,
-  Menu,
-  Send,
-  Settings2,
-  Shield,
-  Ticket,
-  GraduationCap,
-  Library,
-  UsersRound,
-  X,
-  type LucideIcon,
-} from "lucide-react";
+import { LogIn, LogOut, Menu, X } from "lucide-react";
 import {
   useEffect,
   useId,
@@ -39,73 +14,18 @@ import { AssistantPanel } from "@/components/assistant/assistant-panel";
 import { canShowAssistant } from "@/components/assistant/assistant-visibility";
 import { BrandMark } from "@/components/brand-mark";
 import { OrgMembershipGate } from "@/components/org-membership-gate";
+import { OrgNoAccess } from "@/components/org-no-access";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { SubscriptionNotice } from "@/components/subscription-notice";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { AvatarUploader } from "@/components/ui/avatar-uploader";
 import { Button } from "@/components/ui/button";
 import { api, ensureCsrf, fetchSessionUser, signOut as apiSignOut } from "@/lib/api";
-import {
-  hasAnyPermission,
-  matchOrgMembership,
-  type SessionUser,
-} from "@/lib/session";
+import { type NavItem, visibleOrgNav } from "@/lib/org-nav";
+import { isOrgRouteDenied } from "@/lib/org-route-permissions";
+import { matchOrgMembership, type SessionUser } from "@/lib/session";
 import { clearTenant, resolveTenant, setTenant } from "@/lib/tenant";
 import { cn } from "@/lib/utils";
-
-type NavItem = {
-  href: string;
-  label: string;
-  icon: LucideIcon;
-  exact?: boolean;
-  /** Any one of these permissions shows the item (view or manage). */
-  permissions?: readonly string[];
-  /** Hidden when the plan explicitly disables this feature. */
-  planFeature?: "knowledge_base";
-  platformOnly?: boolean;
-};
-
-const NAV: NavItem[] = [
-  { href: "/org", label: "Dashboard", icon: LayoutDashboard, exact: true },
-  { href: "/msp", label: "Organizations", icon: Building2, exact: true, platformOnly: true },
-  { href: "/org/training", label: "Training", icon: GraduationCap, permissions: ["org.training.view", "org.training.manage"] },
-  { href: "/org/courses", label: "Courses", icon: Library, permissions: ["org.training.view", "org.training.manage"] },
-  { href: "/org/training/campaigns", label: "Campaigns", icon: Send, permissions: ["org.campaigns.view", "org.campaigns.manage"] },
-  { href: "/org/checklists", label: "Checklists", icon: ClipboardList, permissions: ["org.checklists.view", "org.checklists.fill", "org.checklists.manage"] },
-  { href: "/org/ticketing", label: "Ticketing", icon: Ticket, permissions: ["org.ticketing.tickets"] },
-  { href: "/org/kb", label: "Knowledge base", icon: FileText, permissions: ["org.kb.view", "org.kb.manage"], planFeature: "knowledge_base" },
-  {
-    href: "/org/targets",
-    label: "Employees",
-    icon: ContactRound,
-    permissions: ["org.targets.view", "org.targets.manage", "org.users.view", "org.users.manage"],
-  },
-  { href: "/org/departments", label: "Departments", icon: Layers, permissions: ["org.departments.view", "org.departments.manage"] },
-  { href: "/org/groups", label: "Groups", icon: UsersRound, permissions: ["org.groups.view", "org.groups.manage"] },
-  { href: "/org/roles", label: "Roles", icon: KeyRound, permissions: ["org.roles.manage"] },
-  { href: "/org/reports", label: "Reporting", icon: BarChart3, permissions: ["org.reports.view"] },
-  { href: "/org/reports/export", label: "Export", icon: Download, permissions: ["org.reports.export"] },
-  { href: "/org/announcements", label: "Announcements", icon: Megaphone, permissions: ["org.announcements.manage"] },
-  { href: "/org/audit", label: "Audit log", icon: History, permissions: ["org.audit.view"] },
-  { href: "/org/settings", label: "Settings", icon: Settings2, permissions: ["org.settings.view", "org.settings.manage"] },
-  { href: "/org/settings/mfa", label: "Account / MFA", icon: Shield },
-  { href: "/docs", label: "Guides", icon: BookOpen },
-];
-
-function visibleNav(user: SessionUser | null): NavItem[] {
-  return NAV.filter((item) => {
-    if (item.platformOnly) {
-      return Boolean(user?.is_platform_staff);
-    }
-    if (item.planFeature && user?.subscription?.features?.[item.planFeature] === false) {
-      return false;
-    }
-    if (!item.permissions) {
-      return true;
-    }
-    return hasAnyPermission(user, item.permissions);
-  });
-}
 
 function matchesPath(pathname: string, item: NavItem): boolean {
   if (item.exact) {
@@ -115,7 +35,7 @@ function matchesPath(pathname: string, item: NavItem): boolean {
 }
 
 /** Only the longest matching href is active — avoids parent+child both highlighted. */
-function isNavActive(pathname: string, item: NavItem, items: NavItem[] = NAV): boolean {
+function isNavActive(pathname: string, item: NavItem, items: NavItem[]): boolean {
   const hits = items.filter((candidate) => matchesPath(pathname, candidate));
   if (hits.length === 0) {
     return false;
@@ -235,12 +155,14 @@ function AuthFooter({
   signingOut,
   onSignOut,
   onNavigate,
+  footerExtras,
 }: {
   authChecked: boolean;
   userEmail: string | null;
   signingOut: boolean;
   onSignOut: () => void;
   onNavigate?: () => void;
+  footerExtras?: ReactNode;
 }) {
   return (
     <div className="mt-4 space-y-2 border-t border-[var(--border)] px-2 pt-4">
@@ -250,6 +172,7 @@ function AuthFooter({
         </p>
         <ThemeToggle />
       </div>
+      {footerExtras}
       {authChecked && userEmail ? (
         <Button
           type="button"
@@ -275,7 +198,19 @@ function AuthFooter({
   );
 }
 
-export function OrgShell({ children }: { children: ReactNode }) {
+type OrgShellProps = {
+  children: ReactNode;
+  /** Sidebar menu for the signed-in user. Defaults to the organization console menu. */
+  resolveNavItems?: (user: SessionUser | null) => NavItem[];
+  /** Extra footer row shown above sign out, for example a language switcher. */
+  footerExtras?: ReactNode;
+};
+
+export function OrgShell({
+  children,
+  resolveNavItems = visibleOrgNav,
+  footerExtras,
+}: OrgShellProps) {
   const pathname = usePathname();
   const [user, setUser] = useState<SessionUser | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -290,7 +225,7 @@ export function OrgShell({ children }: { children: ReactNode }) {
   const drawerTitleId = useId();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const preferredTenant = user?.staff_tenant_id ?? user?.tenant_id ?? null;
-  const navItems = visibleNav(user);
+  const navItems = resolveNavItems(user);
   const actingInTenant = Boolean(user?.acting_in_tenant && user.staff_tenant_id);
   const membership = user && tenant ? matchOrgMembership(user, tenant) : null;
   const isDocsRoute = pathname === "/docs" || pathname.startsWith("/docs/");
@@ -300,6 +235,9 @@ export function OrgShell({ children }: { children: ReactNode }) {
     isOrgRoute && authChecked && user && membership && membership.ok === false
       ? membership
       : null;
+  // Page-level permission gate. Membership problems are reported first (see render below).
+  const routeDenied =
+    isOrgRoute && authChecked && user !== null && isOrgRouteDenied(pathname, user.permissions);
 
   const showAssistant = canShowAssistant({
     isOrgRoute,
@@ -434,6 +372,7 @@ export function OrgShell({ children }: { children: ReactNode }) {
             userEmail={userEmail}
             signingOut={signingOut}
             onSignOut={() => void signOut()}
+            footerExtras={footerExtras}
           />
         </div>
       </aside>
@@ -503,7 +442,7 @@ export function OrgShell({ children }: { children: ReactNode }) {
             }
           />
         ) : isDocsRoute || (authChecked && user) ? (
-          children
+          routeDenied ? <OrgNoAccess /> : children
         ) : null}
       </div>
 
@@ -552,6 +491,7 @@ export function OrgShell({ children }: { children: ReactNode }) {
                 signingOut={signingOut}
                 onSignOut={() => void signOut()}
                 onNavigate={() => setMobileOpen(false)}
+                footerExtras={footerExtras}
               />
             </div>
           </aside>

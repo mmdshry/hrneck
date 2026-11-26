@@ -35,4 +35,23 @@ class SsoReturnOrigin
 
         return $scheme.'://'.$host.$port;
     }
+
+    /**
+     * The organization a tenant host names (its single label before the base domain), or null for the base domain.
+     * The result is only a hint: the sign-in still needs a membership in that organization to use it.
+     */
+    public function tenantFor(string $origin): ?string
+    {
+        $host = strtolower((string) parse_url($origin, PHP_URL_HOST));
+        $baseDomain = strtolower((string) config('brand.tenancy_base_domain'));
+        $suffix = '.'.$baseDomain;
+
+        if ($baseDomain === '' || ! str_ends_with($host, $suffix)) {
+            return null;
+        }
+
+        $label = substr($host, 0, -strlen($suffix));
+
+        return $label !== '' && ! str_contains($label, '.') ? $label : null;
+    }
 }

@@ -99,6 +99,25 @@ test('checklist fillers can open instances but not templates', function () {
         ->assertForbidden();
 });
 
+test('hr manager starter role opens checklist instances but cannot create templates', function () {
+    app(SeedRbacCatalog::class)->ensureTemplateRoles('itneck');
+    $hrManager = app(CreateOrgUser::class)->handle('itneck', 'HR starter', 'hr.starter@itneck.test', 'DemoPass!234', []);
+
+    setPermissionsTeamId('itneck');
+    $hrManager->assignRole('hr_manager');
+    setPermissionsTeamId(null);
+
+    $this->actingAs($hrManager)
+        ->withHeader('X-Tenant', 'itneck')
+        ->getJson('/api/v1/org/checklists/instances')
+        ->assertOk();
+
+    $this->actingAs($hrManager)
+        ->withHeader('X-Tenant', 'itneck')
+        ->postJson('/api/v1/org/checklists/templates', [])
+        ->assertForbidden();
+});
+
 test('template roles are seeded once and never overwritten', function () {
     app(SeedRbacCatalog::class)->ensureTemplateRoles('itneck');
 

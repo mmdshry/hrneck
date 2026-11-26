@@ -18,7 +18,7 @@ export const mspGuide: GuideModule = {
   ],
   openInAppHref: "/msp",
   overview:
-    "The MSP console at /msp is for platform staff only (platform_super_admin and platform_agent). It lists tenant organizations with industry, employee band, status, and training flags, and lets staff Open tenant admin—which enters a real staff_tenant_id context so /org loads for that customer. Use Exit tenant in the org shell banner to return to /msp. Filament at admin.hrneck.test/admin is a separate staff surface (health, activity log, tenant switcher, deeper ops) and is not covered by this guide.",
+    "The MSP console at /msp is for platform staff only (platform_super_admin and platform_agent). It lists tenant organizations with industry, employee band, status, and training flags, and lets staff Open tenant admin—which enters a real staff_tenant_id context so /org loads for that customer. Use Exit tenant in the org shell banner to return to /msp.",
   example: {
     title: "Staff helps Acme before Q4 launch",
     narrative:
@@ -51,15 +51,11 @@ export const mspGuide: GuideModule = {
   ],
   sections: [
     {
-      title: "MSP vs Filament vs org",
+      title: "MSP vs org",
       steps: [
         {
           title: "MSP = directory + enter",
           body: "Next /msp is the lightweight staff directory and entry point into the customer org UI.",
-        },
-        {
-          title: "Filament = central ops",
-          body: "admin.hrneck.test/admin adds platform health, activity log, organizations CRUD, and tenant-ops resources after a Filament tenant switch. Customers never see Filament.",
         },
         {
           title: "Org users stay on their host",

@@ -605,7 +605,7 @@ export function OrgDashboardClient() {
         description={t("description")}
       />
       {blockOrgMetrics ? (
-        <EmptyState title={t("openTenantFilament")} />
+        <EmptyState title={t("openTenantFromMsp")} />
       ) : null}
       {waitingForMetrics ? (
         <p className="mt-6 text-sm text-[var(--muted-foreground)]">

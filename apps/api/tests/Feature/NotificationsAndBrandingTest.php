@@ -3,6 +3,7 @@
 use App\Domains\Campaigns\Jobs\SendTrainingReminderJob;
 use App\Domains\Campaigns\Models\Campaign;
 use App\Domains\Campaigns\Models\CampaignRecipient;
+use App\Domains\IdentityAccess\Actions\SeedRbacCatalog;
 use App\Domains\Notifications\Events\UserNotificationBroadcast;
 use App\Domains\Notifications\Jobs\SendNotificationEmailJob;
 use App\Domains\Notifications\Models\OrgAnnouncement;
@@ -12,6 +13,7 @@ use App\Domains\Ticketing\Models\SdDesk;
 use App\Domains\TrainingLms\Models\Course;
 use App\Domains\TrainingLms\Models\Enrollment;
 use App\Models\Tenant;
+use App\Models\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Mail;
@@ -148,7 +150,7 @@ test('training assign notifies matching target user', function () {
     Tenancy::end();
 });
 
-test('checklist assign notifies matching target user', function () {
+test('checklist assign notifies the assigning staff member and sends no employee email', function () {
     Queue::fake();
     Event::fake([UserNotificationBroadcast::class]);
 
@@ -185,7 +187,6 @@ test('checklist assign notifies matching target user', function () {
         ],
     );
     $targetId = $target->id;
-    $targetEmail = (string) $target->email;
     Tenancy::end();
 
     $this->actingAs($this->admin)
@@ -205,10 +206,82 @@ test('checklist assign notifies matching target user', function () {
     )->toBeTrue();
     Tenancy::end();
 
-    Queue::assertPushed(SendNotificationEmailJob::class, function (SendNotificationEmailJob $job) use ($targetEmail): bool {
-        return strtolower($job->email) === strtolower($targetEmail)
-            && str_contains($job->subject, 'checklist: Notify checklist');
+    Queue::assertNotPushed(SendNotificationEmailJob::class, function (SendNotificationEmailJob $job): bool {
+        return str_contains($job->subject, 'checklist: Notify checklist');
     });
+});
+
+test('checklist assign notifies staff with checklist access and skips the employee learner', function () {
+    Queue::fake();
+    Event::fake([UserNotificationBroadcast::class]);
+    app(SeedRbacCatalog::class)->ensureTemplateRoles('itneck');
+
+    $template = $this->actingAs($this->admin)
+        ->withHeader('X-Tenant', 'itneck')
+        ->postJson('/api/v1/org/checklists/templates', [
+            'name' => 'Staff only checklist',
+            'category' => 'onboarding',
+            'status' => 'published',
+            'schema_json' => [
+                'items' => [
+                    [
+                        'key' => 'done',
+                        'type' => 'checkbox',
+                        'label' => 'Done',
+                        'required' => true,
+                        'order' => 1,
+                        'options' => [],
+                    ],
+                ],
+            ],
+        ])
+        ->assertCreated()
+        ->json('data');
+
+    $hrEmail = 'checklist.hr.'.uniqid('', true).'@itneck.test';
+    $this->actingAs($this->admin)
+        ->withHeader('X-Tenant', 'itneck')
+        ->postJson('/api/v1/org/targets', [
+            'email' => $hrEmail,
+            'first_name' => 'Hr',
+            'last_name' => 'Manager',
+        ])
+        ->assertCreated();
+    $hrUser = User::query()->withEmail($hrEmail)->where('tenant_id', 'itneck')->firstOrFail();
+    setPermissionsTeamId('itneck');
+    $hrUser->assignRole('hr_manager');
+    setPermissionsTeamId(null);
+
+    $employeeEmail = 'checklist.employee.'.uniqid('', true).'@itneck.test';
+    $employeeTargetId = $this->actingAs($this->admin)
+        ->withHeader('X-Tenant', 'itneck')
+        ->postJson('/api/v1/org/targets', [
+            'email' => $employeeEmail,
+            'first_name' => 'Learner',
+            'last_name' => 'Employee',
+        ])
+        ->assertCreated()
+        ->json('data.id');
+    $employeeUser = User::query()->withEmail($employeeEmail)->where('tenant_id', 'itneck')->firstOrFail();
+
+    $this->actingAs($this->admin)
+        ->withHeader('X-Tenant', 'itneck')
+        ->postJson('/api/v1/org/checklists/instances', [
+            'template_id' => $template['id'],
+            'target_ids' => [$employeeTargetId],
+        ])
+        ->assertCreated();
+
+    Tenancy::initialize($this->tenant);
+    $hasChecklistNotification = fn (int $userId): bool => UserNotification::query()
+        ->where('user_id', $userId)
+        ->where('type', UserNotification::TYPE_CHECKLIST_ASSIGNED)
+        ->exists();
+
+    expect($hasChecklistNotification($this->admin->id))->toBeTrue();
+    expect($hasChecklistNotification($hrUser->id))->toBeTrue();
+    expect($hasChecklistNotification($employeeUser->id))->toBeFalse();
+    Tenancy::end();
 });
 
 test('ticket assignment creates notification for assignee', function () {

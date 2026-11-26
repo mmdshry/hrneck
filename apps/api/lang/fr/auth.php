@@ -21,4 +21,5 @@ return [
     'password_updated' => 'Mot de passe mis à jour.',
     'logged_out' => 'Déconnecté',
     'sso_handoff_invalid' => 'Ce lien de connexion a expiré. Veuillez vous reconnecter.',
+    'org_choice_invalid' => 'Le choix de l’organisation a expiré. Veuillez vous reconnecter.',
 ];

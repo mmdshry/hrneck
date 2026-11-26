@@ -55,7 +55,7 @@ const EMPLOYEE_PERMISSIONS = [
 ] as const;
 
 /**
- * Mirrors the sidebar NAV in `components/org-shell.tsx` (same href, icon,
+ * Mirrors the sidebar menu `ORG_NAV` in `lib/org-nav.ts` (same href, icon,
  * and permissions per module). Keep the two in sync when adding modules.
  */
 const DASHBOARD_NAV: Record<DashboardNavKey, DashboardNavEntry> = {

@@ -372,6 +372,8 @@
     "selectOrgEmpty": "No organization memberships are available for this account.",
     "selectOrgLoadFailed": "Unable to load organizations.",
     "selectOrgEnterFailed": "Unable to enter that organization.",
+    "selectOrgCurrent": "Current",
+    "selectOrgPasswordPrompt": "This organization has its own login. Enter its password to continue.",
     "passkeyButton": "Sign in with a passkey",
     "passkeyDivider": "Or use a code instead",
     "recoveryCodeLabel": "Recovery code",
@@ -380,6 +382,11 @@
     "passkeyFailed": "The passkey could not be verified. Try again.",
     "passkeyCancelled": "Passkey sign-in was cancelled.",
     "passkeyNeedsHttps": "Passkeys need a secure connection. Open this site over https://."
+  },
+  "orgNoAccess": {
+    "title": "No access to this page",
+    "body": "Your account does not have the permissions needed for this page. Ask an organization admin if you need access.",
+    "backToDashboard": "Back to dashboard"
   },
   "account": {
     "securityTitle": "Security",
@@ -702,7 +709,7 @@
       "details": "Details",
       "openModule": "Open module",
       "loadFailed": "Failed to load dashboard metrics",
-      "openTenantFilament": "Open this organization in Filament. Live metrics are for organization users.",
+      "openTenantFromMsp": "Enter this organization from the MSP console to view live metrics.",
       "goToLogin": "Go to login"
     },
     "msp": {
@@ -1883,6 +1890,15 @@
     "unavailable": "The assistant is temporarily unavailable. Try again shortly.",
     "conversationEnded": "This conversation has ended. Send your message again to start a new one.",
     "genericError": "Something went wrong. Try again."
+  },
+  "legal": {
+    "legalLabel": "Legal",
+    "privacyPolicy": "Privacy Policy",
+    "termsOfService": "Terms of Service",
+    "onThisPage": "On this page",
+    "effectiveDate": "Effective {date}",
+    "precedenceNotice": "The Business Associate Agreement (BAA) between HRNECK and your organization controls how protected health information is handled. These pages describe our practices and do not replace the BAA.",
+    "demoConsent": "By sending this request, you agree to our <privacy>Privacy Policy</privacy> and <terms>Terms of Service</terms>."
   },
   "guides": {
     "hubTitle": "Guides",

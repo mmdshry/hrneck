@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/ui/empty-state";
 import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
@@ -136,15 +135,6 @@ export function ReportsClient() {
 
   if (loading) {
     return <PageSkeleton className="max-w-5xl" />;
-  }
-
-  if (session && !hasPermission(session, "org.ticketing.reports")) {
-    return (
-      <div className="mx-auto w-full max-w-5xl flex-1 space-y-4 px-4 py-8 sm:px-6">
-        <PageHeader title={t("reportsTitle")} description={t("reportsDescription")} />
-        <EmptyState title={t("needReportsPermission")} />
-      </div>
-    );
   }
 
   return (

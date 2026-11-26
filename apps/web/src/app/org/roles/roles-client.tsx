@@ -22,7 +22,7 @@ import {
   type PageSize,
   type PaginationMeta,
 } from "@/lib/pagination";
-import { hasPermission, type SessionUser } from "@/lib/session";
+import type { SessionUser } from "@/lib/session";
 import { matchesCells } from "@/lib/table-filter";
 import { resolveTenant } from "@/lib/tenant";
 import { toastError } from "@/lib/toast";
@@ -237,14 +237,6 @@ export function RolesClient() {
             </Link>
           }
         />
-      </div>
-    );
-  }
-
-  if (!hasPermission(session, "org.roles.manage")) {
-    return (
-      <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">
-        <EmptyState title={t("noPermission")} />
       </div>
     );
   }

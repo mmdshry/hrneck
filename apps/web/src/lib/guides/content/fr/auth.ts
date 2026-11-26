@@ -65,7 +65,7 @@ export const authGuide: GuideModule = {
         },
         {
           title: "Personnel plateforme",
-          body: "platform_super_admin / platform_agent utilisent /msp et entrent éventuellement dans un tenant. Le MFA Filament sur admin.hrneck.test ne prend en charge qu'une application d'authentification. Les clés d'accès n'y sont pas encore proposées.",
+          body: "platform_super_admin / platform_agent utilisent /msp et entrent éventuellement dans un tenant.",
         },
         {
           title: "Apprenants et utilisateurs du portail",

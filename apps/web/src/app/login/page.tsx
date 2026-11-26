@@ -17,6 +17,7 @@ export async function generateMetadata() {
 
 export default async function LoginPage() {
   const t = await getTranslations("auth");
+  const tLegal = await getTranslations("legal");
 
   return (
     <div className="mx-auto flex min-h-full w-full max-w-md flex-1 flex-col justify-center px-6 py-16">
@@ -47,6 +48,17 @@ export default async function LoginPage() {
           </LinkButton>
         </p>
       </div>
+      <nav
+        aria-label={tLegal("legalLabel")}
+        className="mt-6 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-sm"
+      >
+        <LinkButton href="/privacy" variant="link" size="sm">
+          {tLegal("privacyPolicy")}
+        </LinkButton>
+        <LinkButton href="/terms" variant="link" size="sm">
+          {tLegal("termsOfService")}
+        </LinkButton>
+      </nav>
     </div>
   );
 }

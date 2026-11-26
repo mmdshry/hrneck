@@ -27,7 +27,7 @@ export const learnerPortalGuide: GuideModule = {
   steps: [
     {
       title: "Inicie sessão no host do tenant",
-      body: "Use a sua conta da organização em {slug}.hrneck.test. Pode ser exigida MFA. Os formandos não usam o MSP nem o admin Filament.",
+      body: "Use a sua conta da organização em {slug}.hrneck.test. Pode ser exigida MFA. Os formandos não usam a consola MSP.",
       href: "/login",
     },
     {

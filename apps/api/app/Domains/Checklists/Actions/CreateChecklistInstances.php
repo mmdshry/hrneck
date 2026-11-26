@@ -5,10 +5,9 @@ namespace App\Domains\Checklists\Actions;
 use App\Domains\Campaigns\Actions\ResolveCampaignAudience;
 use App\Domains\Checklists\Models\ChecklistInstance;
 use App\Domains\Checklists\Models\ChecklistTemplate;
+use App\Domains\Checklists\Support\ResolveChecklistStaffRecipients;
 use App\Domains\Notifications\Actions\CreateUserNotification;
-use App\Domains\Notifications\Actions\QueueNotificationEmail;
 use App\Domains\Notifications\Models\UserNotification;
-use App\Domains\Notifications\Support\ResolveUsersFromTargets;
 use App\Domains\Realtime\Support\LiveTopics;
 use App\Domains\Realtime\Support\PublishLive;
 use App\Domains\TargetsGroups\Models\Target;
@@ -129,21 +128,17 @@ class CreateChecklistInstances
             return [];
         }
 
-        $createdTargetIds = array_values(array_unique(array_map(
-            static fn (ChecklistInstance $instance): int => (int) $instance->target_id,
-            $created,
-        )));
-        $userIds = app(ResolveUsersFromTargets::class)->handle($createdTargetIds);
+        $recipientIds = app(ResolveChecklistStaffRecipients::class)->handle($actorId);
         $notify = app(CreateUserNotification::class);
         $usersById = User::query()
-            ->whereIn('id', $userIds)
+            ->whereIn('id', $recipientIds)
             ->get(['id', 'locale'])
             ->keyBy('id');
-        foreach ($userIds as $userId) {
-            $matched = $usersById->get($userId);
+        foreach ($recipientIds as $recipientId) {
+            $matched = $usersById->get($recipientId);
             $locale = AppLocale::normalize(is_string($matched?->locale) ? $matched->locale : null);
             $notify->handle(
-                $userId,
+                $recipientId,
                 UserNotification::TYPE_CHECKLIST_ASSIGNED,
                 __('notifications.checklist_assigned_title', [], $locale),
                 $template->name,
@@ -152,39 +147,6 @@ class CreateChecklistInstances
                     'entity_id' => $template->id,
                     'template_id' => $template->id,
                 ],
-            );
-        }
-
-        $frontend = rtrim((string) config('brand.frontend_url', config('app.url')), '/');
-        $link = $frontend.'/org/checklists/instances';
-        $queueEmail = app(QueueNotificationEmail::class);
-        $targets = Target::query()->whereIn('id', $createdTargetIds)->get(['id', 'email', 'first_name']);
-        $localeByEmail = User::query()
-            ->whereIn('email', $targets->pluck('email')->filter()->all())
-            ->get(['email', 'locale'])
-            ->keyBy(fn (User $u): string => strtolower(trim((string) $u->email)));
-
-        foreach ($targets as $target) {
-            $email = trim((string) $target->email);
-            if ($email === '') {
-                continue;
-            }
-            $matched = $localeByEmail->get(strtolower($email));
-            $locale = AppLocale::normalize(is_string($matched?->locale) ? $matched->locale : null);
-            $greeting = $target->first_name !== null && $target->first_name !== ''
-                ? __('notifications.checklist_assigned_greeting_named', ['name' => $target->first_name], $locale)
-                : __('notifications.checklist_assigned_greeting', [], $locale);
-            $queueEmail->handle(
-                $email,
-                __('notifications.checklist_assigned_subject', [
-                    'brand' => config('brand.short'),
-                    'name' => $template->name,
-                ], $locale),
-                $greeting.__('notifications.checklist_assigned_body', [
-                    'name' => $template->name,
-                    'url' => $link,
-                ], $locale),
-                $locale,
             );
         }
 

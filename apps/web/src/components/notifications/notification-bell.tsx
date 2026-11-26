@@ -9,14 +9,14 @@ import { api, ensureCsrf, fetchSessionUser } from "@/lib/api";
 import { getEcho } from "@/lib/echo";
 import { notificationsLiveChannel } from "@/lib/live-topics";
 import {
+  inboxPathFor,
+  isInboxPath,
   type NotificationsResponse,
   type UserNotificationItem,
 } from "@/lib/notifications";
 import { resolveTenant } from "@/lib/tenant";
 import { toastNotification } from "@/lib/toast";
 import { cn } from "@/lib/utils";
-
-const INBOX_PATH = "/org/notifications";
 
 type NotificationsLivePayload = {
   data?: UserNotificationItem[];
@@ -28,16 +28,14 @@ type NotificationBellProps = {
   href?: string;
 };
 
-export function NotificationBell({
-  className,
-  href = INBOX_PATH,
-}: NotificationBellProps) {
+export function NotificationBell({ className, href }: NotificationBellProps) {
   const pathname = usePathname();
+  const inboxHref = href ?? inboxPathFor(pathname);
   const [unread, setUnread] = useState(0);
   const [userId, setUserId] = useState<number | null>(null);
   const [tenant, setTenant] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
-  const onInbox = pathname === INBOX_PATH || pathname.startsWith(`${INBOX_PATH}/`);
+  const onInbox = isInboxPath(pathname);
 
   const channel = useMemo(
     () =>
@@ -155,7 +153,7 @@ export function NotificationBell({
   return (
     <div className={cn("relative", className)}>
       <Link
-        href={href}
+        href={inboxHref}
         aria-label="Notifications"
         aria-current={onInbox ? "page" : undefined}
         className={cn(

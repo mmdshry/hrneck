@@ -27,7 +27,7 @@ export const learnerPortalGuide: GuideModule = {
   steps: [
     {
       title: "Se connecter sur l'hôte du tenant",
-      body: "Utilisez votre compte org sur {slug}.hrneck.test. La MFA peut être requise. Les apprenants n'utilisent ni le MSP ni l'admin Filament.",
+      body: "Utilisez votre compte org sur {slug}.hrneck.test. La MFA peut être requise. Les apprenants n'utilisent pas la console MSP.",
       href: "/login",
     },
     {

@@ -15,6 +15,12 @@ use Spatie\Activitylog\Models\Activity;
  */
 class AuditLogController extends Controller
 {
+    /**
+     * Activity `source` values written by platform staff tooling. They are removed before
+     * the entry is returned, so organization users never see which admin surface made a change.
+     */
+    private const STAFF_SOURCES = ['filament', 'platform_staff'];
+
     public function index(Request $request, AuditEntityLabels $labels): JsonResponse
     {
         $query = Activity::query();
@@ -70,8 +76,22 @@ class AuditLogController extends Controller
             'causer_id' => $activity->causer_id,
             'causer' => $labels['causer'],
             'subject' => $labels['subject'],
-            'properties' => $activity->properties->all(),
+            'properties' => $this->customerProperties($activity),
             'created_at' => $activity->created_at?->toIso8601String(),
         ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function customerProperties(Activity $activity): array
+    {
+        $properties = $activity->properties->all();
+
+        if (in_array($properties['source'] ?? null, self::STAFF_SOURCES, true)) {
+            unset($properties['source']);
+        }
+
+        return $properties;
     }
 }

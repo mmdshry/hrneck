@@ -1,8 +1,10 @@
 <?php
 
+use App\Domains\Audit\Actions\LogOrgActivity;
 use App\Domains\IdentityAccess\Actions\CreateOrgUser;
 use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
 use App\Domains\TargetsGroups\Models\Target;
+use App\Filament\Support\AuditsFilamentMutation;
 use App\Models\Role;
 use Spatie\Activitylog\Models\Activity;
 use Stancl\Tenancy\Facades\Tenancy;
@@ -320,6 +322,31 @@ test('user without manage permission cannot mutate targets', function () {
             'email' => 'forbidden@itneck.test',
         ])
         ->assertForbidden();
+});
+
+test('org audit log hides the staff source marker from organization users', function () {
+    $admin = orgAdmin();
+
+    Tenancy::initialize('itneck');
+    AuditsFilamentMutation::log('targets', 'updated', 'Staff target update', null, [
+        'email' => 'staff.source@itneck.test',
+    ]);
+    app(LogOrgActivity::class)->handle('targets', 'updated', 'Legacy staff target update', null, [
+        'email' => 'legacy.source@itneck.test',
+        'source' => 'filament',
+    ]);
+    Tenancy::end();
+
+    $response = $this->actingAs($admin)
+        ->withHeader('X-Tenant', 'itneck')
+        ->getJson('/api/v1/org/audit?log=targets')
+        ->assertOk()
+        ->assertJsonFragment(['email' => 'staff.source@itneck.test'])
+        ->assertJsonFragment(['email' => 'legacy.source@itneck.test']);
+
+    foreach ($response->json('data') as $entry) {
+        expect($entry['properties'])->not->toHaveKey('source');
+    }
 });
 
 test('org user cannot access filament panel while platform staff can', function () {

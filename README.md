@@ -6,7 +6,7 @@ Production: https://hrneck.com/
 
 ## Stack (always latest stable at install)
 
-- `apps/api` — PHP 8.3+ (CI uses 8.5), Laravel 13, Filament 5, stancl/tenancy, Horizon, Reverb, Scramble, Pest
+- `apps/api` — PHP 8.3+ (CI uses 8.5), Laravel 13, stancl/tenancy, Horizon, Reverb, Scramble, Pest
 - `apps/web` — Next.js 16, React 19, Tailwind 4, Playwright, Lighthouse budgets
 - `packages/api-client` — Orval stub (web currently uses `apps/web/src/lib/api.ts`)
 
@@ -16,7 +16,6 @@ Production: https://hrneck.com/
 |------|------|
 | `hrneck.test` | Marketing + Next app (landing, login, MSP/org) |
 | `app.hrneck.test` | Same Next app (legacy alias) |
-| `admin.hrneck.test` | Filament central |
 | `{slug}.hrneck.test` | Tenant admin + learner |
 
 Use `https://` for the web app (for example `https://itneck.hrneck.test`). Caddy serves HTTPS with a local certificate, and passkeys need a secure context. Run `caddy trust` once in an elevated shell so the browser trusts that certificate. Plain `http://` still works for the rest of the app, but passkeys are unavailable there.
@@ -35,7 +34,7 @@ Demo: `admin@hrneck.test` / `DemoPass!234` (platform); `admin@itneck.test` (org)
 
 Alternatively from the repo root: `pnpm dev` (API + Reverb + Next together), or in `apps/api`: `composer dev` / `php artisan dev` (includes Reverb).
 
-API Vite assets (Filament/admin front-end build): from repo root `pnpm --dir apps/api build` (pnpm workspace; do not use npm).
+API Vite assets (front-end build): from repo root `pnpm --dir apps/api build` (pnpm workspace; do not use npm).
 
 ## Tests
 

@@ -3,6 +3,7 @@
 use App\Domains\Checklists\Models\ChecklistAnswer;
 use App\Domains\Checklists\Models\ChecklistPack;
 use App\Domains\Checklists\Models\ChecklistTemplate;
+use App\Domains\Notifications\Models\UserNotification;
 use App\Domains\TargetsGroups\Models\Target;
 use App\Models\Tenant;
 use App\Models\User;
@@ -426,7 +427,7 @@ test('pack crud assign and rejects system templates', function () {
         ->assertStatus(422);
 });
 
-test('creating a target auto assigns published packs', function () {
+test('creating a target auto assigns published packs and notifies only the staff member who added them', function () {
     $template = asChecklistAdmin($this)
         ->postJson('/api/v1/org/checklists/templates', [
             'name' => 'Auto hire checklist',
@@ -477,6 +478,17 @@ test('creating a target auto assigns published packs', function () {
         ->json('data');
 
     expect(collect($instances)->pluck('title')->all())->toContain('Auto hire checklist');
+
+    $newHireUserId = User::query()->withEmail($email)->where('tenant_id', 'itneck')->firstOrFail()->id;
+    Tenancy::initialize($this->tenant);
+    $hasChecklistNotification = fn (int $userId): bool => UserNotification::query()
+        ->where('user_id', $userId)
+        ->where('type', UserNotification::TYPE_CHECKLIST_ASSIGNED)
+        ->exists();
+
+    expect($hasChecklistNotification($this->user->id))->toBeTrue();
+    expect($hasChecklistNotification($newHireUserId))->toBeFalse();
+    Tenancy::end();
 });
 
 test('org admin can show a single target', function () {

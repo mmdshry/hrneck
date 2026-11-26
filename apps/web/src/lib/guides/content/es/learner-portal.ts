@@ -27,7 +27,7 @@ export const learnerPortalGuide: GuideModule = {
   steps: [
     {
       title: "Inicia sesión en el host del tenant",
-      body: "Usa tu cuenta de la organización en {slug}.hrneck.test. Puede requerirse MFA. Los alumnos no usan el MSP ni el admin de Filament.",
+      body: "Usa tu cuenta de la organización en {slug}.hrneck.test. Puede requerirse MFA. Los alumnos no usan la consola MSP.",
       href: "/login",
     },
     {

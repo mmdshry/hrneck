@@ -18,7 +18,7 @@ export const mspGuide: GuideModule = {
   ],
   openInAppHref: "/msp",
   overview:
-    "La consola MSP en /msp es solo para personal de plataforma (platform_super_admin y platform_agent). Lista organizaciones tenant con sector, franja de empleados, estado y flags de formación, y permite Abrir administración del tenant—lo que entra en un contexto real de staff_tenant_id para que /org cargue ese cliente. Use Salir del tenant en el banner del entorno org para volver a /msp. Filament en admin.hrneck.test/admin es otra superficie de personal (salud, registro de actividad, conmutador de tenant, operaciones más profundas) y no está cubierta por esta guía.",
+    "La consola MSP en /msp es solo para personal de plataforma (platform_super_admin y platform_agent). Lista organizaciones tenant con sector, franja de empleados, estado y flags de formación, y permite Abrir administración del tenant—lo que entra en un contexto real de staff_tenant_id para que /org cargue ese cliente. Use Salir del tenant en el banner del entorno org para volver a /msp.",
   example: {
     title: "El personal ayuda a Acme antes del lanzamiento del Q4",
     narrative:
@@ -51,15 +51,11 @@ export const mspGuide: GuideModule = {
   ],
   sections: [
     {
-      title: "MSP frente a Filament frente a org",
+      title: "MSP frente a org",
       steps: [
         {
           title: "MSP = directorio + entrada",
           body: "Next /msp es el directorio ligero de personal y el punto de entrada a la UI de org del cliente.",
-        },
-        {
-          title: "Filament = operaciones centrales",
-          body: "admin.hrneck.test/admin añade salud de plataforma, registro de actividad, CRUD de organizaciones y recursos de operaciones de tenant tras un cambio de tenant en Filament. Los clientes nunca ven Filament.",
         },
         {
           title: "Los usuarios de la org permanecen en su host",

@@ -372,6 +372,8 @@
     "selectOrgEmpty": "No organization memberships are available for this account.",
     "selectOrgLoadFailed": "Unable to load organizations.",
     "selectOrgEnterFailed": "Unable to enter that organization.",
+    "selectOrgCurrent": "Текущая",
+    "selectOrgPasswordPrompt": "У этой организации отдельный вход. Введите её пароль, чтобы продолжить.",
     "passkeyButton": "Войти с ключом доступа",
     "passkeyDivider": "Или введите код",
     "recoveryCodeLabel": "Код восстановления",
@@ -380,6 +382,11 @@
     "passkeyFailed": "Не удалось подтвердить ключ доступа. Попробуйте снова.",
     "passkeyCancelled": "Вход ключом доступа отменён.",
     "passkeyNeedsHttps": "Для ключей доступа нужно защищённое соединение. Откройте сайт по https://."
+  },
+  "orgNoAccess": {
+    "title": "Нет доступа к этой странице",
+    "body": "У вашей учётной записи нет прав, необходимых для этой страницы. Если доступ нужен, обратитесь к администратору организации.",
+    "backToDashboard": "Вернуться на главную"
   },
   "account": {
     "securityTitle": "Безопасность",
@@ -702,7 +709,7 @@
       "details": "Details",
       "openModule": "Open module",
       "loadFailed": "Failed to load dashboard metrics",
-      "openTenantFilament": "Open this organization in Filament. Live metrics are for organization users.",
+      "openTenantFromMsp": "Enter this organization from the MSP console to view live metrics.",
       "goToLogin": "Go to login"
     },
     "msp": {
@@ -1883,6 +1890,15 @@
     "unavailable": "Ассистент временно недоступен. Попробуйте позже.",
     "conversationEnded": "Этот диалог завершён. Отправьте сообщение ещё раз, чтобы начать новый.",
     "genericError": "Что-то пошло не так. Попробуйте ещё раз."
+  },
+  "legal": {
+    "legalLabel": "Правовая информация",
+    "privacyPolicy": "Политика конфиденциальности",
+    "termsOfService": "Условия использования",
+    "onThisPage": "На этой странице",
+    "effectiveDate": "Действует с {date}",
+    "precedenceNotice": "Соглашение о бизнес-партнёрстве (BAA) между HRNECK и вашей организацией определяет порядок обработки защищённой медицинской информации. Эти страницы описывают наши практики и не заменяют BAA.",
+    "demoConsent": "Отправляя этот запрос, вы соглашаетесь с нашей <privacy>Политикой конфиденциальности</privacy> и <terms>Условиями использования</terms>."
   },
   "guides": {
     "hubTitle": "Руководства",

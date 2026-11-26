@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { isAppLocale, normalizeLocale } from "@/i18n/config";
 import { setLocaleCookie } from "@/i18n/set-locale";
 import { api, ensureCsrf } from "@/lib/api";
+import { saveOrgChoice } from "@/lib/org-choice";
 import { resolvePostLoginPath, type SessionUser } from "@/lib/session";
 import {
   isSsoErrorCode,
@@ -91,6 +92,8 @@ export function LoginForm() {
         mfa_required?: boolean;
         challenge_token?: string;
         mfa_methods?: { totp: boolean; passkey: boolean };
+        org_choice_required?: boolean;
+        organizations?: { tenant_id: string; name: string }[];
         data?: SessionUser;
       }>("/api/v1/auth/login", {
         method: "POST",
@@ -105,6 +108,15 @@ export function LoginForm() {
       });
 
       const next = safeNextPath(searchParams.get("next"));
+
+      if (result.org_choice_required && result.challenge_token && result.organizations) {
+        saveOrgChoice({
+          challengeToken: result.challenge_token,
+          organizations: result.organizations,
+        });
+        router.push(next ? `/select-org?next=${encodeURIComponent(next)}` : "/select-org");
+        return;
+      }
 
       if (result.mfa_required && result.challenge_token) {
         sessionStorage.setItem("mfa_challenge", result.challenge_token);

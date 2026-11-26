@@ -65,7 +65,7 @@ export const authGuide: GuideModule = {
         },
         {
           title: "Сотрудники платформы",
-          body: "platform_super_admin / platform_agent используют /msp и при необходимости входят в тенант. MFA в Filament на admin.hrneck.test поддерживает только приложение-аутентификатор. Ключи доступа там пока не предлагаются.",
+          body: "platform_super_admin / platform_agent используют /msp и при необходимости входят в тенант.",
         },
         {
           title: "Учащиеся и пользователи портала",

@@ -5,7 +5,6 @@ import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
-import { EmptyState } from "@/components/ui/empty-state";
 import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
@@ -23,7 +22,7 @@ import {
   type PageSize,
   type PaginationMeta,
 } from "@/lib/pagination";
-import { hasAnyPermission, hasPermission, type SessionUser } from "@/lib/session";
+import { hasPermission, type SessionUser } from "@/lib/session";
 import { matchesCells } from "@/lib/table-filter";
 import { resolveTenant } from "@/lib/tenant";
 import { toastError, toastInfo } from "@/lib/toast";
@@ -355,15 +354,6 @@ export function ChecklistsClient() {
 
   if (loading) {
     return <PageSkeleton className="max-w-5xl" />;
-  }
-
-  if (session && !hasAnyPermission(session, ["org.checklists.view", "org.checklists.manage"])) {
-    return (
-      <div className="mx-auto w-full max-w-5xl flex-1 space-y-4 px-4 py-8 sm:px-6">
-        <PageHeader title={t("title")} description={t("description")} />
-        <EmptyState title={t("needManagePermission")} />
-      </div>
-    );
   }
 
   return (

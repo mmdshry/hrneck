@@ -65,7 +65,7 @@ export const authGuide: GuideModule = {
         },
         {
           title: "Personal de plataforma",
-          body: "platform_super_admin / platform_agent usan /msp y opcionalmente entran en un tenant. El MFA de Filament en admin.hrneck.test solo admite una app de autenticación. Las llaves de acceso aún no están disponibles allí.",
+          body: "platform_super_admin / platform_agent usan /msp y opcionalmente entran en un tenant.",
         },
         {
           title: "Alumnos y usuarios del portal",

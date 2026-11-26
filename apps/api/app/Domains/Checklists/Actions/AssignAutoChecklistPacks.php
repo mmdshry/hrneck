@@ -35,8 +35,10 @@ class AssignAutoChecklistPacks
                     requireCreated: false,
                 );
                 $created += count($instances);
-            } catch (Throwable) {
+            } catch (Throwable $exception) {
                 // Employee create must not fail because of checklist assignment.
+                report($exception);
+
                 continue;
             }
         }

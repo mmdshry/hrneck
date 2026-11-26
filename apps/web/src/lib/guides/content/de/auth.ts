@@ -64,7 +64,7 @@ export const authGuide: GuideModule = {
         },
         {
           title: "Plattform-Mitarbeiter",
-          body: "platform_super_admin / platform_agent nutzen /msp und betreten optional einen Tenant. Filament-MFA auf admin.hrneck.test unterstützt nur eine Authenticator-App. Passkeys werden dort noch nicht angeboten.",
+          body: "platform_super_admin / platform_agent nutzen /msp und betreten optional einen Tenant.",
         },
         {
           title: "Lernende und Portalnutzer",

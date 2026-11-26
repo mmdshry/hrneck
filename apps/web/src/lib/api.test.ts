@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { friendlyMessage, NO_ASSIGNED_TRAINING_MESSAGE } from "./api";
+import { FORBIDDEN_MESSAGE, friendlyMessage, NO_ASSIGNED_TRAINING_MESSAGE } from "./api";
 
 describe("friendlyMessage", () => {
-  it("hides a debug 403 dump behind the learner sentence", () => {
+  it("hides a debug 403 dump behind a generic permission message", () => {
     const body = JSON.stringify({
       message: "",
       exception: "Symfony\\Component\\HttpKernel\\Exception\\HttpException",
@@ -10,7 +10,7 @@ describe("friendlyMessage", () => {
       trace: [{ file: "vendor\\laravel\\framework\\helpers.php" }],
     });
 
-    expect(friendlyMessage(403, body)).toBe(NO_ASSIGNED_TRAINING_MESSAGE);
+    expect(friendlyMessage(403, body)).toBe(FORBIDDEN_MESSAGE);
     expect(friendlyMessage(403, body)).not.toContain("vendor");
     expect(friendlyMessage(403, body)).not.toContain("trace");
   });
@@ -22,6 +22,11 @@ describe("friendlyMessage", () => {
         JSON.stringify({ message: NO_ASSIGNED_TRAINING_MESSAGE }),
       ),
     ).toBe(NO_ASSIGNED_TRAINING_MESSAGE);
+  });
+
+  it("does not show the training sentence for a 403 without a usable message", () => {
+    expect(friendlyMessage(403, "")).toBe(FORBIDDEN_MESSAGE);
+    expect(friendlyMessage(403, "{}")).toBe(FORBIDDEN_MESSAGE);
   });
 
   it("does not return a raw body", () => {

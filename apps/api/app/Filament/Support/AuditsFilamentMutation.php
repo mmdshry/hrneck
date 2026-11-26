@@ -22,7 +22,7 @@ final class AuditsFilamentMutation
             $event,
             $description,
             $subject,
-            array_merge(['source' => 'filament'], $properties),
+            array_merge(['source' => 'platform_staff'], $properties),
         );
     }
 }

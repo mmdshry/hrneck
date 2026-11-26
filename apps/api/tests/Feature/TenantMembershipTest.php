@@ -57,7 +57,8 @@ test('each organization login keeps its own password', function () {
         ])
         ->assertOk()
         ->assertJsonPath('data.tenant_id', 'company')
-        ->assertJsonPath('data.needs_org_selection', false);
+        // The same email also has an itneck login, so the user must still choose an organization.
+        ->assertJsonPath('data.needs_org_selection', true);
 
     $this->withHeaders($origin)
         ->postJson('/api/v1/auth/login', [
@@ -102,8 +103,9 @@ test('identical passwords across organizations are resolved by the organization 
             'email' => $email,
             'password' => $password,
         ])
-        ->assertUnprocessable()
-        ->assertJsonValidationErrors(['email']);
+        ->assertOk()
+        ->assertJsonPath('org_choice_required', true)
+        ->assertJsonCount(2, 'organizations');
 
     $this->withHeaders($origin)
         ->postJson('/api/v1/auth/login', [

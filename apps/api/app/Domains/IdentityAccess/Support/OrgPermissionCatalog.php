@@ -224,6 +224,8 @@ final class OrgPermissionCatalog
                 self::DEPARTMENTS_VIEW,
                 self::GROUPS_VIEW,
                 self::REPORTS_VIEW,
+                self::CHECKLISTS_VIEW,
+                self::CHECKLISTS_FILL,
             ],
             'helpdesk_agent' => [
                 self::TICKETING_TICKETS,

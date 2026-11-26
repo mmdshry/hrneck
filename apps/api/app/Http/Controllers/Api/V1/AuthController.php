@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Domains\IdentityAccess\Actions\ListSignInOrganizations;
 use App\Domains\IdentityAccess\Actions\MfaService;
 use App\Domains\IdentityAccess\Actions\PasskeyService;
 use App\Domains\IdentityAccess\Actions\SyncActiveOrgAfterSignIn;
 use App\Domains\IdentityAccess\Notifications\EmployeeInviteNotification;
+use App\Domains\IdentityAccess\Support\OrgChoiceChallenge;
 use App\Domains\IdentityAccess\Support\SignInBlockReason;
 use App\Domains\IdentityAccess\Support\SignInEligibility;
 use App\Http\Controllers\Controller;
@@ -37,55 +39,103 @@ class AuthController extends Controller
         private readonly PasskeyService $passkeys,
         private readonly SignInEligibility $eligibility,
         private readonly SyncActiveOrgAfterSignIn $activeOrg,
+        private readonly ListSignInOrganizations $organizations,
+        private readonly OrgChoiceChallenge $orgChoice,
     ) {}
 
     public function login(LoginRequest $request): JsonResponse
     {
-        $user = $this->findLoginAccount(
+        $logins = $this->passwordLogins(
             (string) $request->input('email'),
             (string) $request->input('password'),
             $request->input('tenant'),
         );
 
-        if ($user === null) {
+        if ($logins->isEmpty()) {
             throw ValidationException::withMessages([
                 'email' => [__('auth.failed')],
             ]);
         }
 
-        Auth::guard('web')->login($user, $request->boolean('remember'));
+        $remember = $request->boolean('remember');
+        $organizationHint = $this->organizationHint($request);
 
-        $blockReason = $this->eligibility->blockReason($user, viaPassword: true);
-        if ($blockReason !== null) {
-            Auth::guard('web')->logout();
-
-            throw ValidationException::withMessages([
-                'email' => [$this->signInBlockMessage($blockReason)],
-            ]);
+        if ($logins->count() === 1) {
+            return $this->signIn($request, $logins->first(), $remember, $organizationHint);
         }
 
-        if ($user->mfa_enabled) {
-            $remember = $request->boolean('remember');
-            Auth::guard('web')->logout();
-            $challenge = $this->mfa->issueChallengeToken($user, $remember);
+        return $this->chooseOrganization($request, $logins, $remember, $organizationHint);
+    }
 
-            return response()->json([
-                'mfa_required' => true,
-                'challenge_token' => $challenge,
-                'mfa_methods' => $this->mfaMethods($user),
-            ]);
-        }
-
-        if ($request->hasSession()) {
-            $request->session()->regenerate();
-        }
-
-        $this->activeOrg->handle($user);
-
-        return response()->json([
-            'data' => new UserResource($user),
-            'mfa_required' => false,
+    /**
+     * Second step after a password matched several organizations: the user picked one, so no password is asked again.
+     */
+    public function loginOrg(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'challenge_token' => ['required', 'string'],
+            'tenant' => ['required', 'string', 'max:64'],
         ]);
+
+        $challenge = $this->orgChoice->fromToken($data['challenge_token']);
+        if ($challenge === null) {
+            throw ValidationException::withMessages([
+                'challenge_token' => [__('auth.org_choice_invalid')],
+            ]);
+        }
+
+        $login = $challenge['logins']->first(
+            fn (User $candidate): bool => $candidate->tenant_id === $data['tenant'],
+        );
+        if (! $login instanceof User) {
+            throw ValidationException::withMessages([
+                'tenant' => [__('auth.org_choice_invalid')],
+            ]);
+        }
+
+        $this->orgChoice->consume($data['challenge_token']);
+
+        return $this->signIn($request, $login, $challenge['remember'], $data['tenant']);
+    }
+
+    /**
+     * Switch from this login to another organization login that shares the same email.
+     * That login has its own password (and MFA), so both are required here.
+     */
+    public function switchOrg(Request $request, string $tenant): JsonResponse
+    {
+        if (! $request->hasSession()) {
+            abort(400, 'A browser session is required to switch organizations.');
+        }
+
+        /** @var User $current */
+        $current = $request->user();
+        if ($current->isPlatformStaff()) {
+            abort(403, 'Platform staff must enter tenants via MSP.');
+        }
+
+        $data = $request->validate([
+            'password' => ['required', 'string'],
+            'remember' => ['sometimes', 'boolean'],
+        ]);
+
+        $login = User::query()
+            ->withEmail((string) $current->email)
+            ->where('tenant_id', $tenant)
+            ->whereKeyNot($current->getKey())
+            ->first();
+
+        if (! $login instanceof User || ! $this->organizations->isUsableOrganizationLogin($login)) {
+            abort(403, 'You do not have a login for this organization.');
+        }
+
+        if (! Hash::check($data['password'], $login->getAuthPassword())) {
+            throw ValidationException::withMessages([
+                'password' => [__('auth.password')],
+            ]);
+        }
+
+        return $this->signIn($request, $login, $request->boolean('remember'), $tenant);
     }
 
     public function verifyMfa(Request $request): JsonResponse
@@ -111,7 +161,13 @@ class AuthController extends Controller
             ]);
         }
 
-        return $this->completeMfaLogin($request, $data['challenge_token'], $user, $challenge['remember']);
+        return $this->completeMfaLogin(
+            $request,
+            $data['challenge_token'],
+            $user,
+            $challenge['remember'],
+            $challenge['preferred_tenant_id'],
+        );
     }
 
     public function passkeyMfaOptions(Request $request): JsonResponse
@@ -157,7 +213,13 @@ class AuthController extends Controller
             ]);
         }
 
-        return $this->completeMfaLogin($request, $data['challenge_token'], $user, $challenge['remember']);
+        return $this->completeMfaLogin(
+            $request,
+            $data['challenge_token'],
+            $user,
+            $challenge['remember'],
+            $challenge['preferred_tenant_id'],
+        );
     }
 
     public function enterOrg(Request $request, string $tenant): JsonResponse
@@ -382,27 +444,112 @@ class AuthController extends Controller
     }
 
     /**
-     * Email plus password picks the login. The optional tenant (the organization sign-in address)
-     * narrows the search. Without it, a single password match is accepted; several matches need the tenant.
+     * Logins whose password matches the email and password. The optional tenant (the organization
+     * sign-in address) narrows the search to that organization's login.
+     *
+     * @return Collection<int, User>
      */
-    private function findLoginAccount(string $email, string $password, mixed $tenant): ?User
+    private function passwordLogins(string $email, string $password, mixed $tenant): Collection
     {
-        $query = User::query()->withEmail($email);
+        $query = User::query()->withEmail($email)->with('tenant');
         if (is_string($tenant) && $tenant !== '') {
             $query->where('tenant_id', $tenant);
         }
 
-        $matches = $query->get()
+        return $query->get()
             ->filter(fn (User $user): bool => Hash::check($password, $user->getAuthPassword()))
             ->values();
+    }
 
-        if ($matches->count() > 1) {
+    /**
+     * The organization sign-in address (subdomain or ?tenant=) sent with the password. When this login can enter
+     * that organization, it becomes the active one, so the user is not asked to pick it again.
+     */
+    private function organizationHint(Request $request): ?string
+    {
+        $tenant = $request->input('tenant');
+
+        return is_string($tenant) && $tenant !== '' ? $tenant : null;
+    }
+
+    /**
+     * One password matched several organization logins: the user picks the organization next. Platform
+     * staff logins are never listed, and logins that cannot be used are dropped.
+     *
+     * @param  Collection<int, User>  $logins
+     */
+    private function chooseOrganization(
+        Request $request,
+        Collection $logins,
+        bool $remember,
+        ?string $organizationHint,
+    ): JsonResponse {
+        $organizationLogins = $logins
+            ->filter(fn (User $login): bool => $this->organizations->isUsableOrganizationLogin($login))
+            ->values();
+
+        if ($organizationLogins->isEmpty()) {
+            /** @var User $first */
+            $first = $logins->first();
+
+            return $this->signIn($request, $first, $remember);
+        }
+
+        if ($organizationLogins->count() === 1) {
+            return $this->signIn($request, $organizationLogins->first(), $remember, $organizationHint);
+        }
+
+        return response()->json([
+            'org_choice_required' => true,
+            'challenge_token' => $this->orgChoice->issue($organizationLogins, $remember),
+            'organizations' => $organizationLogins
+                ->map(fn (User $login): array => [
+                    'tenant_id' => (string) $login->tenant_id,
+                    'name' => $login->tenant->name ?? (string) $login->tenant_id,
+                ])
+                ->values()
+                ->all(),
+        ]);
+    }
+
+    /**
+     * Checks account state and MFA, then starts the session. $preferredTenantId is an organization the user
+     * picked explicitly; it becomes the active organization once the session starts.
+     */
+    private function signIn(Request $request, User $user, bool $remember, ?string $preferredTenantId = null): JsonResponse
+    {
+        $blockReason = $this->eligibility->blockReason($user, viaPassword: true);
+        if ($blockReason !== null) {
             throw ValidationException::withMessages([
-                'email' => ['This email has a login in more than one organization. Sign in from your organization address.'],
+                'email' => [$this->signInBlockMessage($blockReason)],
             ]);
         }
 
-        return $matches->first();
+        if ($user->mfa_enabled) {
+            return response()->json([
+                'mfa_required' => true,
+                'challenge_token' => $this->mfa->issueChallengeToken($user, $remember, $preferredTenantId),
+                'mfa_methods' => $this->mfaMethods($user),
+            ]);
+        }
+
+        $this->startSession($request, $user, $remember, $preferredTenantId);
+
+        return response()->json([
+            'data' => new UserResource($user),
+            'mfa_required' => false,
+        ]);
+    }
+
+    private function startSession(Request $request, User $user, bool $remember, ?string $preferredTenantId): void
+    {
+        Auth::guard('web')->login($user, $remember);
+
+        if ($request->hasSession()) {
+            $request->session()->regenerate();
+        }
+
+        $this->activeOrg->handle($user, $preferredTenantId);
     }
 
     public function changePassword(Request $request): JsonResponse
@@ -460,15 +607,15 @@ class AuthController extends Controller
         ];
     }
 
-    private function completeMfaLogin(Request $request, string $challengeToken, User $user, bool $remember): JsonResponse
-    {
+    private function completeMfaLogin(
+        Request $request,
+        string $challengeToken,
+        User $user,
+        bool $remember,
+        ?string $preferredTenantId,
+    ): JsonResponse {
         $this->mfa->consumeChallengeToken($challengeToken);
-        Auth::guard('web')->login($user, $remember);
-        if ($request->hasSession()) {
-            $request->session()->regenerate();
-        }
-
-        $this->activeOrg->handle($user);
+        $this->startSession($request, $user, $remember, $preferredTenantId);
 
         return response()->json(['data' => new UserResource($user)]);
     }

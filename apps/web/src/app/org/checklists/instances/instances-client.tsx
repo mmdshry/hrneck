@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { EmptyState } from "@/components/ui/empty-state";
 import { toastError } from "@/lib/toast";
 import { useTranslations } from "next-intl";
 import type { AudienceGroup, AudienceTarget } from "@/app/org/training/audience-picker";
@@ -24,7 +23,7 @@ import {
   type PageSize,
   type PaginationMeta,
 } from "@/lib/pagination";
-import { hasAnyPermission, hasPermission, type SessionUser } from "@/lib/session";
+import { hasPermission, type SessionUser } from "@/lib/session";
 import { matchesCells } from "@/lib/table-filter";
 import { resolveTenant } from "@/lib/tenant";
 import type {
@@ -282,22 +281,6 @@ export function ChecklistInstancesClient() {
 
   if (loading) {
     return <PageSkeleton className="max-w-5xl" />;
-  }
-
-  if (
-    session &&
-    !hasAnyPermission(session, [
-      "org.checklists.view",
-      "org.checklists.fill",
-      "org.checklists.manage",
-    ])
-  ) {
-    return (
-      <div className="mx-auto w-full max-w-5xl flex-1 space-y-4 px-4 py-8 sm:px-6">
-        <PageHeader title={t("instancesTitle")} description={t("instancesDescription")} />
-        <EmptyState title={t("needChecklistAccess")} />
-      </div>
-    );
   }
 
   const canManageChecklists = hasPermission(session, "org.checklists.manage");

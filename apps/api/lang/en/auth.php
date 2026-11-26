@@ -21,4 +21,5 @@ return [
     'password_updated' => 'Password updated.',
     'logged_out' => 'Logged out',
     'sso_handoff_invalid' => 'This sign-in link has expired. Please sign in again.',
+    'org_choice_invalid' => 'This organization choice has expired. Sign in again.',
 ];

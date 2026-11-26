@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useState, type FormEvent } from "react";
 import { Reveal } from "@/components/landing/reveal";
@@ -14,6 +15,7 @@ const contactEmail =
 
 export function LandingDemoForm() {
   const t = useTranslations("landing");
+  const tLegal = useTranslations("legal");
   const [submitted, setSubmitted] = useState(false);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -136,6 +138,26 @@ export function LandingDemoForm() {
                 </p>
               ) : null}
             </div>
+            <p className="text-xs leading-relaxed text-[var(--muted-foreground)] sm:col-span-2">
+              {tLegal.rich("demoConsent", {
+                privacy: (chunks) => (
+                  <Link
+                    href="/privacy"
+                    className="font-medium text-[var(--link)] underline-offset-4 hover:underline"
+                  >
+                    {chunks}
+                  </Link>
+                ),
+                terms: (chunks) => (
+                  <Link
+                    href="/terms"
+                    className="font-medium text-[var(--link)] underline-offset-4 hover:underline"
+                  >
+                    {chunks}
+                  </Link>
+                ),
+              })}
+            </p>
           </form>
         </Reveal>
       </div>

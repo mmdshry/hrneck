@@ -27,7 +27,7 @@ export const learnerPortalGuide: GuideModule = {
   steps: [
     {
       title: "Войдите на хост тенанта",
-      body: "Используйте учётную запись организации на {slug}.hrneck.test. Может потребоваться MFA. Учащиеся не используют MSP или админку Filament.",
+      body: "Используйте учётную запись организации на {slug}.hrneck.test. Может потребоваться MFA. Учащиеся не используют консоль MSP.",
       href: "/login",
     },
     {

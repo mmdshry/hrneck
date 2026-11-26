@@ -1,6 +1,6 @@
 # HRNECK API (`apps/api`)
 
-Laravel API + Filament admin for HRNECK.
+Laravel API for HRNECK.
 
 ```powershell
 cd apps\api

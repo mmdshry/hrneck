@@ -1,9 +1,11 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { BookOpen } from "lucide-react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionUser } from "@/lib/session";
 import { OrgShell } from "./org-shell";
 
 const state = vi.hoisted(() => ({
+  pathname: "/org",
   user: null as SessionUser | null,
   uploaderProps: [] as Array<{
     name?: string | null;
@@ -14,7 +16,12 @@ const state = vi.hoisted(() => ({
 }));
 
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/org",
+  usePathname: () => state.pathname,
+}));
+
+vi.mock("next-intl", () => ({
+  useTranslations: (namespace?: string) => (key: string) =>
+    namespace ? `${namespace}.${key}` : key,
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -101,8 +108,17 @@ async function findSidebar() {
   return screen.findByRole("complementary", { name: "Sidebar" });
 }
 
+function expectFooterExtraBelowTheme(container: HTMLElement) {
+  const theme = within(container).getByText("Theme");
+  const extra = within(container).getByText("Extra footer row");
+  expect(theme.compareDocumentPosition(extra) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+    Node.DOCUMENT_POSITION_FOLLOWING,
+  );
+}
+
 describe("OrgShell profile block", () => {
   beforeEach(() => {
+    state.pathname = "/org";
     state.user = null;
     state.uploaderProps.length = 0;
   });
@@ -166,5 +182,83 @@ describe("OrgShell profile block", () => {
     });
 
     expect(lastUploaderProps()?.avatarUrl).toBe("/api/v1/auth/avatar?v=2");
+  });
+});
+
+describe("OrgShell route permission gate", () => {
+  beforeEach(() => {
+    state.pathname = "/org";
+    state.user = null;
+    state.uploaderProps.length = 0;
+  });
+
+  it("shows the no-access page instead of the page body when the member lacks the route permission", async () => {
+    state.pathname = "/org/roles";
+    state.user = sessionUser({ permissions: ["org.users.view"] });
+    renderShell();
+
+    expect(await screen.findByText("orgNoAccess.title")).toBeTruthy();
+    expect(screen.queryByText("page body")).toBeNull();
+    const backLink = screen.getByRole("link", { name: "orgNoAccess.backToDashboard" });
+    expect(backLink.getAttribute("href")).toBe("/org");
+  });
+
+  it("renders the page when the member holds a permission for the route", async () => {
+    state.pathname = "/org/roles";
+    state.user = sessionUser({ permissions: ["org.roles.manage"] });
+    renderShell();
+
+    expect(await screen.findByText("page body")).toBeTruthy();
+    expect(screen.queryByText("orgNoAccess.title")).toBeNull();
+  });
+
+  it("does not gate open routes such as the per-account MFA page", async () => {
+    state.pathname = "/org/settings/mfa";
+    state.user = sessionUser({ permissions: [] });
+    renderShell();
+
+    expect(await screen.findByText("page body")).toBeTruthy();
+    expect(screen.queryByText("orgNoAccess.title")).toBeNull();
+  });
+});
+
+describe("OrgShell navigation", () => {
+  beforeEach(() => {
+    state.user = null;
+    state.uploaderProps.length = 0;
+  });
+
+  it("shows the organization console menu by default, filtered by permission", async () => {
+    state.user = sessionUser({ permissions: ["org.ticketing.tickets"] });
+    renderShell();
+
+    const sidebar = await findSidebar();
+    await within(sidebar).findByText("Ada Lovelace");
+    expect(within(sidebar).getByRole("link", { name: "Dashboard" })).toBeTruthy();
+    expect(within(sidebar).getByRole("link", { name: "Ticketing" })).toBeTruthy();
+    expect(within(sidebar).queryByRole("link", { name: "Training" })).toBeNull();
+  });
+
+  it("renders the menu and footer extras supplied by the caller", async () => {
+    state.user = sessionUser();
+    render(
+      <OrgShell
+        resolveNavItems={() => [{ href: "/portal", label: "Custom item", icon: BookOpen }]}
+        footerExtras={<p>Extra footer row</p>}
+      >
+        <p>page body</p>
+      </OrgShell>,
+    );
+
+    const sidebar = await findSidebar();
+    await within(sidebar).findByText("Ada Lovelace");
+    expect(within(sidebar).getByRole("link", { name: "Custom item" })).toBeTruthy();
+    expect(within(sidebar).queryByRole("link", { name: "Dashboard" })).toBeNull();
+    expectFooterExtraBelowTheme(sidebar);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open navigation menu" }));
+    const drawer = document.getElementById("org-mobile-nav");
+    expect(drawer).not.toBeNull();
+    expectFooterExtraBelowTheme(drawer!);
   });
 });

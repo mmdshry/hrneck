@@ -18,7 +18,7 @@ export const mspGuide: GuideModule = {
   ],
   openInAppHref: "/msp",
   overview:
-    "La console MSP sur /msp est réservée au personnel plateforme (platform_super_admin et platform_agent). Elle liste les organisations tenant avec secteur, tranche d'effectifs, statut et indicateurs de formation, et permet Ouvrir l'administration du tenant—ce qui entre dans un vrai contexte staff_tenant_id pour charger /org pour ce client. Utilisez Quitter le tenant dans la bannière de l'environnement org pour revenir à /msp. Filament sur admin.hrneck.test/admin est une surface personnel distincte (santé, journal d'activité, sélecteur de tenant, opérations plus poussées) et n'est pas couverte par ce guide.",
+    "La console MSP sur /msp est réservée au personnel plateforme (platform_super_admin et platform_agent). Elle liste les organisations tenant avec secteur, tranche d'effectifs, statut et indicateurs de formation, et permet Ouvrir l'administration du tenant—ce qui entre dans un vrai contexte staff_tenant_id pour charger /org pour ce client. Utilisez Quitter le tenant dans la bannière de l'environnement org pour revenir à /msp.",
   example: {
     title: "Le personnel aide Acme avant le lancement Q4",
     narrative:
@@ -51,15 +51,11 @@ export const mspGuide: GuideModule = {
   ],
   sections: [
     {
-      title: "MSP vs Filament vs org",
+      title: "MSP vs org",
       steps: [
         {
           title: "MSP = répertoire + entrée",
           body: "Next /msp est le répertoire léger du personnel et le point d'entrée dans l'UI org du client.",
-        },
-        {
-          title: "Filament = opérations centrales",
-          body: "admin.hrneck.test/admin ajoute la santé plateforme, le journal d'activité, le CRUD des organisations et les ressources d'ops tenant après un changement de tenant Filament. Les clients ne voient jamais Filament.",
         },
         {
           title: "Les utilisateurs org restent sur leur hôte",

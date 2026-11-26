@@ -11,6 +11,9 @@ const API_BASE = "";
 export const NO_ASSIGNED_TRAINING_MESSAGE =
   "No assigned training found for this account yet.";
 
+/** Shown for a 403 when the server sent no message that is safe to display. */
+export const FORBIDDEN_MESSAGE = "You do not have permission to do this.";
+
 const SIGN_IN_MESSAGE = "Sign in required to continue.";
 const CSRF_MESSAGE = "Your session expired. Refresh the page and try again.";
 
@@ -80,9 +83,7 @@ export function friendlyMessage(status: number, body: string): string {
     }
   } catch {
     if (body.includes("Exception") || body.includes('"trace"')) {
-      return status === 403
-        ? NO_ASSIGNED_TRAINING_MESSAGE
-        : `Request failed (${status})`;
+      return status === 403 ? FORBIDDEN_MESSAGE : `Request failed (${status})`;
     }
   }
 
@@ -101,7 +102,7 @@ export function friendlyMessage(status: number, body: string): string {
   }
 
   if (status === 403) {
-    return NO_ASSIGNED_TRAINING_MESSAGE;
+    return FORBIDDEN_MESSAGE;
   }
 
   return `Request failed (${status})`;
@@ -343,6 +344,24 @@ function normalizeSessionUser(raw: Partial<SessionUser> | null | undefined): Ses
             };
           })
           .filter((m): m is NonNullable<typeof m> => m !== null)
+      : undefined,
+    organizations: Array.isArray(raw.organizations)
+      ? raw.organizations
+          .map((o) => {
+            if (!o || typeof o !== "object") return null;
+            const tenantId =
+              typeof o.tenant_id === "string" ? o.tenant_id.trim() : "";
+            if (!tenantId) return null;
+            return {
+              tenant_id: tenantId,
+              name:
+                typeof o.name === "string" && o.name.trim() !== ""
+                  ? o.name.trim()
+                  : tenantId,
+              requires_password: Boolean(o.requires_password),
+            };
+          })
+          .filter((o): o is NonNullable<typeof o> => o !== null)
       : undefined,
     needs_org_selection: Boolean(raw.needs_org_selection),
     ...optionalSubscription(raw.subscription),

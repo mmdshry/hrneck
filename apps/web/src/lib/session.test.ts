@@ -5,6 +5,7 @@ import {
   hasPermission,
   matchOrgMembership,
   resolvePostLoginPath,
+  signInOrganizations,
   type SessionUser,
 } from "./session";
 
@@ -226,5 +227,50 @@ describe("MSP staff gate paths", () => {
     expect(resolvePostLoginPath(orgUser(), "//evil.test")).toBe("/org");
     expect(resolvePostLoginPath(orgUser(), "https://evil.test")).toBe("/org");
     expect(resolvePostLoginPath(staffUser(), null)).toBe("/msp");
+  });
+});
+
+describe("sign-in organizations", () => {
+  const ownAndSibling = orgUser({
+    tenant_id: "itneck",
+    needs_org_selection: true,
+    memberships: [{ tenant_id: "itneck", name: "ITneck" }],
+    organizations: [
+      { tenant_id: "itneck", name: "ITneck", requires_password: false },
+      { tenant_id: "company", name: "Company", requires_password: true },
+    ],
+  });
+
+  it("lists this login's organizations first, then other logins of the same email", () => {
+    expect(
+      signInOrganizations(ownAndSibling).map((org) => [org.tenant_id, org.requires_password]),
+    ).toEqual([
+      ["itneck", false],
+      ["company", true],
+    ]);
+  });
+
+  it("falls back to memberships when the API sent no organization list", () => {
+    const legacy = orgUser({
+      memberships: [
+        { tenant_id: "itneck", name: "ITneck" },
+        { tenant_id: "company", name: "Company" },
+      ],
+    });
+    expect(signInOrganizations(legacy)).toEqual([
+      { tenant_id: "itneck", name: "ITneck", requires_password: false },
+      { tenant_id: "company", name: "Company", requires_password: false },
+    ]);
+  });
+
+  it("keeps this login's own organization accessible", () => {
+    expect(matchOrgMembership(ownAndSibling, "itneck")).toEqual({ ok: true });
+  });
+
+  it("asks for org selection when the tenant is only another login of the same email", () => {
+    expect(matchOrgMembership(ownAndSibling, "company")).toEqual({
+      ok: false,
+      kind: "org_selection_required",
+    });
   });
 });

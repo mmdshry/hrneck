@@ -55,6 +55,7 @@ Route::prefix('v1')->group(function (): void {
     Route::get('/health', HealthController::class)->name('api.v1.health');
 
     Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:auth-login');
+    Route::post('/auth/login/org', [AuthController::class, 'loginOrg'])->middleware('throttle:auth-login');
 
     $ssoProviders = implode('|', array_column(SsoProvider::cases(), 'value'));
     Route::get('/auth/oauth/providers', [SsoController::class, 'providers']);
@@ -89,6 +90,7 @@ Route::prefix('v1')->group(function (): void {
         Route::delete('/auth/avatar', [AuthAvatarController::class, 'destroy']);
         Route::post('/auth/orgs/leave', [AuthController::class, 'leaveOrg']);
         Route::post('/auth/orgs/{tenant}/enter', [AuthController::class, 'enterOrg']);
+        Route::post('/auth/orgs/{tenant}/switch', [AuthController::class, 'switchOrg'])->middleware('throttle:auth-login');
     });
 
     Route::middleware(['auth:sanctum', EnsurePlatformStaff::class])->prefix('msp')->group(function (): void {

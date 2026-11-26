@@ -8,7 +8,6 @@ Track implementation status for HRNECK.
 - [x] Demo MSP admin user
 - [x] Demo tenants (`itneck`, `test`, `company`) on `{slug}.hrneck.test`
 - [x] MFA setup/verify/disable + recovery codes + Settings MFA/password page
-- [x] Filament MFA (App Authentication) + password reset on admin panel
 - [x] Password forgot/reset/change API + Next `/login/forgot` `/login/reset`
 - [x] Email verification gate on login (admin-created users verified)
 - [x] Platform staff tenant-context (`staff_tenant_id` enter/leave) for Next `/org`
@@ -23,7 +22,6 @@ Track implementation status for HRNECK.
 - [x] MSP Organizations live API (industry, employee band, status, module flags / `training_enabled` — informational, not enforced)
 - [x] Realtime WebSocket (Laravel Reverb + Echo): MSP + org Refresh-live pages use private channel snapshot/updated (no manual refresh)
 - [x] Org shell sidebar (Dashboard, Organizations/MSP, Training, Courses, Checklists, Ticketing, Employees, Departments, Groups, Users, Roles, Reporting, Export, Announcements, Settings, Guides)
-- [x] Filament full admin (`admin.hrneck.test/admin`): Tenant Switcher (`filament_tenant_id`) + central directory + full tenant ops/settings/reporting
 - [x] SSO sign-in with Google and Microsoft (Entra and personal accounts), global OAuth credentials, link-only to pre-provisioned users; see [auth.md](auth.md#single-sign-on-google-and-microsoft)
 - [ ] SSO admin per organization: own Entra/OIDC settings in Settings → Integrations (deferred)
 - [ ] Active/Purchased license cards (deferred to Billing)
@@ -32,7 +30,6 @@ Track implementation status for HRNECK.
 
 | Surface | Role |
 |---------|------|
-| Filament (`/admin`) | Platform staff only (`platform_super_admin` / `platform_agent`); tenant switcher for ops |
 | Next `/msp` | Platform staff |
 | Next `/org` | Organization users (`tenant_id` match) **or** platform staff after MSP enter |
 
@@ -63,8 +60,6 @@ Track implementation status for HRNECK.
 - [x] Detailed activity audit (Spatie activitylog in tenant DB) + instance audit UI
 - [x] Five system HR templates (onboarding, offboarding, IT access, transfer, leave return)
 - [x] Checklist packs (API + Next `/org/checklists/packs`)
-- [ ] Filament parity for checklists (deferred)
-
 ## Reporting
 
 - [x] Dashboards / summary API
@@ -92,7 +87,6 @@ Track implementation status for HRNECK.
 - [x] KB articles, ticket→KB convert, Search All — **API + Next ✓** (list/create/edit/publish toggle/delete)
 - [x] Org UI `/org/ticketing/*` (HRNECK UX, English) — core flows complete for implemented API surface
 - [x] End-user portal `/portal/tickets` + published KB
-- [x] Filament tenant-ops Tickets resource (view/unlock)
 - [x] Reports summary + CSV/PDF export — **API + Next ✓**; JSON import/export package — **API + Next ✓**
 - [x] Preferences (delay, scope, default desk) — **API + Next ✓**
 - [x] RBAC: `org.ticketing.*` + `sd_admin` / `sd_technician` / `sd_user` / `kb_admin`
@@ -115,15 +109,15 @@ Track implementation status for HRNECK.
 
 ## Subscription plans
 
-- [x] Plan catalog in the central DB (`subscription_plans`): employee and user limits (empty = unlimited), feature toggles, informational monthly price, active and default flags — Filament Directory → Subscription plans (platform staff only, audited)
-- [x] One subscription per organization (`tenant_subscriptions`): plan, status (`trial` / `active` / `suspended` / `expired`), `trial_ends_at`, `ends_at` — Filament Organizations → Plan & status (audited, realtime refresh)
+- [x] Plan catalog in the central DB (`subscription_plans`): employee and user limits (empty = unlimited), feature toggles, informational monthly price, active and default flags — managed by platform staff only (audited)
+- [x] One subscription per organization (`tenant_subscriptions`): plan, status (`trial` / `active` / `suspended` / `expired`), `trial_ends_at`, `ends_at` — managed by platform staff (audited, realtime refresh)
 - [x] New organizations get the default plan; existing organizations were backfilled to it as `active`
 - [x] Organizations without a subscription row use the default plan; with no default plan nothing is restricted
-- [x] Employee seats (`max_employees`) enforced for new targets (`POST /org/targets`, CSV import, Filament Employees create and import) and for learner logins that create a new employee
-- [x] User seats (`max_users`) enforced for non-learner org users (`POST /org/users`, Filament Users); a user is counted as active memberships not linked to an employee
+- [x] Employee seats (`max_employees`) enforced for new targets (`POST /org/targets`, CSV import, staff employee create and import) and for learner logins that create a new employee
+- [x] User seats (`max_users`) enforced for non-learner org users (`POST /org/users`, staff user management); a user is counted as active memberships not linked to an employee
 - [x] Feature gates return HTTP 403 `plan_feature_disabled`: `learner_portal` (learner training routes), `training` (course management), `checklists`, `ticketing` (all ticketing groups including portal), `advanced_reporting` (detailed reports and exports), `white_label` (logo upload), `custom_domains` (domain settings; `enabled` flag reflects the plan)
 - [x] Limit breaches return HTTP 403 `plan_limit_reached` (message includes limit and usage)
-- [x] Read-only subscriptions (`suspended`, `expired`, a trial past `trial_ends_at`, or an active subscription past `ends_at`) keep every read working. Any other org API write (every method except GET/HEAD/OPTIONS under `/api/v1/org/*`) returns HTTP 403 `subscription_read_only` with the effective status; tenant data is unchanged. Filament and platform staff are not affected
+- [x] Read-only subscriptions (`suspended`, `expired`, a trial past `trial_ends_at`, or an active subscription past `ends_at`) keep every read working. Any other org API write (every method except GET/HEAD/OPTIONS under `/api/v1/org/*`) returns HTTP 403 `subscription_read_only` with the effective status; tenant data is unchanged. platform staff are not affected
 - [x] Trials expire automatically: `hrneck:expire-trial-subscriptions` runs hourly and moves trials past `trial_ends_at` to `expired` (audited as `tenant_subscription_expired`, source `schedule`). Platform staff can still change any status manually; the job does not expire active subscriptions
 - [x] Pennant feature flags resolve per organization from its plan; enforcement itself goes through `TenantEntitlements`
 - [x] `automation_rules` removed from the plan catalog because nothing implements it; add it back with a gate when an automation feature ships
@@ -138,7 +132,6 @@ Track implementation status for HRNECK.
 - [x] Feature flags (Pennant) — per-organization resolvers driven by the subscription plan; hard enforcement via `TenantEntitlements` (see Subscription plans)
 - [x] Audit log package installed
 - [x] Fleet-wide org CRUD activity logging (Spatie `activity_log` in tenant DB via `LogOrgActivity`)
-- [x] Filament Activity log resource (read-only; HRneck platform staff + tenant switcher; not exposed to customers)
 - [x] Activity log retention prune (`hrneck:prune-activity-logs`, 180 days)
 - [x] Backup package installed
 - [x] Rate limit per tenant

@@ -27,7 +27,7 @@ export const learnerPortalGuide: GuideModule = {
   steps: [
     {
       title: "Am Tenant-Host anmelden",
-      body: "Nutzen Sie Ihr Org-Konto auf {slug}.hrneck.test. MFA kann erforderlich sein. Lernende nutzen weder MSP noch Filament-Admin.",
+      body: "Nutzen Sie Ihr Org-Konto auf {slug}.hrneck.test. MFA kann erforderlich sein. Lernende nutzen die MSP-Konsole nicht.",
       href: "/login",
     },
     {
