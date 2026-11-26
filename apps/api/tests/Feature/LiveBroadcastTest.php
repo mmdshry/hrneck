@@ -1,5 +1,6 @@
 <?php
 
+use App\Domains\Realtime\Actions\LiveBroadcaster;
 use App\Domains\Realtime\Events\LiveTopicBroadcast;
 use App\Domains\Realtime\Snapshots\LiveSnapshotBuilder;
 use App\Domains\Realtime\Support\LiveChannelGate;
@@ -7,6 +8,8 @@ use App\Domains\Realtime\Support\LiveTopics;
 use App\Models\Tenant;
 use App\Support\StaffTenant;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Exceptions;
+use Mockery\MockInterface;
 use Stancl\Tenancy\Tenancy;
 
 test('msp live channel gate allows platform staff only', function () {
@@ -147,4 +150,17 @@ test('snapshot builder covers new org topics', function () {
         ->and($builder->forOrgTopic(LiveTopics::TRAINING))->toHaveKeys(['courses', 'enrollments'])
         ->and($builder->forOrgTopic(LiveTopics::REPORTS_DETAILED))->toHaveKey('overview')
         ->and($builder->forOrgTopic(LiveTopics::BRANDING))->toHaveKey('data');
+});
+
+test('failed post-response snapshot is reported and does not throw', function () {
+    $this->mock(LiveSnapshotBuilder::class, function (MockInterface $mock): void {
+        $mock->shouldReceive('forMsp')->once()->andThrow(new RuntimeException('Payload too large.'));
+    });
+    Exceptions::fake();
+
+    app(LiveBroadcaster::class)->scheduleSnapshotAfterResponse(LiveTopics::mspChannel(), 'itneck', null);
+
+    $this->app->terminate();
+
+    Exceptions::assertReported(RuntimeException::class);
 });

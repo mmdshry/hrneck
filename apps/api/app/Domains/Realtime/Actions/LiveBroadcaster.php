@@ -8,6 +8,7 @@ use App\Domains\Realtime\Support\LiveTopics;
 use App\Models\Tenant;
 use Illuminate\Support\Facades\Cache;
 use Stancl\Tenancy\Tenancy;
+use Throwable;
 
 class LiveBroadcaster
 {
@@ -152,38 +153,51 @@ class LiveBroadcaster
 
     /**
      * Schedule snapshot after the auth HTTP response so the WS subscription is ready.
+     *
+     * Runs after the response is sent, so a failure cannot change the HTTP status.
+     * Errors are reported instead of thrown, otherwise Symfony tries to send a 500
+     * after headers were already sent ("headers already sent" fatal).
      */
     public function scheduleSnapshotAfterResponse(string $channel, string $tenantId, ?string $topic, ?int $userId = null): void
     {
         app()->terminating(function () use ($channel, $tenantId, $topic, $userId): void {
-            if ($channel === LiveTopics::mspChannel()) {
-                $this->snapshotMsp();
-
-                return;
-            }
-
-            if ($userId !== null && str_ends_with($channel, '.learn.'.$userId)) {
-                $this->snapshotLearnUser($tenantId, $userId);
-
-                return;
-            }
-
-            if ($userId !== null && str_ends_with($channel, '.portal.'.$userId)) {
-                $this->snapshotPortalUser($tenantId, $userId);
-
-                return;
-            }
-
-            if ($userId !== null && str_ends_with($channel, '.notifications.'.$userId)) {
-                $this->snapshotNotificationsUser($tenantId, $userId);
-
-                return;
-            }
-
-            if ($topic !== null) {
-                $this->snapshotOrgTopic($tenantId, $topic);
+            try {
+                $this->snapshotScheduledChannel($channel, $tenantId, $topic, $userId);
+            } catch (Throwable $e) {
+                report($e);
             }
         });
+    }
+
+    private function snapshotScheduledChannel(string $channel, string $tenantId, ?string $topic, ?int $userId): void
+    {
+        if ($channel === LiveTopics::mspChannel()) {
+            $this->snapshotMsp();
+
+            return;
+        }
+
+        if ($userId !== null && str_ends_with($channel, '.learn.'.$userId)) {
+            $this->snapshotLearnUser($tenantId, $userId);
+
+            return;
+        }
+
+        if ($userId !== null && str_ends_with($channel, '.portal.'.$userId)) {
+            $this->snapshotPortalUser($tenantId, $userId);
+
+            return;
+        }
+
+        if ($userId !== null && str_ends_with($channel, '.notifications.'.$userId)) {
+            $this->snapshotNotificationsUser($tenantId, $userId);
+
+            return;
+        }
+
+        if ($topic !== null) {
+            $this->snapshotOrgTopic($tenantId, $topic);
+        }
     }
 
     /**
