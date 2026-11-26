@@ -1,6 +1,6 @@
-# HRNECK feature parity
+# HRneck feature parity
 
-Track implementation status for HRNECK.
+Track implementation status for HRneck.
 
 ## Organization & access
 
@@ -85,7 +85,7 @@ Track implementation status for HRNECK.
 - [x] Procedures + SLA — **API + Next ✓** (desk create/edit, stages, support rows, procedures, SLA, templates)
 - [x] Email readers + ingest/IMAP poller job + delayed notifications — **API + Next ✓** (create/ingest/edit/delete)
 - [x] KB articles, ticket→KB convert, Search All — **API + Next ✓** (list/create/edit/publish toggle/delete)
-- [x] Org UI `/org/ticketing/*` (HRNECK UX, English) — core flows complete for implemented API surface
+- [x] Org UI `/org/ticketing/*` (HRneck UX, English) — core flows complete for implemented API surface
 - [x] End-user portal `/portal/tickets` + published KB
 - [x] Reports summary + CSV/PDF export — **API + Next ✓**; JSON import/export package — **API + Next ✓**
 - [x] Preferences (delay, scope, default desk) — **API + Next ✓**

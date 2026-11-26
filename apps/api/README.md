@@ -1,6 +1,6 @@
-# HRNECK API (`apps/api`)
+# HRneck API (`apps/api`)
 
-Laravel API for HRNECK.
+Laravel API for HRneck.
 
 ```powershell
 cd apps\api

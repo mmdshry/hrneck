@@ -1,6 +1,6 @@
 # Dashboard Page Overrides
 
-> **PROJECT:** HRNECK
+> **PROJECT:** HRneck
 > **Page Type:** Organization / MSP dashboard
 
 ---

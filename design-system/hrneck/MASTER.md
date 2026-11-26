@@ -6,7 +6,7 @@
 
 ---
 
-**Project:** HRNECK
+**Project:** HRneck
 **Category:** Security awareness training SaaS (MSP / org / learner)
 **Design Dials:** Variance 4/10 (Balanced / Modern) | Motion 4/10 (Standard) | Density 5/10 (Standard)
 **Default theme:** Light (dark optional via toggle)

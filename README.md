@@ -1,4 +1,4 @@
-# HRNECK — HRNECK Training Portal
+# HRneck — HRneck Training Portal
 
 Security awareness training platform. English UI. No Docker — native Windows.
 

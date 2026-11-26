@@ -1,6 +1,6 @@
-# HRNECK web (`apps/web`)
+# HRneck web (`apps/web`)
 
-Next.js app for HRNECK (MSP / org / learner / portal).
+Next.js app for HRneck (MSP / org / learner / portal).
 
 Use the **repo root** workspace — do not run a separate `pnpm install` inside this folder.
 

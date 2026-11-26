@@ -1,6 +1,6 @@
 # Landing Page Overrides
 
-> **PROJECT:** HRNECK
+> **PROJECT:** HRneck
 > **Page Type:** Landing / Marketing
 
 > Rules in this file **override** the Master file. Only deviations are documented here.

@@ -1,6 +1,6 @@
 # Authentication
 
-HRNECK uses first-party **Laravel Sanctum cookie sessions** (not bearer PATs). The Next app rewrites `/api`, `/sanctum`, and `/broadcasting` to the Laravel origin so the browser stays same-origin.
+HRneck uses first-party **Laravel Sanctum cookie sessions** (not bearer PATs). The Next app rewrites `/api`, `/sanctum`, and `/broadcasting` to the Laravel origin so the browser stays same-origin.
 
 ## Demo accounts
 

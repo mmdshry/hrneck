@@ -1,6 +1,6 @@
 # Notifications Page Overrides
 
-> **PROJECT:** HRNECK  
+> **PROJECT:** HRneck  
 > **Page Type:** In-app inbox / announcement publish
 
 ---
