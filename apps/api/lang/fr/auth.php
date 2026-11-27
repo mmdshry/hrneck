@@ -22,4 +22,7 @@ return [
     'logged_out' => 'Déconnecté',
     'sso_handoff_invalid' => 'Ce lien de connexion a expiré. Veuillez vous reconnecter.',
     'org_choice_invalid' => 'Le choix de l’organisation a expiré. Veuillez vous reconnecter.',
+    'tenant_required' => 'Connectez-vous à l’adresse de votre organisation.',
+    'tenant_not_found' => 'Cette organisation n’existe pas.',
+    'organization_not_found' => 'Cette organisation n’existe pas.',
 ];

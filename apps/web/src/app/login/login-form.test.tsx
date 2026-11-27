@@ -195,6 +195,120 @@ describe("LoginForm SSO", () => {
   });
 });
 
+/** The JSON body of the most recent login request. */
+function sentLoginBody(): Record<string, unknown> | null {
+  const call = apiMock.mock.calls.find(([path]) => path === "/api/v1/auth/login");
+  const init = call?.[1] as { body?: string } | undefined;
+  return init?.body ? (JSON.parse(init.body) as Record<string, unknown>) : null;
+}
+
+describe("LoginForm on the staff host", () => {
+  beforeEach(() => {
+    search = "";
+    hostTenant = null;
+    apiMock.mockImplementation(async (path: string) => {
+      if (path === PROVIDERS_PATH) {
+        return { data: ["google", "microsoft"] };
+      }
+      return {
+        data: {
+          email: "root@example.test",
+          tenant_id: null,
+          needs_org_selection: false,
+          has_org_access: false,
+          is_platform_staff: true,
+          memberships: [],
+        },
+      };
+    });
+    vi.stubGlobal("location", {
+      origin: "https://app.hrneck.test",
+      hostname: "app.hrneck.test",
+      assign,
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  it("offers password sign-in only and does not ask for the provider list", async () => {
+    render(<LoginForm scope="platform" />);
+    await flushRequests();
+
+    expect(apiMock).not.toHaveBeenCalledWith(PROVIDERS_PATH);
+    expect(screen.queryByRole("button", { name: "continueWithGoogle" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "continueWithMicrosoft" })).toBeNull();
+    expect(screen.getByLabelText("password")).toBeTruthy();
+  });
+
+  it("signs in with scope platform and sends no organization", async () => {
+    render(<LoginForm scope="platform" />);
+    fireEvent.change(screen.getByLabelText("email"), { target: { value: "root@example.test" } });
+    fireEvent.change(screen.getByLabelText("password"), { target: { value: "staff-password" } });
+    fireEvent.submit(screen.getByLabelText("email").closest("form") as HTMLFormElement);
+
+    await waitFor(() =>
+      expect(sentLoginBody()).toEqual({
+        email: "root@example.test",
+        password: "staff-password",
+        remember: false,
+        scope: "platform",
+      }),
+    );
+  });
+});
+
+describe("LoginForm organization scope", () => {
+  beforeEach(() => {
+    search = "tenant=company";
+    hostTenant = null;
+    apiMock.mockImplementation(async (path: string) => {
+      if (path === PROVIDERS_PATH) {
+        return { data: [] };
+      }
+      return {
+        data: {
+          email: "ada@example.test",
+          tenant_id: "itneck",
+          needs_org_selection: false,
+          has_org_access: true,
+          is_platform_staff: false,
+          memberships: [{ tenant_id: "itneck", name: "ITneck" }],
+        },
+      };
+    });
+    vi.stubGlobal("location", {
+      origin: "https://hrneck.test",
+      hostname: "hrneck.test",
+      assign,
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  it("ignores a ?tenant= query and sends no organization when the host is not one", async () => {
+    render(<LoginForm />);
+    fireEvent.change(screen.getByLabelText("email"), { target: { value: "ada@example.test" } });
+    fireEvent.change(screen.getByLabelText("password"), { target: { value: "shared-password" } });
+    fireEvent.submit(screen.getByLabelText("email").closest("form") as HTMLFormElement);
+
+    await waitFor(() =>
+      expect(sentLoginBody()).toEqual({
+        email: "ada@example.test",
+        password: "shared-password",
+        remember: false,
+        scope: "tenant",
+      }),
+    );
+    expect(sentLoginBody()).not.toHaveProperty("tenant");
+  });
+});
+
 describe("LoginForm organization choice", () => {
   const organizations = [
     { tenant_id: "itneck", name: "ITneck" },

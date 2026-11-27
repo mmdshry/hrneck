@@ -7,14 +7,17 @@ use App\Domains\IdentityAccess\Actions\SeedRbacCatalog;
 use App\Domains\IdentityAccess\Notifications\EmployeeInviteNotification;
 use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
 use App\Domains\TargetsGroups\Models\Target;
+use App\Filament\Resources\Users\Pages\ManageUsers;
 use App\Models\Tenant;
 use App\Models\User;
+use Filament\Facades\Filament;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Validation\ValidationException;
+use Livewire\Livewire;
 use Spatie\Permission\PermissionRegistrar;
 use Stancl\Tenancy\Facades\Tenancy;
 
@@ -85,12 +88,13 @@ test('a password reset changes only the organization login it was issued for', f
     expect(Hash::check('DemoPass!234', $company->fresh()->getAuthPassword()))->toBeTrue();
 });
 
-test('a reset link without an organization still works when the email has one login', function () {
+test('a reset without an organization address cannot change an organization login', function () {
     $email = 'single.login@example.test';
     $login = orgLogin('itneck', $email, 'DemoPass!234');
 
     $token = Password::broker()->createToken($login);
 
+    // Organization logins are reset on the organization's own address, even when the email has only one login.
     $this->withHeader('Origin', 'http://hrneck.test')
         ->postJson('/api/v1/auth/password/reset', [
             'token' => $token,
@@ -98,9 +102,10 @@ test('a reset link without an organization still works when the email has one lo
             'password' => 'NewSingle!234',
             'password_confirmation' => 'NewSingle!234',
         ])
-        ->assertOk();
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['tenant']);
 
-    expect(Hash::check('NewSingle!234', $login->fresh()->getAuthPassword()))->toBeTrue();
+    expect(Hash::check('DemoPass!234', $login->fresh()->getAuthPassword()))->toBeTrue();
 });
 
 test('forgot password sends a reset link only to the chosen organization login', function () {
@@ -195,6 +200,74 @@ test('a platform super admin can assign roles to a new employee in an entered or
     expect($login->fresh()->hasRole(OrgPermissionCatalog::LEARNER))->toBeTrue();
     setPermissionsTeamId(null);
     app(PermissionRegistrar::class)->forgetCachedPermissions();
+});
+
+test('an employee with a password can be created for an email that belongs to a platform staff account', function () {
+    $email = 'staff.employee@itneck.test';
+    User::factory()->create(['email' => $email, 'tenant_id' => null]);
+
+    $this->actingAs(orgAdmin())
+        ->withHeader('X-Tenant', 'itneck')
+        ->postJson('/api/v1/org/targets', [
+            'email' => $email,
+            'first_name' => 'Staff',
+            'last_name' => 'Employee',
+            'password' => 'ItneckPass!234',
+        ])
+        ->assertCreated();
+
+    expect(User::query()->withEmail($email)->where('tenant_id', 'itneck')->exists())->toBeTrue();
+});
+
+test('the MSP user form accepts an email that another organization already uses', function () {
+    Filament::setCurrentPanel(Filament::getPanel('admin'));
+    $email = 'msp.other.org@example.test';
+    orgLogin('itneck', $email, 'DemoPass!234');
+
+    Livewire::actingAs(platformAdmin())
+        ->test(ManageUsers::class)
+        ->callAction('create', data: [
+            'name' => 'Company Admin',
+            'email' => $email,
+            'password' => 'CompanyPass!234',
+            'tenant_id' => 'company',
+        ])
+        ->assertHasNoActionErrors();
+
+    expect(User::query()->withEmail($email)->where('tenant_id', 'company')->exists())->toBeTrue();
+});
+
+test('the MSP user form rejects an email that the same organization already uses', function () {
+    Filament::setCurrentPanel(Filament::getPanel('admin'));
+    $email = 'msp.same.org@example.test';
+    orgLogin('itneck', $email, 'DemoPass!234');
+
+    Livewire::actingAs(platformAdmin())
+        ->test(ManageUsers::class)
+        ->callAction('create', data: [
+            'name' => 'Duplicate',
+            'email' => $email,
+            'password' => 'DuplicatePass!234',
+            'tenant_id' => 'itneck',
+        ])
+        ->assertHasActionErrors(['email']);
+
+    expect(User::query()->withEmail($email)->count())->toBe(1);
+});
+
+test('the MSP user form rejects an email that another platform staff account already uses', function () {
+    Filament::setCurrentPanel(Filament::getPanel('admin'));
+    $email = 'msp.platform.dup@example.test';
+    User::factory()->create(['email' => $email, 'tenant_id' => null]);
+
+    Livewire::actingAs(platformAdmin())
+        ->test(ManageUsers::class)
+        ->callAction('create', data: [
+            'name' => 'Staff Duplicate',
+            'email' => $email,
+            'password' => 'StaffPass!234',
+        ])
+        ->assertHasActionErrors(['email']);
 });
 
 test('split command gives each organization its own login for a shared account', function () {

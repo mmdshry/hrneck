@@ -32,5 +32,5 @@ test('csv normalizer drops invalid locations', function () {
     ]);
 
     expect($result['values']['location'])->toBeNull();
-    expect($result['warnings'])->toContain('Invalid location; value ignored. Use Country/City (e.g. Iran/Tehran).');
+    expect($result['warnings'])->toContain('Invalid location; value ignored. Use Country/City (e.g. United Kingdom/London).');
 });

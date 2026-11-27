@@ -1,5 +1,8 @@
 import { expect, test } from "@playwright/test";
-import { loginAsPlatformAdmin } from "./helpers/auth";
+import { loginAsPlatformAdmin, STAFF_ORIGIN } from "./helpers/auth";
+
+// Platform staff stay on the staff host; "Open tenant admin" keeps that session.
+test.use({ baseURL: STAFF_ORIGIN });
 
 test("client navigation keeps a single main landmark", async ({ page }) => {
   test.setTimeout(120_000);

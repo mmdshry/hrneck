@@ -53,7 +53,6 @@ class ProvisionEmployeePair
         }
 
         if ($user === null) {
-            $this->assertNoPlatformAccount($email);
             $this->rbac->ensureLearnerRole($tenantId);
 
             $name = trim(implode(' ', array_filter([
@@ -220,8 +219,6 @@ class ProvisionEmployeePair
             ]);
         }
 
-        $this->assertNoPlatformAccount($to);
-
         $user->forceFill(['email' => $to])->save();
     }
 
@@ -318,31 +315,6 @@ class ProvisionEmployeePair
             ->withEmail($this->normalizeEmail($email))
             ->where('tenant_id', $tenantId)
             ->first();
-    }
-
-    /**
-     * Platform staff accounts have no organization. Their email must stay unique across the platform.
-     */
-    public function findPlatformAccountByEmail(string $email): ?User
-    {
-        return User::query()
-            ->withEmail($this->normalizeEmail($email))
-            ->whereNull('tenant_id')
-            ->first();
-    }
-
-    /**
-     * Refuse to create an organization login for an email that belongs to a platform staff account.
-     *
-     * @throws ValidationException
-     */
-    public function assertNoPlatformAccount(string $email): void
-    {
-        if ($this->findPlatformAccountByEmail($email) !== null) {
-            throw ValidationException::withMessages([
-                'email' => ['This email belongs to a platform staff account and cannot be linked to an organization.'],
-            ]);
-        }
     }
 
     public function linkTargetToUser(Target $target, User $user): void

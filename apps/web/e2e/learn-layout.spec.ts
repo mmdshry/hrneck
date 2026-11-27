@@ -1,8 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { ORG_STORAGE_STATE } from "./helpers/auth";
+import { ORG_STORAGE_STATE, TENANT_ORIGIN } from "./helpers/auth";
 
 test.use({
   storageState: ORG_STORAGE_STATE,
+  baseURL: TENANT_ORIGIN,
   viewport: { width: 390, height: 844 },
 });
 

@@ -23,6 +23,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rules\Unique;
 use Illuminate\Validation\ValidationException;
 
 class UserResource extends Resource
@@ -41,7 +42,13 @@ class UserResource extends Resource
     {
         return $schema->components([
             TextInput::make('name')->required()->maxLength(120),
-            TextInput::make('email')->email()->required()->unique(ignoreRecord: true),
+            TextInput::make('email')
+                ->email()
+                ->required()
+                ->unique(
+                    ignoreRecord: true,
+                    modifyRuleUsing: fn (Unique $rule, callable $get): Unique => $rule->where('tenant_id', $get('tenant_id') ?: null),
+                ),
             TextInput::make('password')
                 ->password()
                 ->revealable()

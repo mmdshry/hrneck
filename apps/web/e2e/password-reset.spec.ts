@@ -1,4 +1,8 @@
 import { test, expect } from "@playwright/test";
+import { TENANT_ORIGIN } from "./helpers/auth";
+
+// Organization accounts reset passwords on their own address; the main site redirects /login/forgot.
+test.use({ baseURL: TENANT_ORIGIN });
 
 test.describe("Password reset UI", () => {
   test("forgot password form shows generic success message", async ({ page }) => {

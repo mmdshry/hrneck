@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs/config";
 import createNextIntlPlugin from "next-intl/plugin";
 
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
@@ -29,7 +30,8 @@ const nextConfig: NextConfig = {
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob:",
       "font-src 'self' data:",
-      "connect-src 'self' ws: wss:",
+      // Browser error and trace reports go to Sentry (hrneck-web).
+      "connect-src 'self' ws: wss: https://*.ingest.de.sentry.io https://*.ingest.sentry.io",
       // Turnstile renders its challenge inside this iframe.
       "frame-src https://challenges.cloudflare.com",
       "form-action 'self'",
@@ -75,4 +77,10 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withNextIntl(nextConfig);
+// Source maps upload only when SENTRY_AUTH_TOKEN is set (builds on the server).
+export default withSentryConfig(withNextIntl(nextConfig), {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  silent: !process.env.CI,
+});

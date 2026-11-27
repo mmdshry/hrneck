@@ -8,6 +8,7 @@ use App\Domains\AnalyticsReporting\Actions\BuildQuarterlyPdfReport;
 use App\Domains\AnalyticsReporting\Actions\ResolveBusinessReportPeriod;
 use App\Domains\AnalyticsReporting\Mails\CampaignReportMail;
 use App\Domains\AnalyticsReporting\Models\ReportSchedule;
+use App\Domains\Tenancy\Support\TenantAddress;
 use App\Models\User;
 use App\Support\AppLocale;
 use App\Support\OrgTimezone;
@@ -80,7 +81,7 @@ class SendScheduledReportJob implements ShouldQueue
             $data = $report->handle();
             $csv = "metric,value\n".collect($data)->map(fn ($v, $k) => "{$k},{$v}")->implode("\n");
 
-            Mail::to($this->email)->send(new CampaignReportMail($csv));
+            Mail::to($this->email)->send(new CampaignReportMail($csv, loginUrl: $this->loginUrl()));
 
             return;
         }
@@ -98,7 +99,20 @@ class SendScheduledReportJob implements ShouldQueue
                 'section' => $sectionLabel,
             ]),
             truncated: $detailed->csvTruncated($this->section, $filters),
+            loginUrl: $this->loginUrl(),
         ));
+    }
+
+    /**
+     * Footer address for the organization the report belongs to. Null when the report runs outside an organization.
+     */
+    private function loginUrl(): ?string
+    {
+        $tenantId = is_string($this->tenantId) && $this->tenantId !== ''
+            ? $this->tenantId
+            : (is_string(tenant('id')) ? (string) tenant('id') : null);
+
+        return $tenantId === null ? null : app(TenantAddress::class)->loginUrl($tenantId);
     }
 
     /**
@@ -150,6 +164,7 @@ class SendScheduledReportJob implements ShouldQueue
             $binary,
             basename($built['path']),
             config('brand.short').' '.$label.' Business Report '.$closed['key'],
+            loginUrl: $this->loginUrl(),
         ));
     }
 }

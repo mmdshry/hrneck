@@ -58,7 +58,7 @@ export const LocationSelect = forwardRef<HTMLInputElement, LocationSelectProps>(
           disabled={disabled}
           className={cn(className)}
           value={query}
-          placeholder="Iran/Tehran"
+          placeholder="Country/City"
           onChange={(e) => {
             const next = e.target.value;
             setQuery(next);

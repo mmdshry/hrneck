@@ -425,7 +425,7 @@ class TargetController extends Controller
                     if ($currentLocation !== null && $value === $currentLocation) {
                         return;
                     }
-                    $fail('The selected location is invalid. Use Country/City (e.g. Iran/Tehran).');
+                    $fail('The selected location is invalid. Use Country/City (e.g. United Kingdom/London).');
                 },
             ]),
             'employment_type' => array_merge($optional, [

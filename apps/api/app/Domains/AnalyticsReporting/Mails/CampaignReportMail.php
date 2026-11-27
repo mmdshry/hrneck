@@ -22,6 +22,7 @@ class CampaignReportMail extends Mailable
         public ?string $csvAttachment = null,
         public ?string $csvAttachmentName = null,
         public bool $truncated = false,
+        public ?string $loginUrl = null,
     ) {}
 
     public function envelope(): Envelope

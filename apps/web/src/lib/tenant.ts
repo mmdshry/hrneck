@@ -29,6 +29,48 @@ export function tenantFromHostname(hostname: string): string | null {
   return label;
 }
 
+/** First label of the platform staff host, `app.{base}`. Matches `STAFF_HOST` on the API. */
+const PLATFORM_HOST_LABEL = "app";
+
+/**
+ * Which sign-in surface a host serves:
+ * - `{slug}.{base}`: an organization, which signs in with its own password.
+ * - `app.{base}`: platform staff only.
+ * - anything else (the apex, `www`, localhost): the main site, which only helps people find their organization.
+ */
+export type HostKind = "organization" | "platform" | "central";
+
+export function hostKind(hostname: string): HostKind {
+  const host = (hostname.split(":")[0] ?? "").trim().toLowerCase();
+  const labels = host.split(".").filter(Boolean);
+  if (labels.length >= 3 && labels[0] === PLATFORM_HOST_LABEL) {
+    return "platform";
+  }
+  return tenantFromHostname(host) ? "organization" : "central";
+}
+
+/**
+ * Host the browser asked for, as the server sees it. Behind Apache or Caddy the forwarded host wins,
+ * matching the public-origin logic in the proxy.
+ */
+export function requestHost(headers: Headers): string {
+  const forwarded = headers.get("x-forwarded-host") ?? headers.get("host") ?? "";
+  return forwarded.split(",")[0]?.trim() ?? "";
+}
+
+const ORGANIZATION_SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{0,62}$/;
+
+/**
+ * The organization slug from what someone typed on the main site: `itneck`, `itneck.hrneck.com`,
+ * or a pasted address such as `https://itneck.hrneck.com/login`. Returns null if it cannot be a slug.
+ */
+export function organizationSlugFromInput(input: string): string | null {
+  const bare = input.trim().toLowerCase().replace(/^https?:\/\//, "");
+  const host = bare.split(/[/?#]/)[0] ?? "";
+  const label = host.split(".")[0] ?? "";
+  return ORGANIZATION_SLUG_PATTERN.test(label) ? label : null;
+}
+
 export function resolveTenant(preferred?: string | null): string {
   if (typeof window === "undefined") {
     return preferred || DEFAULT_TENANT;

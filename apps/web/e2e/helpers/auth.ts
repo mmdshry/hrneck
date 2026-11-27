@@ -6,6 +6,14 @@ import { expect, type Page } from "@playwright/test";
 export const ORG_STORAGE_STATE = path.join(__dirname, "..", ".auth", "org.json");
 export const PLATFORM_STORAGE_STATE = path.join(__dirname, "..", ".auth", "platform.json");
 
+/**
+ * Where each kind of account signs in. Organization accounts sign in only on their own address
+ * (`{slug}.{base}`), and platform staff only on the staff host. The main site has no sign-in form.
+ * Override with PLAYWRIGHT_TENANT_URL / PLAYWRIGHT_STAFF_URL when the dev proxy uses other hosts.
+ */
+export const TENANT_ORIGIN = process.env.PLAYWRIGHT_TENANT_URL ?? "http://itneck.hrneck.test";
+export const STAFF_ORIGIN = process.env.PLAYWRIGHT_STAFF_URL ?? "http://app.hrneck.test";
+
 export async function saveStorageState(page: Page, file: string): Promise<void> {
   mkdirSync(path.dirname(file), { recursive: true });
   await page.context().storageState({ path: file });
@@ -15,8 +23,9 @@ export async function loginAs(
   page: Page,
   email: string,
   password = "DemoPass!234",
+  origin = TENANT_ORIGIN,
 ): Promise<void> {
-  await page.goto("/login");
+  await page.goto(new URL("/login", origin).toString());
   const emailInput = page.getByLabel("Email");
   const passwordInput = page.getByLabel("Password");
   await emailInput.fill("");
@@ -37,7 +46,7 @@ export async function loginAsOrgAdmin(page: Page): Promise<void> {
 }
 
 export async function loginAsPlatformAdmin(page: Page): Promise<void> {
-  await loginAs(page, "admin@hrneck.test");
+  await loginAs(page, "admin@hrneck.test", "DemoPass!234", STAFF_ORIGIN);
   await page.waitForURL(/\/msp(?:\/|$)/, { timeout: 20_000 });
 }
 

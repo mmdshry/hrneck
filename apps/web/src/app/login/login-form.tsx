@@ -26,23 +26,37 @@ import { GoogleIcon, MicrosoftIcon } from "./sso-provider-icons";
 
 const isDev = process.env.NODE_ENV === "development";
 
-export function LoginForm() {
+/**
+ * - `tenant`: an organization's own sign-in, on `{slug}.{base}`. The organization comes from the host.
+ * - `platform`: platform staff, on `app.{base}`. Staff accounts have no organization.
+ */
+export type LoginScope = "tenant" | "platform";
+
+function demoEmail(scope: LoginScope): string {
+  return scope === "platform" ? "admin@hrneck.test" : "admin@itneck.test";
+}
+
+export function LoginForm({ scope = "tenant" }: { scope?: LoginScope }) {
   const t = useTranslations("auth");
   const tCommon = useTranslations("common");
   const locale = useLocale();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [email, setEmail] = useState(isDev ? "admin@hrneck.test" : "");
+  const [email, setEmail] = useState(isDev ? demoEmail(scope) : "");
   const [password, setPassword] = useState(isDev ? "DemoPass!234" : "");
   const [remember, setRemember] = useState(false);
   const [loading, setLoading] = useState(false);
   const [ssoProviders, setSsoProviders] = useState<SsoProvider[]>([]);
   const ssoErrorShown = useRef(false);
-  const showGoogle = ssoProviders.includes("google");
-  const showMicrosoft = ssoProviders.includes("microsoft");
+  const showGoogle = scope === "tenant" && ssoProviders.includes("google");
+  const showMicrosoft = scope === "tenant" && ssoProviders.includes("microsoft");
 
   // Only providers with credentials on the server get a button. Until the list loads, password sign-in alone is shown.
+  // Staff sign in with a password only, so the list is not requested on the staff host.
   useEffect(() => {
+    if (scope !== "tenant") {
+      return;
+    }
     let active = true;
     api<{ data?: string[] }>("/api/v1/auth/oauth/providers")
       .then((result) => {
@@ -56,7 +70,7 @@ export function LoginForm() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [scope]);
 
   useEffect(() => {
     const code = searchParams.get("sso_error");
@@ -83,6 +97,20 @@ export function LoginForm() {
     );
   }
 
+  // The organization is the one in this page's address. A ?tenant= query is never trusted for sign-in.
+  function loginBody() {
+    if (scope === "platform") {
+      return { email, password, remember, scope: "platform" };
+    }
+    return {
+      email,
+      password,
+      remember,
+      scope: "tenant",
+      tenant: tenantFromHostname(window.location.hostname) ?? undefined,
+    };
+  }
+
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     setLoading(true);
@@ -98,13 +126,7 @@ export function LoginForm() {
       }>("/api/v1/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        // The organization address (subdomain or ?tenant=) picks this organization's login when one email has several.
-        body: JSON.stringify({
-          email,
-          password,
-          remember,
-          tenant: tenantFromHostname(window.location.hostname) ?? searchParams.get("tenant") ?? undefined,
-        }),
+        body: JSON.stringify(loginBody()),
       });
 
       const next = safeNextPath(searchParams.get("next"));

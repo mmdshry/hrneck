@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
-import { ORG_STORAGE_STATE } from "./helpers/auth";
+import { ORG_STORAGE_STATE, TENANT_ORIGIN } from "./helpers/auth";
 
-test.use({ storageState: ORG_STORAGE_STATE });
+test.use({ baseURL: TENANT_ORIGIN, storageState: ORG_STORAGE_STATE });
 
 test.describe("Learner portal", () => {
   test("assigns a course then shows progress in /portal", async ({ page }) => {

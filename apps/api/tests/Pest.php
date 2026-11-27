@@ -34,3 +34,23 @@ function platformAdmin(): User
 {
     return User::query()->where('email', config('brand.demo_admin_email'))->firstOrFail();
 }
+
+/**
+ * Body of a password sign-in on an organization's own address. The web app sends the organization of the host as `tenant`.
+ *
+ * @return array{email: string, password: string, tenant: string, scope: string}
+ */
+function tenantLoginBody(string $tenant, string $email, string $password): array
+{
+    return ['email' => $email, 'password' => $password, 'tenant' => $tenant, 'scope' => 'tenant'];
+}
+
+/**
+ * Body of a password sign-in on the platform staff host (app.{base}), for accounts that have no organization.
+ *
+ * @return array{email: string, password: string, scope: string}
+ */
+function staffLoginBody(string $email, string $password): array
+{
+    return ['email' => $email, 'password' => $password, 'scope' => 'platform'];
+}

@@ -152,6 +152,11 @@ body {
   transform: translateY(0.75rem);
 }
 
+/* Skip link target: a container, not a control. Higher specificity than the unlayered :focus-visible rule above. */
+#main-content:focus {
+  outline: none;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;

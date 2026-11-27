@@ -10,6 +10,7 @@ test('mfa setup keeps existing mfa enabled until confirm', function () {
     $existingSecret = $google2fa->generateSecretKey();
 
     $user = User::factory()->create([
+        'tenant_id' => 'itneck',
         'password' => Hash::make('DemoPass!234'),
     ]);
     $user->forceFill([
@@ -46,6 +47,7 @@ test('wrong mfa code keeps challenge token usable', function () {
     $google2fa = new Google2FA;
     $secret = $google2fa->generateSecretKey();
     $user = User::factory()->create([
+        'tenant_id' => 'itneck',
         'password' => Hash::make('DemoPass!234'),
     ]);
     $user->forceFill([
@@ -54,10 +56,7 @@ test('wrong mfa code keeps challenge token usable', function () {
         'mfa_confirmed_at' => now(),
     ])->save();
 
-    $login = $this->postJson('/api/v1/auth/login', [
-        'email' => $user->email,
-        'password' => 'DemoPass!234',
-    ])->assertOk()->json();
+    $login = $this->postJson('/api/v1/auth/login', tenantLoginBody('itneck', $user->email, 'DemoPass!234'))->assertOk()->json();
 
     expect($login['mfa_required'])->toBeTrue();
     $token = $login['challenge_token'];
@@ -78,6 +77,7 @@ test('wrong mfa code keeps challenge token usable', function () {
 
 test('recovery code works once then burns', function () {
     $user = User::factory()->create([
+        'tenant_id' => 'itneck',
         'password' => Hash::make('DemoPass!234'),
     ]);
     $plain = 'abcd-efghijkl';
@@ -88,10 +88,7 @@ test('recovery code works once then burns', function () {
         'mfa_recovery_codes' => [Hash::make($plain)],
     ])->save();
 
-    $login = $this->postJson('/api/v1/auth/login', [
-        'email' => $user->email,
-        'password' => 'DemoPass!234',
-    ])->assertOk()->json();
+    $login = $this->postJson('/api/v1/auth/login', tenantLoginBody('itneck', $user->email, 'DemoPass!234'))->assertOk()->json();
 
     $this->postJson('/api/v1/auth/mfa/verify', [
         'challenge_token' => $login['challenge_token'],
@@ -101,10 +98,7 @@ test('recovery code works once then burns', function () {
     $user->refresh();
     expect($user->mfa_recovery_codes)->toBe([]);
 
-    $login2 = $this->postJson('/api/v1/auth/login', [
-        'email' => $user->email,
-        'password' => 'DemoPass!234',
-    ])->assertOk()->json();
+    $login2 = $this->postJson('/api/v1/auth/login', tenantLoginBody('itneck', $user->email, 'DemoPass!234'))->assertOk()->json();
 
     $this->postJson('/api/v1/auth/mfa/verify', [
         'challenge_token' => $login2['challenge_token'],
@@ -116,6 +110,7 @@ test('mfa can be disabled with password and totp', function () {
     $google2fa = new Google2FA;
     $secret = $google2fa->generateSecretKey();
     $user = User::factory()->create([
+        'tenant_id' => 'itneck',
         'password' => Hash::make('DemoPass!234'),
     ]);
     $user->forceFill([

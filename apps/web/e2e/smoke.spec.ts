@@ -1,8 +1,10 @@
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { TENANT_ORIGIN } from "./helpers/auth";
 
 // login-form.tsx prefills the demo email only under `next dev`; the production build starts empty.
-const expectedDemoEmail = process.env.PLAYWRIGHT_DEV_SERVER === "1" ? "admin@hrneck.test" : "";
+// The prefill is on the organization sign-in form (the main site has none).
+const expectedDemoEmail = process.env.PLAYWRIGHT_DEV_SERVER === "1" ? "admin@itneck.test" : "";
 
 const AXE_ROUTES = [
   "/",
@@ -32,6 +34,20 @@ test.describe("HRneck smoke", () => {
     expect(results.violations).toEqual([]);
   });
 
+  test("skip link moves focus to main content", async ({ page }) => {
+    await page.goto("/");
+    const skipLink = page.getByRole("link", { name: "Skip to main content" });
+    await skipLink.focus();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/#main-content$/);
+    await expect(page.locator("#main-content")).toBeFocused();
+  });
+
+  test("login page has no skip link", async ({ page }) => {
+    await page.goto("/login");
+    await expect(page.getByRole("link", { name: "Skip to main content" })).toHaveCount(0);
+  });
+
   for (const route of AXE_ROUTES) {
     test(`axe: ${route}`, async ({ page }) => {
       await page.goto(route);
@@ -49,7 +65,7 @@ test.describe("HRneck smoke", () => {
   }
 
   test("login page demo prefill matches the build mode", async ({ page }) => {
-    await page.goto("/login");
+    await page.goto(new URL("/login", TENANT_ORIGIN).toString());
     await expect(page.getByLabel("Email")).toHaveValue(expectedDemoEmail);
     await expect(page.getByRole("button", { name: "Continue" })).toBeVisible();
   });

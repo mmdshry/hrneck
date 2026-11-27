@@ -10,7 +10,6 @@ use App\Models\TenantMembership;
 use App\Models\User;
 use App\Support\ActiveOrgTenant;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Validation\ValidationException;
 use Stancl\Tenancy\Facades\Tenancy;
 
 test('same email can hold a separate login in each organization', function () {
@@ -50,31 +49,22 @@ test('each organization login keeps its own password', function () {
 
     $origin = ['Origin' => 'http://hrneck.test'];
 
+    // Each organization address takes its own login and password.
     $this->withHeaders($origin)
-        ->postJson('/api/v1/auth/login', [
-            'email' => $email,
-            'password' => 'OtherPass!234',
-        ])
+        ->postJson('/api/v1/auth/login', tenantLoginBody('company', $email, 'OtherPass!234'))
         ->assertOk()
-        ->assertJsonPath('data.tenant_id', 'company')
-        // The same email also has an itneck login, so the user must still choose an organization.
-        ->assertJsonPath('data.needs_org_selection', true);
+        ->assertJsonPath('data.tenant_id', 'company');
 
     $this->withHeaders($origin)
-        ->postJson('/api/v1/auth/login', [
-            'email' => $email,
-            'password' => 'DemoPass!234',
-        ])
+        ->postJson('/api/v1/auth/login', tenantLoginBody('itneck', $email, 'DemoPass!234'))
         ->assertOk()
         ->assertJsonPath('data.tenant_id', 'itneck');
 
+    // The itneck password does not open the company address.
     $this->withHeaders($origin)
-        ->postJson('/api/v1/auth/login', [
-            'email' => $email,
-            'password' => 'DemoPass!234',
-            'tenant' => 'company',
-        ])
-        ->assertUnprocessable();
+        ->postJson('/api/v1/auth/login', tenantLoginBody('company', $email, 'DemoPass!234'))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['email']);
 
     $user = User::query()->withEmail($email)->where('tenant_id', 'itneck')->firstOrFail();
 
@@ -98,21 +88,14 @@ test('identical passwords across organizations are resolved by the organization 
 
     $origin = ['Origin' => 'http://hrneck.test'];
 
+    // Without an organization address there is nothing to pick the login with, even when the password matches both.
     $this->withHeaders($origin)
-        ->postJson('/api/v1/auth/login', [
-            'email' => $email,
-            'password' => $password,
-        ])
-        ->assertOk()
-        ->assertJsonPath('org_choice_required', true)
-        ->assertJsonCount(2, 'organizations');
+        ->postJson('/api/v1/auth/login', ['email' => $email, 'password' => $password])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['tenant']);
 
     $this->withHeaders($origin)
-        ->postJson('/api/v1/auth/login', [
-            'email' => $email,
-            'password' => $password,
-            'tenant' => 'company',
-        ])
+        ->postJson('/api/v1/auth/login', tenantLoginBody('company', $email, $password))
         ->assertOk()
         ->assertJsonPath('data.tenant_id', 'company');
 });
@@ -152,16 +135,20 @@ test('provisioning an employee in a second org creates a separate login', functi
     }
 });
 
-test('platform staff email cannot be linked as an org member', function () {
+test('platform staff email can also be an org member and the platform account stays unchanged', function () {
     $staff = platformAdmin();
 
-    expect(fn () => app(CreateOrgUser::class)->handle(
+    $login = app(CreateOrgUser::class)->handle(
         'itneck',
-        'Nope',
+        'Staff Org Login',
         $staff->email,
         'DemoPass!234',
         [OrgPermissionCatalog::ORG_ADMIN],
-    ))->toThrow(ValidationException::class);
+    );
+
+    expect($login->tenant_id)->toBe('itneck')
+        ->and($login->id)->not->toBe($staff->id)
+        ->and($staff->fresh()->tenant_id)->toBeNull();
 });
 
 test('disabled membership blocks that organization login only', function () {

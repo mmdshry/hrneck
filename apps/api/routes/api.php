@@ -57,6 +57,8 @@ Route::prefix('v1')->group(function (): void {
 
     Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:auth-login');
     Route::post('/auth/login/org', [AuthController::class, 'loginOrg'])->middleware('throttle:auth-login');
+    // Sign-in finder on the main domain: confirms an organization exists and returns its sign-in address.
+    Route::get('/auth/organizations/{slug}', [AuthController::class, 'findOrganization'])->middleware('throttle:org-lookup');
 
     $ssoProviders = implode('|', array_column(SsoProvider::cases(), 'value'));
     Route::get('/auth/oauth/providers', [SsoController::class, 'providers']);

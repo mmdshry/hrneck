@@ -22,13 +22,12 @@ export default function ForgotPasswordPage() {
     setLoading(true);
     try {
       await ensureCsrf();
+      // An organization's reset goes to that organization. On the staff host, reset is for platform accounts.
+      const tenant = tenantFromHostname(window.location.hostname);
       const res = await api<{ message?: string }>("/api/v1/auth/password/forgot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          tenant: tenantFromHostname(window.location.hostname) ?? undefined,
-        }),
+        body: JSON.stringify(tenant ? { email, tenant } : { email, scope: "platform" }),
       });
       toastSuccess(res.message ?? t("resetSent"));
     } catch (err) {

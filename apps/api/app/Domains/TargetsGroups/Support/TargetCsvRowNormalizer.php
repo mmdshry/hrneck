@@ -36,7 +36,7 @@ final class TargetCsvRowNormalizer
             $values['location'] = $locationRaw;
         } else {
             $values['location'] = null;
-            $warnings[] = 'Invalid location; value ignored. Use Country/City (e.g. Iran/Tehran).';
+            $warnings[] = 'Invalid location; value ignored. Use Country/City (e.g. United Kingdom/London).';
         }
 
         $languageRaw = $this->nullableString($item['preferred_language'] ?? null, 16);

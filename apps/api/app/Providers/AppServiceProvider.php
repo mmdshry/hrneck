@@ -7,6 +7,7 @@ use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
 use App\Domains\Notifications\Mails\BrandedNotificationMail;
 use App\Domains\Subscriptions\Support\PlanFeature;
 use App\Domains\Subscriptions\Support\TenantEntitlements;
+use App\Domains\Tenancy\Support\TenantAddress;
 use App\Http\Middleware\AuthenticateAssistantTool;
 use App\Models\Tenant;
 use App\Models\User;
@@ -65,6 +66,13 @@ class AppServiceProvider extends ServiceProvider
             ];
         });
 
+        // The sign-in finder looks up organizations by slug. Each visit to the main domain makes one request.
+        RateLimiter::for('org-lookup', function (Request $request) {
+            $perMinute = app()->environment(['local', 'testing']) ? 300 : 30;
+
+            return Limit::perMinute($perMinute)->by('org-lookup-ip:'.$request->ip());
+        });
+
         // Public demo form: a small per-IP budget per hour, looser outside production so suites can run.
         RateLimiter::for('demo-request', function (Request $request) {
             $perHour = app()->environment(['local', 'testing']) ? 1000 : 10;
@@ -113,24 +121,27 @@ class AppServiceProvider extends ServiceProvider
             return null;
         });
 
+        // The link opens on the organization's own address and names one specific login, since emails can repeat across
+        // organizations. Platform staff (no tenant) get the staff host.
         $resetUrl = static function (object $notifiable, string $token): string {
-            $base = rtrim((string) config('brand.frontend_url'), '/');
-            // The organization makes the link point at one specific login, since emails can repeat across organizations.
             $query = http_build_query([
                 'token' => $token,
                 'email' => (string) $notifiable->email,
                 'tenant' => $notifiable->tenant_id,
             ]);
 
-            return "{$base}/login/reset?{$query}";
+            return app(TenantAddress::class)->url($notifiable->tenant_id, '/login/reset?'.$query);
         };
 
         ResetPassword::createUrlUsing($resetUrl);
         ResetPassword::toMailUsing(static function (object $notifiable, string $token) use ($resetUrl): BrandedNotificationMail {
             $expiresInMinutes = (int) config('auth.passwords.'.config('auth.defaults.passwords').'.expire', 60);
 
-            return BrandedNotificationMail::passwordReset($resetUrl($notifiable, $token), $expiresInMinutes)
-                ->to((string) $notifiable->email);
+            return BrandedNotificationMail::passwordReset(
+                $resetUrl($notifiable, $token),
+                $expiresInMinutes,
+                app(TenantAddress::class)->loginUrl($notifiable->tenant_id),
+            )->to((string) $notifiable->email);
         });
 
         // socialiteproviders/microsoft-azure is registered under the "azure" driver name (see config/services.php).

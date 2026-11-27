@@ -3,6 +3,7 @@
 namespace App\Domains\IdentityAccess\Notifications;
 
 use App\Domains\Notifications\Mails\BrandedNotificationMail;
+use App\Domains\Tenancy\Support\TenantAddress;
 use Illuminate\Notifications\Notification;
 
 /**
@@ -26,16 +27,20 @@ class EmployeeInviteNotification extends Notification
     public function toMail(object $notifiable): BrandedNotificationMail
     {
         $email = (string) $notifiable->email;
-        $base = rtrim((string) config('brand.frontend_url'), '/');
+        $addresses = app(TenantAddress::class);
         $query = http_build_query([
             'token' => $this->token,
             'email' => $email,
             'tenant' => $notifiable->tenant_id,
             'invite' => 1,
         ]);
-        $setPasswordUrl = "{$base}/login/reset?{$query}";
+        $setPasswordUrl = $addresses->url($notifiable->tenant_id, '/login/reset?'.$query);
         $expiresInDays = (int) ceil((int) config('auth.passwords.'.self::PASSWORD_BROKER.'.expire') / 1440);
 
-        return BrandedNotificationMail::employeeInvite($setPasswordUrl, $expiresInDays)->to($email);
+        return BrandedNotificationMail::employeeInvite(
+            $setPasswordUrl,
+            $expiresInDays,
+            $addresses->loginUrl($notifiable->tenant_id),
+        )->to($email);
     }
 }

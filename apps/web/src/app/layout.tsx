@@ -61,7 +61,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       <body className="flex min-h-full flex-col bg-[var(--background)] text-[var(--foreground)]">
         <SkipLink />
         {/* Keep the main landmark outside Suspense so axe/SSR always see it. */}
-        <main id="main-content" className="flex min-h-full flex-1 flex-col">
+        <main id="main-content" tabIndex={-1} className="flex min-h-full flex-1 flex-col">
           <Suspense fallback={null}>
             <NextIntlClientProvider locale={locale} messages={messages}>
               <ThemeProvider>

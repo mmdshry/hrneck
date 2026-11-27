@@ -35,8 +35,6 @@ class CreateOrgUser
     ): User {
         $email = $this->provision->normalizeEmail($email);
 
-        $this->provision->assertNoPlatformAccount($email);
-
         if ($this->provision->findOrgUserByEmail($email, $tenantId) !== null) {
             throw ValidationException::withMessages([
                 'email' => ['A user with this email already belongs to this organization.'],

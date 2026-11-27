@@ -10,4 +10,7 @@
 
 --
 {!! config('brand.name') !!}
+@isset($loginUrl)
+Sign in to your organization: {!! $loginUrl !!}
+@endisset
 Need help? {!! config('brand.support_address') !!}

@@ -10,6 +10,8 @@ use Illuminate\Queue\SerializesModels;
 
 /**
  * Generic HRneck-branded email: an HTML layout with a plain-text alternative.
+ *
+ * Every email to an organization member carries the organization's sign-in address in its footer ($loginUrl).
  */
 class BrandedNotificationMail extends Mailable
 {
@@ -30,13 +32,14 @@ class BrandedNotificationMail extends Mailable
         public string $title,
         public array $lines = [],
         public array $actions = [],
+        public ?string $loginUrl = null,
     ) {}
 
     /**
      * Build from a plain-text body. The last line, when it is a "<label>: <url>" link,
      * becomes the call-to-action button; every other non-empty line becomes a paragraph.
      */
-    public static function fromPlainBody(string $subject, string $body): self
+    public static function fromPlainBody(string $subject, string $body, ?string $loginUrl = null): self
     {
         $lines = array_values(array_filter(
             array_map('trim', preg_split('/\R/u', $body) ?: []),
@@ -50,10 +53,10 @@ class BrandedNotificationMail extends Mailable
             array_pop($lines);
         }
 
-        return new self(subjectLine: $subject, title: $subject, lines: $lines, actions: $actions);
+        return new self(subjectLine: $subject, title: $subject, lines: $lines, actions: $actions, loginUrl: $loginUrl);
     }
 
-    public static function passwordReset(string $resetUrl, int $expiresInMinutes): self
+    public static function passwordReset(string $resetUrl, int $expiresInMinutes, ?string $loginUrl = null): self
     {
         return new self(
             subjectLine: 'Reset your '.config('brand.short').' password',
@@ -63,10 +66,11 @@ class BrandedNotificationMail extends Mailable
                 "This link expires in {$expiresInMinutes} minutes. If you did not request a reset, you can ignore this email.",
             ],
             actions: [['label' => 'Reset password', 'url' => $resetUrl]],
+            loginUrl: $loginUrl,
         );
     }
 
-    public static function employeeInvite(string $setPasswordUrl, int $expiresInDays): self
+    public static function employeeInvite(string $setPasswordUrl, int $expiresInDays, ?string $loginUrl = null): self
     {
         return new self(
             subjectLine: "You're invited to ".config('brand.short'),
@@ -76,6 +80,7 @@ class BrandedNotificationMail extends Mailable
                 "Set your password using the button below. This link expires in {$expiresInDays} days. If you were not expecting this invitation, you can ignore this email.",
             ],
             actions: [['label' => 'Set your password', 'url' => $setPasswordUrl]],
+            loginUrl: $loginUrl,
         );
     }
 

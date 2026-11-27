@@ -4,6 +4,7 @@ namespace App\Domains\Notifications\Jobs;
 
 use App\Domains\Notifications\Mails\BrandedNotificationMail;
 use App\Domains\Notifications\Support\NotificationEmailGate;
+use App\Domains\Tenancy\Support\TenantAddress;
 use App\Support\AppLocale;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -23,9 +24,10 @@ class SendNotificationEmailJob implements ShouldQueue
         public string $subject,
         public string $body,
         public ?string $locale = null,
+        public ?string $tenantId = null,
     ) {}
 
-    public function handle(NotificationEmailGate $gate): void
+    public function handle(NotificationEmailGate $gate, TenantAddress $addresses): void
     {
         if (! $gate->allows($this->email)) {
             return;
@@ -35,8 +37,13 @@ class SendNotificationEmailJob implements ShouldQueue
             App::setLocale(AppLocale::normalize($this->locale));
         }
 
+        $tenantId = is_string($this->tenantId) && $this->tenantId !== ''
+            ? $this->tenantId
+            : (is_string(tenant('id')) ? (string) tenant('id') : null);
+        $loginUrl = $tenantId === null ? null : $addresses->loginUrl($tenantId);
+
         try {
-            Mail::to($this->email)->send(BrandedNotificationMail::fromPlainBody($this->subject, $this->body));
+            Mail::to($this->email)->send(BrandedNotificationMail::fromPlainBody($this->subject, $this->body, $loginUrl));
         } catch (Throwable $e) {
             report($e);
         }

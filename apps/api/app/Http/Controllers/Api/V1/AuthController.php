@@ -10,6 +10,7 @@ use App\Domains\IdentityAccess\Notifications\EmployeeInviteNotification;
 use App\Domains\IdentityAccess\Support\OrgChoiceChallenge;
 use App\Domains\IdentityAccess\Support\SignInBlockReason;
 use App\Domains\IdentityAccess\Support\SignInEligibility;
+use App\Domains\Tenancy\Support\TenantAddress;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\LoginRequest;
 use App\Http\Resources\Api\V1\TenantResource;
@@ -43,13 +44,29 @@ class AuthController extends Controller
         private readonly OrgChoiceChallenge $orgChoice,
     ) {}
 
+    /**
+     * Organization sign-in happens only on the organization's own address, which arrives as `tenant`. Platform staff
+     * sign in on the staff host with `scope=platform`, and only accounts without an organization are checked.
+     */
     public function login(LoginRequest $request): JsonResponse
     {
-        $logins = $this->passwordLogins(
-            (string) $request->input('email'),
-            (string) $request->input('password'),
-            $request->input('tenant'),
-        );
+        $remember = $request->boolean('remember');
+        $email = (string) $request->input('email');
+        $password = (string) $request->input('password');
+
+        if ($request->input('scope') === 'platform') {
+            $staff = $this->platformStaffLogin($email, $password);
+            if (! $staff instanceof User) {
+                throw ValidationException::withMessages([
+                    'email' => [__('auth.failed')],
+                ]);
+            }
+
+            return $this->signIn($request, $staff, $remember);
+        }
+
+        $tenantId = $this->tenantFromRequest($request);
+        $logins = $this->passwordLogins($email, $password, $tenantId);
 
         if ($logins->isEmpty()) {
             throw ValidationException::withMessages([
@@ -57,14 +74,11 @@ class AuthController extends Controller
             ]);
         }
 
-        $remember = $request->boolean('remember');
-        $organizationHint = $this->organizationHint($request);
-
         if ($logins->count() === 1) {
-            return $this->signIn($request, $logins->first(), $remember, $organizationHint);
+            return $this->signIn($request, $logins->first(), $remember, $tenantId);
         }
 
-        return $this->chooseOrganization($request, $logins, $remember, $organizationHint);
+        return $this->chooseOrganization($request, $logins, $remember, $tenantId);
     }
 
     /**
@@ -332,15 +346,36 @@ class AuthController extends Controller
         return response()->json(['data' => new UserResource($user->fresh())]);
     }
 
+    /**
+     * Public lookup behind the sign-in finder on the main domain. It confirms that the organization exists and returns
+     * the address to sign in at. Nothing else about the organization is returned.
+     */
+    public function findOrganization(string $slug, TenantAddress $addresses): JsonResponse
+    {
+        $tenant = Tenant::query()->whereKey(strtolower(trim($slug)))->first();
+        if ($tenant === null) {
+            return response()->json(['message' => __('auth.organization_not_found')], 404);
+        }
+
+        return response()->json([
+            'data' => [
+                'tenant_id' => $tenant->id,
+                'name' => $tenant->name ?? $tenant->id,
+                'login_url' => $addresses->loginUrl($tenant->id),
+            ],
+        ]);
+    }
+
     public function forgotPassword(Request $request): JsonResponse
     {
         $data = $request->validate([
             'email' => ['required', 'email'],
             'tenant' => ['nullable', 'string', 'max:64'],
+            'scope' => ['nullable', 'string', Rule::in(['tenant', 'platform'])],
         ]);
 
-        // Every organization login with this email gets its own reset link.
-        foreach ($this->accountsForEmail($data['email'], $data['tenant'] ?? null) as $account) {
+        // The organization address picks one login, so the reset link goes to that login only.
+        foreach ($this->accountsForEmail($data['email'], $this->accountTenantFromRequest($request)) as $account) {
             try {
                 Password::broker()->sendResetLink([
                     'email' => $account->email,
@@ -364,9 +399,10 @@ class AuthController extends Controller
             'email' => ['required', 'email'],
             'password' => ['required', 'confirmed', PasswordRule::defaults()],
             'tenant' => ['nullable', 'string', 'max:64'],
+            'scope' => ['nullable', 'string', Rule::in(['tenant', 'platform'])],
         ]);
 
-        $tenantId = $this->resetTenantId($data['email'], $data['tenant'] ?? null);
+        $tenantId = $this->accountTenantFromRequest($request);
 
         $status = Password::broker($this->resetPasswordBrokerName($data['email'], $data['token'], $tenantId))->reset(
             [
@@ -418,58 +454,84 @@ class AuthController extends Controller
     }
 
     /**
-     * Reset links carry the organization. Without it, an email that has one organization login
-     * resolves to that login; anything ambiguous falls back to platform staff (tenant null).
-     */
-    private function resetTenantId(string $email, ?string $tenant): ?string
-    {
-        if ($tenant !== null && $tenant !== '') {
-            return $tenant;
-        }
-
-        $accounts = $this->accountsForEmail($email, null);
-
-        return $accounts->count() === 1 ? $accounts->first()->tenant_id : null;
-    }
-
-    /**
+     * Accounts for an email in one organization, or the platform accounts (tenant null) when no organization is given.
+     *
      * @return Collection<int, User>
      */
-    private function accountsForEmail(string $email, ?string $tenant): Collection
+    private function accountsForEmail(string $email, ?string $tenantId): Collection
     {
         return User::query()
             ->withEmail($email)
-            ->when($tenant !== null && $tenant !== '', fn (Builder $query) => $query->where('tenant_id', $tenant))
+            ->when(
+                $tenantId !== null,
+                fn (Builder $query) => $query->where('tenant_id', $tenantId),
+                fn (Builder $query) => $query->whereNull('tenant_id'),
+            )
             ->get();
     }
 
     /**
-     * Logins whose password matches the email and password. The optional tenant (the organization
-     * sign-in address) narrows the search to that organization's login.
+     * Logins of one organization whose password matches the email and password.
      *
      * @return Collection<int, User>
      */
-    private function passwordLogins(string $email, string $password, mixed $tenant): Collection
+    private function passwordLogins(string $email, string $password, string $tenantId): Collection
     {
-        $query = User::query()->withEmail($email)->with('tenant');
-        if (is_string($tenant) && $tenant !== '') {
-            $query->where('tenant_id', $tenant);
-        }
-
-        return $query->get()
+        return User::query()
+            ->withEmail($email)
+            ->where('tenant_id', $tenantId)
+            ->with('tenant')
+            ->get()
             ->filter(fn (User $user): bool => Hash::check($password, $user->getAuthPassword()))
             ->values();
     }
 
     /**
-     * The organization sign-in address (subdomain or ?tenant=) sent with the password. When this login can enter
-     * that organization, it becomes the active one, so the user is not asked to pick it again.
+     * Platform staff have no organization. Their login is found among accounts without a tenant, and only accounts
+     * that hold a platform role qualify.
      */
-    private function organizationHint(Request $request): ?string
+    private function platformStaffLogin(string $email, string $password): ?User
+    {
+        return User::query()
+            ->withEmail($email)
+            ->whereNull('tenant_id')
+            ->get()
+            ->first(fn (User $user): bool => $user->isPlatformStaff() && Hash::check($password, $user->getAuthPassword()));
+    }
+
+    /**
+     * The organization named by the sign-in address. A missing or unknown organization is rejected before any password
+     * is checked.
+     */
+    private function tenantFromRequest(Request $request): string
     {
         $tenant = $request->input('tenant');
+        if (! is_string($tenant) || $tenant === '') {
+            throw ValidationException::withMessages([
+                'tenant' => [__('auth.tenant_required')],
+            ]);
+        }
 
-        return is_string($tenant) && $tenant !== '' ? $tenant : null;
+        if (! Tenant::query()->whereKey($tenant)->exists()) {
+            throw ValidationException::withMessages([
+                'tenant' => [__('auth.tenant_not_found')],
+            ]);
+        }
+
+        return $tenant;
+    }
+
+    /**
+     * Password recovery and reset follow the same rule as sign-in: an organization address names the organization,
+     * and the platform staff host (`scope=platform`) reaches accounts without a tenant.
+     */
+    private function accountTenantFromRequest(Request $request): ?string
+    {
+        if ($request->input('scope') === 'platform') {
+            return null;
+        }
+
+        return $this->tenantFromRequest($request);
     }
 
     /**

@@ -8,6 +8,8 @@ use App\Domains\IdentityAccess\Support\SsoLoginException;
 use App\Domains\IdentityAccess\Support\SsoProvider;
 use App\Models\User;
 use App\Models\UserIdentity;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Laravel\Socialite\Two\User as SocialiteUser;
 
@@ -20,27 +22,24 @@ class SsoLogin
     public function __construct(private readonly SignInEligibility $eligibility) {}
 
     /**
-     * An identity already linked to (provider, subject) wins. Otherwise a verified provider email links the identity
-     * to the User with that email, provided that User has no identity from the same provider yet.
+     * A login of the organization being signed into that already has this (provider, subject) identity wins. Otherwise a
+     * verified provider email links the identity to that organization's login with the email, provided that login has no
+     * identity from the same provider yet. One provider account can link to one login per organization.
      *
      * @param  array<string, mixed>  $idTokenClaims
      *
      * @throws SsoLoginException
      */
-    public function handle(SsoProvider $provider, SocialiteUser $ssoUser, array $idTokenClaims): User
+    public function handle(SsoProvider $provider, SocialiteUser $ssoUser, array $idTokenClaims, string $tenantId): User
     {
         $subject = (string) $ssoUser->getId();
         if ($subject === '') {
             throw new SsoLoginException(SsoError::ProviderError, 'Provider returned no subject.');
         }
 
-        $identity = UserIdentity::query()
-            ->where('provider', $provider->value)
-            ->where('subject', $subject)
-            ->first();
-
-        if ($identity !== null) {
-            return $this->ensureSignInAllowed($identity->user);
+        $linkedLogins = $this->organizationLogins($this->loginsWithIdentity($provider, $subject), $tenantId);
+        if ($linkedLogins->isNotEmpty()) {
+            return $this->ensureSignInAllowed($this->onlyLogin($linkedLogins));
         }
 
         $email = $this->providerEmail($provider, $ssoUser);
@@ -48,9 +47,7 @@ class SsoLogin
             throw new SsoLoginException(SsoError::NotLinked, 'Provider email is missing or not verified.');
         }
 
-        // Organization logins can share an email. Only link when the address identifies exactly one login.
-        $candidates = User::query()->withEmail($email)->limit(2)->get();
-        $user = $this->ensureSignInAllowed($candidates->count() === 1 ? $candidates->first() : null);
+        $user = $this->ensureSignInAllowed($this->onlyLogin($this->organizationLogins(User::query()->withEmail($email), $tenantId)));
 
         if ($user->identities()->where('provider', $provider->value)->exists()) {
             throw new SsoLoginException(SsoError::NotLinked, 'Account already has a different '.$provider->value.' identity.');
@@ -59,6 +56,46 @@ class SsoLogin
         $this->link($user, $provider, $subject, $email);
 
         return $user;
+    }
+
+    /**
+     * Logins that hold this (provider, subject) identity, whatever organization they belong to.
+     *
+     * @return Builder<User>
+     */
+    private function loginsWithIdentity(SsoProvider $provider, string $subject): Builder
+    {
+        return User::query()->whereHas('identities', fn (Builder $identity) => $identity
+            ->where('provider', $provider->value)
+            ->where('subject', $subject));
+    }
+
+    /**
+     * The logins among $logins that belong to the organization being signed into: its own logins win, and logins that
+     * only hold an active membership there are the fallback. At most two are fetched, enough to tell one match from many.
+     *
+     * @param  Builder<User>  $logins
+     * @return Collection<int, User>
+     */
+    private function organizationLogins(Builder $logins, string $tenantId): Collection
+    {
+        $ownLogins = (clone $logins)->where('tenant_id', $tenantId)->limit(2)->get();
+        if ($ownLogins->isNotEmpty()) {
+            return $ownLogins;
+        }
+
+        return (clone $logins)
+            ->whereHas('memberships', fn (Builder $membership) => $membership->where('tenant_id', $tenantId)->active())
+            ->limit(2)
+            ->get();
+    }
+
+    /**
+     * @param  Collection<int, User>  $logins
+     */
+    private function onlyLogin(Collection $logins): ?User
+    {
+        return $logins->count() === 1 ? $logins->first() : null;
     }
 
     /**

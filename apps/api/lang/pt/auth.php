@@ -22,4 +22,7 @@ return [
     'logged_out' => 'Sessão terminada',
     'sso_handoff_invalid' => 'Este link de início de sessão expirou. Inicie sessão novamente.',
     'org_choice_invalid' => 'A escolha da organização expirou. Inicie sessão novamente.',
+    'tenant_required' => 'Inicie sessão no endereço da sua organização.',
+    'tenant_not_found' => 'Esta organização não existe.',
+    'organization_not_found' => 'Esta organização não existe.',
 ];

@@ -2,6 +2,7 @@
 
 use App\Domains\AnalyticsReporting\Mails\CampaignReportMail;
 use App\Domains\Notifications\Mails\BrandedNotificationMail;
+use App\Domains\Tenancy\Support\TenantAddress;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Mail\Transport\ArrayTransport;
 use Illuminate\Support\Facades\Mail;
@@ -66,6 +67,57 @@ test('password reset notification builds the branded mail addressed to the user'
         ->toContain('email=ana%40example.test')
         ->toContain('This link expires in')
         ->toContain('Reset password');
+});
+
+test('an organization reset mail links to that organization and names its sign-in address', function () {
+    $notifiable = new class
+    {
+        public string $email = 'ana@example.test';
+
+        public ?string $tenant_id = 'itneck';
+    };
+
+    $addresses = app(TenantAddress::class);
+
+    expect((new ResetPassword('tok123'))->toMail($notifiable)->render())
+        ->toContain($addresses->origin('itneck').'/login/reset?token=tok123')
+        ->toContain('Sign in to your organization: <a href="'.$addresses->loginUrl('itneck').'"');
+});
+
+test('mail to an organization member ends with the sign-in address in the html and text parts', function () {
+    $loginUrl = app(TenantAddress::class)->loginUrl('itneck');
+
+    Mail::mailer('array')->to('ana@example.test')->send(
+        BrandedNotificationMail::fromPlainBody('HRneck: Policy', "Hi Ana,\n\nNew policy is live.", $loginUrl),
+    );
+
+    /** @var ArrayTransport $transport */
+    $transport = Mail::mailer('array')->getSymfonyTransport();
+    $sent = $transport->messages()->last()->getOriginalMessage();
+
+    expect($sent->getHtmlBody())->toContain('Sign in to your organization: <a href="'.$loginUrl.'"')
+        ->and($sent->getTextBody())->toContain('Sign in to your organization: '.$loginUrl);
+});
+
+test('mail without an organization has no sign-in footer', function () {
+    $mail = BrandedNotificationMail::fromPlainBody('HRneck: Notice', 'Plain notice for everyone.');
+
+    expect($mail->render())->not->toContain('Sign in to your organization');
+});
+
+test('campaign report to an organization member carries the sign-in footer', function () {
+    $loginUrl = app(TenantAddress::class)->loginUrl('itneck');
+
+    Mail::mailer('array')->to('reports@example.test')->send(
+        new CampaignReportMail("metric,value\nemployees,42", loginUrl: $loginUrl),
+    );
+
+    /** @var ArrayTransport $transport */
+    $transport = Mail::mailer('array')->getSymfonyTransport();
+    $sent = $transport->messages()->last()->getOriginalMessage();
+
+    expect($sent->getHtmlBody())->toContain('Sign in to your organization: <a href="'.$loginUrl.'"')
+        ->and($sent->getTextBody())->toContain('Sign in to your organization: '.$loginUrl);
 });
 
 test('employee invite mail asks for a password and states the seven day expiry', function () {

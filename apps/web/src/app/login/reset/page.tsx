@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { MinimalLoader } from "@/components/ui/minimal-loader";
 import { Panel } from "@/components/ui/panel";
 import { api, ensureCsrf } from "@/lib/api";
+import { tenantFromHostname } from "@/lib/tenant";
 import { toastError } from "@/lib/toast";
 
 function ResetPasswordForm({ isInvite }: { isInvite: boolean }) {
@@ -31,14 +32,17 @@ function ResetPasswordForm({ isInvite }: { isInvite: boolean }) {
         throw new Error(t("resetTokenMissing"));
       }
       await ensureCsrf();
+      // The organization is the one this address belongs to. Links from before tenant hosts carried it in ?tenant=.
+      // With neither, the reset is for a platform account on the staff host.
+      const tenant =
+        tenantFromHostname(window.location.hostname) ?? searchParams.get("tenant");
       await api("/api/v1/auth/password/reset", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           token,
           email,
-          // The link names the organization whose login this token belongs to.
-          tenant: searchParams.get("tenant") ?? undefined,
+          ...(tenant ? { tenant } : { scope: "platform" }),
           password,
           password_confirmation: passwordConfirmation,
         }),

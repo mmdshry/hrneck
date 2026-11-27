@@ -22,4 +22,7 @@ return [
     'logged_out' => 'Abgemeldet',
     'sso_handoff_invalid' => 'Dieser Anmeldelink ist abgelaufen. Bitte melden Sie sich erneut an.',
     'org_choice_invalid' => 'Die Organisationsauswahl ist abgelaufen. Bitte melden Sie sich erneut an.',
+    'tenant_required' => 'Bitte melden Sie sich über die Adresse Ihrer Organisation an.',
+    'tenant_not_found' => 'Diese Organisation existiert nicht.',
+    'organization_not_found' => 'Diese Organisation existiert nicht.',
 ];

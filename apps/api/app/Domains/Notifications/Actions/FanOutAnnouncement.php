@@ -5,6 +5,7 @@ namespace App\Domains\Notifications\Actions;
 use App\Domains\IdentityAccess\Support\OrgPermissionCatalog;
 use App\Domains\Notifications\Models\OrgAnnouncement;
 use App\Domains\Notifications\Models\UserNotification;
+use App\Domains\Tenancy\Support\TenantAddress;
 use App\Models\User;
 use App\Support\AppLocale;
 use Illuminate\Support\Carbon;
@@ -14,6 +15,7 @@ class FanOutAnnouncement
     public function __construct(
         private readonly CreateUserNotification $notify,
         private readonly QueueNotificationEmail $queueEmail,
+        private readonly TenantAddress $addresses,
     ) {}
 
     public function handle(string $title, string $body, ?int $publishedBy = null): OrgAnnouncement
@@ -34,8 +36,6 @@ class FanOutAnnouncement
             ->inTenant($tenantId)
             ->whereNull('disabled_at')
             ->get(['id', 'tenant_id', 'email', 'locale']);
-
-        $frontend = rtrim((string) config('brand.frontend_url', config('app.url')), '/');
 
         foreach ($users as $user) {
             $link = $this->announcementLinkFor($user, $tenantId);
@@ -60,8 +60,9 @@ class FanOutAnnouncement
             $this->queueEmail->handle(
                 $email,
                 $title,
-                $body.__('notifications.announcement_open', ['url' => $frontend.$link], $locale),
+                $body.__('notifications.announcement_open', ['url' => $this->addresses->url($tenantId, $link)], $locale),
                 $locale,
+                $tenantId,
             );
         }
 

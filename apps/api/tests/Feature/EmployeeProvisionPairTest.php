@@ -125,10 +125,7 @@ test('must_set_password blocks login until invite reset', function () {
 
     expect($learner->fresh()->must_set_password)->toBeTrue();
 
-    $this->postJson('/api/v1/auth/login', [
-        'email' => 'invite.block@itneck.test',
-        'password' => 'DemoPass!234',
-    ])
+    $this->postJson('/api/v1/auth/login', tenantLoginBody('itneck', 'invite.block@itneck.test', 'DemoPass!234'))
         ->assertStatus(422)
         ->assertJsonValidationErrors(['email']);
 });
@@ -247,10 +244,8 @@ test('creating an employee with a password makes the login usable immediately wi
     $user = User::query()->where('email', 'pw.created@itneck.test')->firstOrFail();
     expect($user->must_set_password)->toBeFalse();
 
-    $this->postJson('/api/v1/auth/login', [
-        'email' => 'pw.created@itneck.test',
-        'password' => 'EmployeePass!234',
-    ])->assertOk();
+    $this->postJson('/api/v1/auth/login', tenantLoginBody('itneck', 'pw.created@itneck.test', 'EmployeePass!234'))
+        ->assertOk();
 });
 
 test('creating an employee with a password is rejected when a login already exists for the email', function () {
@@ -300,10 +295,8 @@ test('admin sets an employee password from the list and the login clears the inv
     expect($user->must_set_password)->toBeFalse()
         ->and(Hash::check('NewEmployee!234', $user->getAuthPassword()))->toBeTrue();
 
-    $this->postJson('/api/v1/auth/login', [
-        'email' => 'set.pw@itneck.test',
-        'password' => 'NewEmployee!234',
-    ])->assertOk();
+    $this->postJson('/api/v1/auth/login', tenantLoginBody('itneck', 'set.pw@itneck.test', 'NewEmployee!234'))
+        ->assertOk();
 
     $activity = Activity::query()->inLog('targets')->where('event', 'password_set')->latest('id')->first();
     expect($activity)->not->toBeNull()

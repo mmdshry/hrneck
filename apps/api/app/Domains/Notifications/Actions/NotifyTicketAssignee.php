@@ -3,6 +3,7 @@
 namespace App\Domains\Notifications\Actions;
 
 use App\Domains\Notifications\Models\UserNotification;
+use App\Domains\Tenancy\Support\TenantAddress;
 use App\Domains\Ticketing\Models\SdTicket;
 use App\Models\User;
 use App\Support\AppLocale;
@@ -12,6 +13,7 @@ class NotifyTicketAssignee
     public function __construct(
         private readonly CreateUserNotification $notify,
         private readonly QueueNotificationEmail $queueEmail,
+        private readonly TenantAddress $addresses,
     ) {}
 
     public function handle(SdTicket $ticket, ?int $previousAssigneeId = null): void
@@ -43,16 +45,17 @@ class NotifyTicketAssignee
             return;
         }
 
-        $frontend = rtrim((string) config('brand.frontend_url', config('app.url')), '/');
+        $tenantId = is_string(tenant('id')) ? (string) tenant('id') : null;
         $this->queueEmail->handle(
             $email,
             __('notifications.ticket_assigned_subject', ['number' => $ticket->number], $locale),
             __('notifications.ticket_assigned_body', [
                 'number' => $ticket->number,
                 'summary' => $ticket->summary,
-                'url' => $frontend.$link,
+                'url' => $this->addresses->url($tenantId, $link),
             ], $locale),
             $locale,
+            $tenantId,
         );
     }
 }

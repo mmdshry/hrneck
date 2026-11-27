@@ -21,17 +21,17 @@ beforeEach(function () {
 });
 
 test('links a provisioned user by verified Google email and starts a session', function () {
-    $user = User::factory()->unverified()->create(['email' => 'ana@example.com']);
+    $user = User::factory()->unverified()->create(['email' => 'ana@example.com', 'tenant_id' => 'itneck']);
     $flow = ssoFakeProvider('google', ssoGoogleUser('ana@example.com'));
 
     $token = ssoHandoffToken($this, 'google', $flow);
 
-    $this->withHeader('Origin', 'http://hrneck.test')
+    $this->withHeader('Origin', 'http://itneck.hrneck.test')
         ->postJson('/api/v1/auth/oauth/exchange', ['token' => $token])
         ->assertOk()
         ->assertJsonPath('data.email', 'ana@example.com');
 
-    $this->withHeader('Origin', 'http://hrneck.test')
+    $this->withHeader('Origin', 'http://itneck.hrneck.test')
         ->getJson('/api/v1/auth/me')
         ->assertJsonPath('data.email', 'ana@example.com');
 
@@ -40,7 +40,7 @@ test('links a provisioned user by verified Google email and starts a session', f
 });
 
 test('matches an existing identity by subject even when the provider email changed', function () {
-    $user = User::factory()->create(['email' => 'old@example.com']);
+    $user = User::factory()->create(['email' => 'old@example.com', 'tenant_id' => 'itneck']);
     UserIdentity::factory()->create([
         'user_id' => $user->id,
         'provider' => 'google',
@@ -50,7 +50,7 @@ test('matches an existing identity by subject even when the provider email chang
 
     $token = ssoHandoffToken($this, 'google', $flow);
 
-    $this->withHeader('Origin', 'http://hrneck.test')
+    $this->withHeader('Origin', 'http://itneck.hrneck.test')
         ->postJson('/api/v1/auth/oauth/exchange', ['token' => $token])
         ->assertOk()
         ->assertJsonPath('data.email', 'old@example.com');
@@ -60,12 +60,12 @@ test('matches an existing identity by subject even when the provider email chang
 });
 
 test('links a Microsoft work account by its mail attribute without an email_verified claim', function () {
-    $user = User::factory()->unverified()->create(['email' => 'ana@contoso.com']);
+    $user = User::factory()->unverified()->create(['email' => 'ana@contoso.com', 'tenant_id' => 'itneck']);
     $flow = ssoFakeProvider('microsoft', ssoMicrosoftUser('ana@contoso.com', mail: 'ana@contoso.com'));
 
     $token = ssoHandoffToken($this, 'microsoft', $flow);
 
-    $this->withHeader('Origin', 'http://hrneck.test')
+    $this->withHeader('Origin', 'http://itneck.hrneck.test')
         ->postJson('/api/v1/auth/oauth/exchange', ['token' => $token])
         ->assertOk()
         ->assertJsonPath('data.email', 'ana@contoso.com');
@@ -74,12 +74,12 @@ test('links a Microsoft work account by its mail attribute without an email_veri
 });
 
 test('falls back to the Microsoft sign-in name when the mail attribute is empty', function () {
-    $user = User::factory()->create(['email' => 'ana@contoso.onmicrosoft.com']);
+    $user = User::factory()->create(['email' => 'ana@contoso.onmicrosoft.com', 'tenant_id' => 'itneck']);
     $flow = ssoFakeProvider('microsoft', ssoMicrosoftUser('ana@contoso.onmicrosoft.com', mail: null));
 
     $token = ssoHandoffToken($this, 'microsoft', $flow);
 
-    $this->withHeader('Origin', 'http://hrneck.test')
+    $this->withHeader('Origin', 'http://itneck.hrneck.test')
         ->postJson('/api/v1/auth/oauth/exchange', ['token' => $token])
         ->assertOk()
         ->assertJsonPath('data.email', 'ana@contoso.onmicrosoft.com');
@@ -109,7 +109,7 @@ test('never creates an account for an unknown identity', function () {
 });
 
 test('refuses a disabled account even when its identity is already linked', function () {
-    $user = User::factory()->create(['email' => 'ana@example.com', 'disabled_at' => now()]);
+    $user = User::factory()->create(['email' => 'ana@example.com', 'tenant_id' => 'itneck', 'disabled_at' => now()]);
     UserIdentity::factory()->create([
         'user_id' => $user->id,
         'provider' => 'google',
@@ -119,7 +119,7 @@ test('refuses a disabled account even when its identity is already linked', func
 
     ssoCallback($this, 'google', $flow)->assertRedirectContains('/login?sso_error=account_disabled');
 
-    $this->withHeader('Origin', 'http://hrneck.test')
+    $this->withHeader('Origin', 'http://itneck.hrneck.test')
         ->getJson('/api/v1/auth/me')
         ->assertJsonPath('data', null);
 });
@@ -127,6 +127,7 @@ test('refuses a disabled account even when its identity is already linked', func
 test('skips the app MFA for SSO sign-in because the identity provider already did MFA', function () {
     $user = User::factory()->create([
         'email' => 'ana@example.com',
+        'tenant_id' => 'itneck',
         'mfa_enabled' => true,
         'mfa_secret' => 'not-used-by-sso',
         'mfa_confirmed_at' => now(),
@@ -140,13 +141,13 @@ test('skips the app MFA for SSO sign-in because the identity provider already di
 
     $token = ssoHandoffToken($this, 'google', $flow);
 
-    $this->withHeader('Origin', 'http://hrneck.test')
+    $this->withHeader('Origin', 'http://itneck.hrneck.test')
         ->postJson('/api/v1/auth/oauth/exchange', ['token' => $token])
         ->assertOk()
         ->assertJsonMissingPath('challenge_token')
         ->assertJsonMissing(['mfa_required' => true]);
 
-    $this->withHeader('Origin', 'http://hrneck.test')
+    $this->withHeader('Origin', 'http://itneck.hrneck.test')
         ->getJson('/api/v1/auth/me')
         ->assertJsonPath('data.email', 'ana@example.com');
 });
@@ -154,6 +155,7 @@ test('skips the app MFA for SSO sign-in because the identity provider already di
 test('keeps must_set_password on the account after an SSO sign-in', function () {
     $user = User::factory()->create([
         'email' => 'ana@example.com',
+        'tenant_id' => 'itneck',
         'must_set_password' => true,
     ]);
     UserIdentity::factory()->create([
@@ -165,7 +167,7 @@ test('keeps must_set_password on the account after an SSO sign-in', function () 
 
     $token = ssoHandoffToken($this, 'google', $flow);
 
-    $this->withHeader('Origin', 'http://hrneck.test')
+    $this->withHeader('Origin', 'http://itneck.hrneck.test')
         ->postJson('/api/v1/auth/oauth/exchange', ['token' => $token])
         ->assertOk();
 
@@ -173,7 +175,7 @@ test('keeps must_set_password on the account after an SSO sign-in', function () 
 });
 
 test('rejects a state that was already used', function () {
-    User::factory()->create(['email' => 'ana@example.com']);
+    User::factory()->create(['email' => 'ana@example.com', 'tenant_id' => 'itneck']);
     $flow = ssoFakeProvider('google', ssoGoogleUser('ana@example.com'));
 
     ssoHandoffToken($this, 'google', $flow);
@@ -194,14 +196,82 @@ test('an SSO sign-in that started on an organization address activates that orga
 
     $token = ssoHandoffToken($this, 'google', $flow, 'http://company.hrneck.test');
 
-    $this->withHeader('Origin', 'http://hrneck.test')
+    $this->withHeader('Origin', 'http://itneck.hrneck.test')
         ->postJson('/api/v1/auth/oauth/exchange', ['token' => $token])
         ->assertOk()
         ->assertJsonPath('data.active_tenant_id', 'company');
 });
 
+test('links the login of the organization being signed into when logins share an email', function (string $tenant) {
+    $email = 'shared.sso@example.com';
+    $itneckLogin = User::factory()->create(['email' => $email, 'tenant_id' => 'itneck']);
+    $companyLogin = User::factory()->create(['email' => $email, 'tenant_id' => 'company']);
+    $flow = ssoFakeProvider('google', ssoGoogleUser($email));
+
+    ssoHandoffToken($this, 'google', $flow, 'http://'.$tenant.'.hrneck.test');
+
+    $linked = $tenant === 'itneck' ? $itneckLogin : $companyLogin;
+    $other = $tenant === 'itneck' ? $companyLogin : $itneckLogin;
+
+    expect(UserIdentity::query()->count())->toBe(1)
+        ->and(UserIdentity::query()->where('user_id', $linked->id)->exists())->toBeTrue()
+        ->and(UserIdentity::query()->where('user_id', $other->id)->exists())->toBeFalse();
+})->with(['itneck', 'company']);
+
+test('a platform staff account with the same email is never linked from an organization sign-in page', function () {
+    $email = 'platform.and.org@example.com';
+    $platform = User::factory()->create(['email' => $email, 'tenant_id' => null]);
+    $itneckLogin = User::factory()->create(['email' => $email, 'tenant_id' => 'itneck']);
+    $flow = ssoFakeProvider('google', ssoGoogleUser($email));
+
+    ssoHandoffToken($this, 'google', $flow);
+
+    expect(UserIdentity::query()->where('user_id', $itneckLogin->id)->exists())->toBeTrue()
+        ->and(UserIdentity::query()->where('user_id', $platform->id)->exists())->toBeFalse();
+});
+
+test('an organization sign-in does not link a platform staff account on its own', function () {
+    $email = 'platform.only@example.com';
+    User::factory()->create(['email' => $email, 'tenant_id' => null]);
+    $flow = ssoFakeProvider('google', ssoGoogleUser($email));
+
+    ssoCallback($this, 'google', $flow)->assertRedirectContains('/login?sso_error=not_linked');
+
+    expect(UserIdentity::query()->count())->toBe(0);
+});
+
+test('one provider account links to a login in each organization it belongs to', function () {
+    $email = 'both.orgs@example.com';
+    $itneckLogin = User::factory()->create(['email' => $email, 'tenant_id' => 'itneck']);
+    $companyLogin = User::factory()->create(['email' => $email, 'tenant_id' => 'company']);
+    $flow = ssoFakeProvider('google', ssoGoogleUser($email));
+
+    ssoHandoffToken($this, 'google', $flow, 'http://itneck.hrneck.test');
+    ssoHandoffToken($this, 'google', $flow, 'http://company.hrneck.test');
+
+    expect(UserIdentity::query()->count())->toBe(2)
+        ->and(UserIdentity::query()->where('user_id', $itneckLogin->id)->where('subject', 'google-subject-1')->exists())->toBeTrue()
+        ->and(UserIdentity::query()->where('user_id', $companyLogin->id)->where('subject', 'google-subject-1')->exists())->toBeTrue();
+});
+
+test('an identity linked in one organization does not sign into another organization', function () {
+    $email = 'itneck.only@example.com';
+    $itneckLogin = User::factory()->create(['email' => $email, 'tenant_id' => 'itneck']);
+    UserIdentity::factory()->create([
+        'user_id' => $itneckLogin->id,
+        'provider' => 'google',
+        'subject' => 'google-subject-1',
+    ]);
+    $flow = ssoFakeProvider('google', ssoGoogleUser($email));
+
+    ssoCallback($this, 'google', $flow, 'http://company.hrneck.test')
+        ->assertRedirectContains('/login?sso_error=not_linked');
+
+    expect(UserIdentity::query()->count())->toBe(1);
+});
+
 test('a handoff token can be exchanged only once', function () {
-    $user = User::factory()->create(['email' => 'ana@example.com']);
+    $user = User::factory()->create(['email' => 'ana@example.com', 'tenant_id' => 'itneck']);
     UserIdentity::factory()->create([
         'user_id' => $user->id,
         'provider' => 'google',
@@ -210,11 +280,11 @@ test('a handoff token can be exchanged only once', function () {
     $flow = ssoFakeProvider('google', ssoGoogleUser('ana@example.com'));
     $token = ssoHandoffToken($this, 'google', $flow);
 
-    $this->withHeader('Origin', 'http://hrneck.test')
+    $this->withHeader('Origin', 'http://itneck.hrneck.test')
         ->postJson('/api/v1/auth/oauth/exchange', ['token' => $token])
         ->assertOk();
 
-    $this->withHeader('Origin', 'http://hrneck.test')
+    $this->withHeader('Origin', 'http://itneck.hrneck.test')
         ->postJson('/api/v1/auth/oauth/exchange', ['token' => $token])
         ->assertStatus(422)
         ->assertJsonValidationErrors(['token']);
@@ -248,6 +318,18 @@ test('refuses to start sign-in for a return origin outside the platform', functi
     $this->get(ssoStartUrl('google', returnTo: 'https://evil.test'))
         ->assertRedirectContains('/login?sso_error=invalid_request');
 });
+
+test('refuses to start sign-in from the main site or the staff host', function (string $returnTo) {
+    Socialite::shouldReceive('driver')->never();
+
+    // SSO signs a person into one organization, so only that organization's own address can start it.
+    $this->get(ssoStartUrl('google', returnTo: $returnTo))
+        ->assertRedirectContains('/login?sso_error=invalid_request');
+})->with([
+    'main site' => ['http://hrneck.test'],
+    'staff host' => ['http://app.hrneck.test'],
+    'www' => ['http://www.hrneck.test'],
+]);
 
 test('refuses to start sign-in for a provider without a client id', function (string $provider, string $clientIdKey) {
     config([$clientIdKey => '']);
@@ -304,7 +386,7 @@ test('lists no providers when none is configured', function () {
  *
  * @param  array<string, string>  $extra
  */
-function ssoStartUrl(string $provider, string $returnTo = 'http://hrneck.test', array $extra = []): string
+function ssoStartUrl(string $provider, string $returnTo = 'http://itneck.hrneck.test', array $extra = []): string
 {
     return '/api/v1/auth/oauth/'.$provider.'/redirect?'.http_build_query(['return_to' => $returnTo] + $extra);
 }
@@ -327,7 +409,7 @@ function ssoCallbackUrl(string $provider, string $state, string $code = 'auth-co
 /**
  * Runs the redirect and callback steps and returns the response of the callback.
  */
-function ssoCallback(TestCase $test, string $provider, stdClass $flow, string $returnTo = 'http://hrneck.test'): TestResponse
+function ssoCallback(TestCase $test, string $provider, stdClass $flow, string $returnTo = 'http://itneck.hrneck.test'): TestResponse
 {
     $test->get(ssoStartUrl($provider, $returnTo))->assertRedirect();
 
@@ -337,7 +419,7 @@ function ssoCallback(TestCase $test, string $provider, stdClass $flow, string $r
 /**
  * Runs a successful redirect and callback and returns the one-time handoff token the web app would exchange.
  */
-function ssoHandoffToken(TestCase $test, string $provider, stdClass $flow, string $returnTo = 'http://hrneck.test'): string
+function ssoHandoffToken(TestCase $test, string $provider, stdClass $flow, string $returnTo = 'http://itneck.hrneck.test'): string
 {
     $response = ssoCallback($test, $provider, $flow, $returnTo)
         ->assertRedirectContains('/login/sso/complete?token=');

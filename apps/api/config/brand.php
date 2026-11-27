@@ -9,4 +9,6 @@ return [
     'demo_admin_password' => env('DEMO_ADMIN_PASSWORD', 'DemoPass!234'),
     'support_address' => env('MAIL_SUPPORT_ADDRESS', 'support@hrneck.com'),
     'frontend_url' => env('FRONTEND_URL', 'http://hrneck.test'),
+    // Platform staff sign in here only. It is not an organization host, so it is never a tenant slug.
+    'staff_host' => env('STAFF_HOST', 'app.'.env('TENANCY_BASE_DOMAIN', 'hrneck.test')),
 ];

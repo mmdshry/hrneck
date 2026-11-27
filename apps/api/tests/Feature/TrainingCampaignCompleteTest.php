@@ -5,6 +5,7 @@ use App\Domains\Campaigns\Jobs\SendTrainingReminderJob;
 use App\Domains\Campaigns\Models\Campaign;
 use App\Domains\Campaigns\Models\CampaignRecipient;
 use App\Domains\TargetsGroups\Models\Target;
+use App\Domains\Tenancy\Support\TenantAddress;
 use App\Domains\TrainingLms\Models\Course;
 use App\Domains\TrainingLms\Models\Enrollment;
 use App\Models\Tenant;
@@ -65,7 +66,7 @@ test('cancelled campaign skips reminder job send', function () {
         'status' => 'pending',
     ]);
 
-    (new SendTrainingReminderJob($recipient->id))->handle();
+    (new SendTrainingReminderJob($recipient->id))->handle(app(TenantAddress::class));
 
     expect($recipient->fresh()->status)->toBe('pending');
     Mail::assertNothingSent();

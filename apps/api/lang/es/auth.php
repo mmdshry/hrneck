@@ -22,4 +22,7 @@ return [
     'logged_out' => 'Sesión cerrada',
     'sso_handoff_invalid' => 'Este enlace de inicio de sesión ha caducado. Vuelva a iniciar sesión.',
     'org_choice_invalid' => 'La selección de organización ha caducado. Vuelva a iniciar sesión.',
+    'tenant_required' => 'Inicie sesión en la dirección de su organización.',
+    'tenant_not_found' => 'Esta organización no existe.',
+    'organization_not_found' => 'Esta organización no existe.',
 ];

@@ -22,4 +22,7 @@ return [
     'logged_out' => 'Logged out',
     'sso_handoff_invalid' => 'This sign-in link has expired. Please sign in again.',
     'org_choice_invalid' => 'This organization choice has expired. Sign in again.',
+    'tenant_required' => 'Sign in at your organization\'s address.',
+    'tenant_not_found' => 'This organization does not exist.',
+    'organization_not_found' => 'This organization does not exist.',
 ];

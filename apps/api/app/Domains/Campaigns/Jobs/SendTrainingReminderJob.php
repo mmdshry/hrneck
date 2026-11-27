@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Models\TrainingAssignment;
 use App\Domains\Campaigns\Models\TrainingAssignmentEvent;
 use App\Domains\Notifications\Mails\BrandedNotificationMail;
 use App\Domains\Notifications\Support\NotificationEmailGate;
+use App\Domains\Tenancy\Support\TenantAddress;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -27,7 +28,7 @@ class SendTrainingReminderJob implements ShouldQueue
         public int $recipientId,
     ) {}
 
-    public function handle(): void
+    public function handle(TenantAddress $addresses): void
     {
         $recipient = CampaignRecipient::query()->with(['target', 'campaign'])->find($this->recipientId);
         if (! $recipient?->target || ! $recipient->campaign) {
@@ -55,9 +56,9 @@ class SendTrainingReminderJob implements ShouldQueue
         }
 
         $tenantId = is_string(tenant('id')) ? (string) tenant('id') : null;
-        $baseUrl = rtrim((string) config('brand.frontend_url', config('app.url')), '/');
+        $loginUrl = $addresses->loginUrl($tenantId);
 
-        $entries = $assignments->map(function (TrainingAssignment $assignment) use ($recipient, $tenantId, $baseUrl): array {
+        $entries = $assignments->map(function (TrainingAssignment $assignment) use ($recipient, $tenantId, $addresses): array {
             $query = array_filter([
                 'tenant' => $tenantId,
                 'course' => $assignment->course_id,
@@ -68,7 +69,7 @@ class SendTrainingReminderJob implements ShouldQueue
 
             return [
                 'title' => (string) $assignment->course->title,
-                'url' => $baseUrl.'/portal?'.http_build_query($query),
+                'url' => $addresses->url($tenantId, '/portal').'?'.http_build_query($query),
             ];
         })->all();
 
@@ -87,6 +88,7 @@ class SendTrainingReminderJob implements ShouldQueue
                     static fn (array $entry): array => ['label' => $entry['title'], 'url' => $entry['url']],
                     $entries,
                 ),
+                loginUrl: $loginUrl,
             ));
         } catch (Throwable $e) {
             report($e);

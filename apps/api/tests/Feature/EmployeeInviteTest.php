@@ -2,6 +2,7 @@
 
 use App\Domains\IdentityAccess\Jobs\SendEmployeeInviteJob;
 use App\Domains\IdentityAccess\Notifications\EmployeeInviteNotification;
+use App\Domains\Tenancy\Support\TenantAddress;
 use App\Models\User;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Support\Facades\DB;
@@ -20,8 +21,10 @@ function createInvitedEmployee(string $email): User
 
 function inviteResetPayload(string $email, string $token): array
 {
+    // Invite links name the employee's organization, as the set-password page sends it.
     return [
         'email' => $email,
+        'tenant' => 'itneck',
         'token' => $token,
         'password' => 'NewPass!23456',
         'password_confirmation' => 'NewPass!23456',
@@ -47,12 +50,16 @@ test('an invite email links to the set-password page with the invite flag', func
 
     $mail = (new EmployeeInviteNotification('tok123'))->toMail($employee);
 
+    $addresses = app(TenantAddress::class);
+
     expect($mail->hasTo('invite.mail@itneck.test'))->toBeTrue()
+        ->and($mail->actions[0]['url'])->toStartWith($addresses->origin('itneck').'/login/reset?')
         ->and($mail->render())
         ->toContain('token=tok123')
         ->toContain('email=invite.mail%40itneck.test')
         ->toContain('invite=1')
-        ->toContain('This link expires in 7 days.');
+        ->toContain('This link expires in 7 days.')
+        ->toContain('Sign in to your organization: <a href="'.$addresses->loginUrl('itneck').'"');
 });
 
 test('an invite token sets the password, clears must_set_password and cannot be reused', function () {

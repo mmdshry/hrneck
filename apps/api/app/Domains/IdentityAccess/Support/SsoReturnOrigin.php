@@ -5,13 +5,17 @@ namespace App\Domains\IdentityAccess\Support;
 /**
  * Validates the browser origin an SSO sign-in returns to.
  *
- * Only the platform's own domain and its subdomains (tenant hosts) are accepted, so the flow cannot be used as an
- * open redirect.
+ * Only an organization's own address ({slug}.{base}) is accepted. The main domain, the platform staff host and other
+ * reserved labels are refused, so SSO cannot be used to sign in from the central site, and the flow cannot be used as
+ * an open redirect.
  */
 class SsoReturnOrigin
 {
+    /** Labels under the base domain that are platform hosts, never an organization. */
+    private const RESERVED_LABELS = ['app', 'admin', 'api', 'mail', 'www'];
+
     /**
-     * @return string|null The origin as scheme://host[:port], or null when it is not an allowed platform host.
+     * @return string|null The origin as scheme://host[:port], or null when it is not an organization host.
      */
     public function normalize(string $url): ?string
     {
@@ -26,8 +30,7 @@ class SsoReturnOrigin
             return null;
         }
 
-        $baseDomain = strtolower((string) config('brand.tenancy_base_domain'));
-        if ($baseDomain === '' || ($host !== $baseDomain && ! str_ends_with($host, '.'.$baseDomain))) {
+        if ($this->organizationSlug($host) === null) {
             return null;
         }
 
@@ -37,12 +40,18 @@ class SsoReturnOrigin
     }
 
     /**
-     * The organization a tenant host names (its single label before the base domain), or null for the base domain.
-     * The result is only a hint: the sign-in still needs a membership in that organization to use it.
+     * The organization a tenant host names (its single label before the base domain), or null when the origin is not
+     * an organization host. The result is only a hint: the sign-in still needs a login in that organization.
      */
     public function tenantFor(string $origin): ?string
     {
         $host = strtolower((string) parse_url($origin, PHP_URL_HOST));
+
+        return $this->organizationSlug($host);
+    }
+
+    private function organizationSlug(string $host): ?string
+    {
         $baseDomain = strtolower((string) config('brand.tenancy_base_domain'));
         $suffix = '.'.$baseDomain;
 
@@ -51,7 +60,10 @@ class SsoReturnOrigin
         }
 
         $label = substr($host, 0, -strlen($suffix));
+        if ($label === '' || str_contains($label, '.') || in_array($label, self::RESERVED_LABELS, true)) {
+            return null;
+        }
 
-        return $label !== '' && ! str_contains($label, '.') ? $label : null;
+        return $label;
     }
 }

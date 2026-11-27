@@ -39,7 +39,7 @@ function enrollTestPasskey(TestCase $test, User $user, SoftwarePasskey $passkey,
  */
 function passkeyUser(TestCase $test): array
 {
-    $user = User::factory()->create(['password' => Hash::make('DemoPass!234')]);
+    $user = User::factory()->create(['tenant_id' => 'itneck', 'password' => Hash::make('DemoPass!234')]);
     $passkey = new SoftwarePasskey;
     enrollTestPasskey($test, $user, $passkey)->assertOk();
 
@@ -56,16 +56,13 @@ function startMfaLogin(TestCase $test, User $user): string
 {
     Auth::forgetGuards();
 
-    $login = $test->postJson('/api/v1/auth/login', [
-        'email' => $user->email,
-        'password' => 'DemoPass!234',
-    ])->assertOk()->assertJsonPath('mfa_required', true)->json();
+    $login = $test->postJson('/api/v1/auth/login', tenantLoginBody('itneck', $user->email, 'DemoPass!234'))->assertOk()->assertJsonPath('mfa_required', true)->json();
 
     return $login['challenge_token'];
 }
 
 test('registering a passkey enables mfa and issues recovery codes once', function () {
-    $user = User::factory()->create(['password' => Hash::make('DemoPass!234')]);
+    $user = User::factory()->create(['tenant_id' => 'itneck', 'password' => Hash::make('DemoPass!234')]);
 
     enrollTestPasskey($this, $user, new SoftwarePasskey)
         ->assertOk()
@@ -86,7 +83,7 @@ test('registering a passkey enables mfa and issues recovery codes once', functio
 });
 
 test('a registration challenge can only be used once', function () {
-    $user = User::factory()->create(['password' => Hash::make('DemoPass!234')]);
+    $user = User::factory()->create(['tenant_id' => 'itneck', 'password' => Hash::make('DemoPass!234')]);
     $passkey = new SoftwarePasskey;
 
     $options = $this->actingAs($user)
@@ -103,7 +100,7 @@ test('a registration challenge can only be used once', function () {
 });
 
 test('registration from an origin outside the allowed list is rejected', function () {
-    $user = User::factory()->create(['password' => Hash::make('DemoPass!234')]);
+    $user = User::factory()->create(['tenant_id' => 'itneck', 'password' => Hash::make('DemoPass!234')]);
 
     enrollTestPasskey($this, $user, new SoftwarePasskey, origin: 'https://evil.example')
         ->assertStatus(422);
@@ -112,7 +109,7 @@ test('registration from an origin outside the allowed list is rejected', functio
 });
 
 test('tenant subdomains of the rp id are accepted as origins', function () {
-    $user = User::factory()->create(['password' => Hash::make('DemoPass!234')]);
+    $user = User::factory()->create(['tenant_id' => 'itneck', 'password' => Hash::make('DemoPass!234')]);
 
     enrollTestPasskey($this, $user, new SoftwarePasskey, origin: 'https://acme.hrneck.test')
         ->assertOk();
@@ -121,10 +118,7 @@ test('tenant subdomains of the rp id are accepted as origins', function () {
 test('a passkey completes second-factor sign-in', function () {
     [$user, $passkey] = passkeyUser($this);
 
-    $token = $this->postJson('/api/v1/auth/login', [
-        'email' => $user->email,
-        'password' => 'DemoPass!234',
-    ])
+    $token = $this->postJson('/api/v1/auth/login', tenantLoginBody('itneck', $user->email, 'DemoPass!234'))
         ->assertOk()
         ->assertJsonPath('mfa_methods.totp', false)
         ->assertJsonPath('mfa_methods.passkey', true)
@@ -188,17 +182,14 @@ test('an assertion signed by a different key is rejected', function () {
 });
 
 test('accounts without a passkey are not offered the passkey method', function () {
-    $user = User::factory()->create(['password' => Hash::make('DemoPass!234')]);
+    $user = User::factory()->create(['tenant_id' => 'itneck', 'password' => Hash::make('DemoPass!234')]);
     $user->forceFill([
         'mfa_secret' => Crypt::encryptString((new Google2FA)->generateSecretKey()),
         'mfa_enabled' => true,
         'mfa_confirmed_at' => now(),
     ])->save();
 
-    $token = $this->postJson('/api/v1/auth/login', [
-        'email' => $user->email,
-        'password' => 'DemoPass!234',
-    ])
+    $token = $this->postJson('/api/v1/auth/login', tenantLoginBody('itneck', $user->email, 'DemoPass!234'))
         ->assertOk()
         ->assertJsonPath('mfa_methods.totp', true)
         ->assertJsonPath('mfa_methods.passkey', false)
@@ -266,7 +257,7 @@ test('mfa can be disabled by confirming with a passkey', function () {
 });
 
 test('removing the authenticator app keeps mfa on while a passkey remains', function () {
-    $user = User::factory()->create(['password' => Hash::make('DemoPass!234')]);
+    $user = User::factory()->create(['tenant_id' => 'itneck', 'password' => Hash::make('DemoPass!234')]);
     $user->forceFill([
         'mfa_secret' => Crypt::encryptString((new Google2FA)->generateSecretKey()),
         'mfa_enabled' => true,

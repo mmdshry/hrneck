@@ -1,0 +1,15 @@
+# CI only: send the e2e hosts to the Next server, as scripts/windows/Caddyfile does in local dev.
+# HTTP only (no local TLS): the Playwright job has no browser trust store to configure.
+{
+	auto_https off
+	admin off
+}
+
+http://hrneck.test, http://app.hrneck.test, http://itneck.hrneck.test, http://test.hrneck.test, http://company.hrneck.test, http://*.hrneck.test {
+	reverse_proxy 127.0.0.1:3100 {
+		header_up Host {host}
+		header_up X-Forwarded-Host {host}
+		header_up X-Forwarded-Proto {scheme}
+		flush_interval -1
+	}
+}

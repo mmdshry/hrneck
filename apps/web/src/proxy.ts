@@ -8,6 +8,7 @@ import {
   type PostLoginUser,
   type StaffGateUser,
 } from "@/lib/session";
+import { hostKind, requestHost, tenantFromHostname } from "@/lib/tenant";
 
 const PROTECTED = ["/msp", "/org", "/portal"];
 const LOGIN_FLOW = ["/login/mfa", "/login/forgot", "/login/reset", "/login/sso"];
@@ -134,6 +135,14 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const needsAuth = isProtected(pathname);
 
+  // Password reset is per organization (or the staff host). The main site only offers the organization finder.
+  if (
+    pathname === "/login/forgot" &&
+    hostKind(requestHost(request.headers)) === "central"
+  ) {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
+
   if (pathname === "/login") {
     const user = await sessionUser(request);
     if (user) {
@@ -162,14 +171,9 @@ export async function proxy(request: NextRequest) {
   }
 
   const response = NextResponse.next();
-  const host = (request.headers.get("host") ?? "hrneck.test").split(":")[0];
-  const labels = host.split(".");
-  // Apex hrneck.test is central; tenant hosts are {slug}.hrneck.test (3+ labels).
-  if (labels.length >= 3) {
-    const tenant = labels[0];
-    if (tenant && !["app", "admin", "api", "mail", "www"].includes(tenant)) {
-      response.headers.set("x-hrneck-tenant", tenant);
-    }
+  const tenant = tenantFromHostname(requestHost(request.headers));
+  if (tenant) {
+    response.headers.set("x-hrneck-tenant", tenant);
   }
   return response;
 }

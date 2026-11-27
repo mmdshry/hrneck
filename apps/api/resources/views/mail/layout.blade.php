@@ -39,6 +39,9 @@
                 <tr>
                   <td style="padding-top:20px; font-family:'Plus Jakarta Sans', Arial, Helvetica, sans-serif; font-size:12px; line-height:1.6; color:#64748B;">
                     <strong style="color:#334155;">{{ config('brand.name') }}</strong><br>
+                    @isset($loginUrl)
+                    Sign in to your organization: <a href="{{ $loginUrl }}" style="color:#083A6D; text-decoration:underline;">{{ $loginUrl }}</a><br>
+                    @endisset
                     Need help? Contact <a href="mailto:{{ config('brand.support_address') }}" style="color:#083A6D; text-decoration:underline;">{{ config('brand.support_address') }}</a>
                   </td>
                 </tr>

@@ -108,8 +108,13 @@ class SsoController extends Controller
             return $this->redirectToLogin($flow['origin'], $error);
         }
 
+        $tenantId = $this->returnOrigins->tenantFor($flow['origin']);
+        if ($tenantId === null) {
+            return $this->redirectToLogin($flow['origin'], SsoError::InvalidRequest);
+        }
+
         try {
-            $user = $this->signInFromCallback($request, $ssoProvider, $flow);
+            $user = $this->signInFromCallback($request, $ssoProvider, $flow, $tenantId);
         } catch (SsoLoginException $exception) {
             return $this->redirectToLogin($flow['origin'], $exception->error);
         } catch (Throwable $exception) {
@@ -122,7 +127,7 @@ class SsoController extends Controller
             'user_id' => $user->id,
             'next' => $flow['next'],
             'remember' => $flow['remember'],
-            'tenant' => $this->returnOrigins->tenantFor($flow['origin']),
+            'tenant' => $tenantId,
         ]);
 
         return redirect()->away($flow['origin'].'/login/sso/complete?'.http_build_query(['token' => $token]));
@@ -172,7 +177,7 @@ class SsoController extends Controller
      *
      * @throws SsoLoginException
      */
-    private function signInFromCallback(Request $request, SsoProvider $provider, array $flow): User
+    private function signInFromCallback(Request $request, SsoProvider $provider, array $flow, string $tenantId): User
     {
         $code = $request->query('code');
         if (! is_string($code) || $code === '') {
@@ -195,7 +200,7 @@ class SsoController extends Controller
             $flow['nonce'],
         );
 
-        return $this->ssoLogin->handle($provider, $driver->userFromToken($accessToken), $claims);
+        return $this->ssoLogin->handle($provider, $driver->userFromToken($accessToken), $claims, $tenantId);
     }
 
     /**

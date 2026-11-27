@@ -2,9 +2,9 @@ import { test, expect } from "@playwright/test";
 import path from "node:path";
 import { writeFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { ORG_STORAGE_STATE } from "./helpers/auth";
+import { ORG_STORAGE_STATE, TENANT_ORIGIN } from "./helpers/auth";
 
-test.use({ storageState: ORG_STORAGE_STATE });
+test.use({ baseURL: TENANT_ORIGIN, storageState: ORG_STORAGE_STATE });
 
 test.describe("Targets CSV import", () => {
   test("wizard import creates employees from non-canonical headers", async ({ page }) => {

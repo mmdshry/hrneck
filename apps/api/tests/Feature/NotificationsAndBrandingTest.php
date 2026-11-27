@@ -9,6 +9,7 @@ use App\Domains\Notifications\Jobs\SendNotificationEmailJob;
 use App\Domains\Notifications\Models\OrgAnnouncement;
 use App\Domains\Notifications\Models\UserNotification;
 use App\Domains\TargetsGroups\Models\Target;
+use App\Domains\Tenancy\Support\TenantAddress;
 use App\Domains\Ticketing\Models\SdDesk;
 use App\Domains\TrainingLms\Models\Course;
 use App\Domains\TrainingLms\Models\Enrollment;
@@ -347,7 +348,7 @@ test('training reminder skips email when target opted out', function () {
         'status' => 'pending',
     ]);
 
-    (new SendTrainingReminderJob($recipient->id))->handle();
+    (new SendTrainingReminderJob($recipient->id))->handle(app(TenantAddress::class));
 
     expect($recipient->fresh()->status)->toBe('pending');
     Mail::assertNothingSent();

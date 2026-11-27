@@ -54,6 +54,7 @@ test('org user with global platform role cannot access msp', function () {
 
 test('password change succeeds for authenticated user', function () {
     $user = User::factory()->create([
+        'tenant_id' => 'itneck',
         'password' => Hash::make('OldPass!234'),
     ]);
 
@@ -70,10 +71,7 @@ test('password change succeeds for authenticated user', function () {
     expect($user->remember_token)->not->toBeNull();
 
     $this->withHeader('Origin', 'http://hrneck.test')
-        ->postJson('/api/v1/auth/login', [
-            'email' => $user->email,
-            'password' => 'NewPass!234',
-        ])
+        ->postJson('/api/v1/auth/login', tenantLoginBody('itneck', $user->email, 'NewPass!234'))
         ->assertOk()
         ->assertJsonPath('mfa_required', false);
 });
@@ -193,10 +191,7 @@ test('filament-created style platform user can login to spa', function () {
     $user->syncRoles([OrgPermissionCatalog::PLATFORM_SUPER_ADMIN]);
 
     $this->withHeader('Origin', 'http://hrneck.test')
-        ->postJson('/api/v1/auth/login', [
-            'email' => $user->email,
-            'password' => 'DemoPass!234',
-        ])
+        ->postJson('/api/v1/auth/login', staffLoginBody($user->email, 'DemoPass!234'))
         ->assertOk()
         ->assertJsonPath('mfa_required', false)
         ->assertJsonPath('data.is_platform_staff', true);

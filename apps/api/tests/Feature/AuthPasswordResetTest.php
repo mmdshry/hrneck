@@ -11,6 +11,7 @@ test('forgot password always returns a generic success message and emails a rese
 
     $this->postJson('/api/v1/auth/password/forgot', [
         'email' => 'admin@itneck.test',
+        'tenant' => 'itneck',
     ])
         ->assertOk()
         ->assertJsonPath('message', 'If that email is registered, a reset link has been sent.');
@@ -24,6 +25,7 @@ test('forgot password always returns a generic success message and emails a rese
 
     $this->postJson('/api/v1/auth/password/forgot', [
         'email' => 'nobody@example.test',
+        'tenant' => 'itneck',
     ])
         ->assertOk()
         ->assertJsonPath('message', 'If that email is registered, a reset link has been sent.');
@@ -37,6 +39,7 @@ test('reset password updates credentials with a valid token and rejects invalid 
 
     $this->postJson('/api/v1/auth/password/reset', [
         'email' => 'admin@itneck.test',
+        'tenant' => 'itneck',
         'token' => 'bad-token',
         'password' => 'NewPass!23456',
         'password_confirmation' => 'NewPass!23456',
@@ -44,6 +47,7 @@ test('reset password updates credentials with a valid token and rejects invalid 
 
     $this->postJson('/api/v1/auth/password/reset', [
         'email' => 'admin@itneck.test',
+        'tenant' => 'itneck',
         'token' => $token,
         'password' => 'NewPass!23456',
         'password_confirmation' => 'NewPass!23456',
@@ -53,10 +57,8 @@ test('reset password updates credentials with a valid token and rejects invalid 
 
     expect(Hash::check('NewPass!23456', $user->fresh()->getAuthPassword()))->toBeTrue();
 
-    $this->postJson('/api/v1/auth/login', [
-        'email' => 'admin@itneck.test',
-        'password' => 'NewPass!23456',
-    ])->assertOk();
+    $this->postJson('/api/v1/auth/login', tenantLoginBody('itneck', 'admin@itneck.test', 'NewPass!23456'))
+        ->assertOk();
 });
 
 test('reset password does not re-enable a disabled account', function () {
@@ -66,6 +68,7 @@ test('reset password does not re-enable a disabled account', function () {
 
     $this->postJson('/api/v1/auth/password/reset', [
         'email' => 'admin@itneck.test',
+        'tenant' => 'itneck',
         'token' => $token,
         'password' => 'NewPass!23456',
         'password_confirmation' => 'NewPass!23456',

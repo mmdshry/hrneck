@@ -151,6 +151,23 @@ jobs:
           echo "API did not become ready" >&2
           cat /tmp/hrneck-api.log >&2
           exit 1
+      - name: Route tenant and staff hosts to the web app
+        run: |
+          # Organization sign-in is on {slug}.hrneck.test and platform sign-in on app.hrneck.test. Resolve them locally.
+          echo "127.0.0.1 hrneck.test app.hrneck.test itneck.hrneck.test test.hrneck.test company.hrneck.test" | sudo tee -a /etc/hosts
+          docker run -d --name hrneck-e2e-proxy --network host \
+            -v "$GITHUB_WORKSPACE/scripts/ci/Caddyfile.e2e:/etc/caddy/Caddyfile:ro" \
+            caddy:2-alpine
+          # Playwright starts Next on 3100 later; this only waits for Caddy to answer on port 80.
+          for i in $(seq 1 20); do
+            if curl -s -o /dev/null http://itneck.hrneck.test/; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Caddy did not start" >&2
+          docker logs hrneck-e2e-proxy >&2 || true
+          exit 1
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
@@ -166,6 +183,8 @@ jobs:
         run: >
           pnpm --dir apps/web exec playwright test --project=desktop-chromium
           --grep-invert "Learner portal|Password reset UI|Targets CSV import"
+      - name: Playwright tenant hosts
+        run: pnpm --dir apps/web exec playwright test --project=tenant-hosts
       - name: Restart API before mobile Playwright
         working-directory: apps/api
         run: |
