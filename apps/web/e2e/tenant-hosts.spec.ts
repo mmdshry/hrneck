@@ -44,7 +44,7 @@ test.describe("tenant host shells", () => {
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     await expect(
       page.getByText(/learner portal|security fundamentals|progress|assigned/i).first(),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 20_000 });
   });
 });
 

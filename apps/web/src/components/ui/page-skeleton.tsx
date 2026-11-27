@@ -5,12 +5,15 @@ type PageSkeletonProps = {
   className?: string;
   rows?: number;
   variant?: "list" | "detail" | "form";
+  /** Set to false inside a section that already sits under the page heading, so the page keeps a single h1. */
+  asHeading?: boolean;
 };
 
 export function PageSkeleton({
   className,
   rows = 5,
   variant = "list",
+  asHeading = true,
 }: PageSkeletonProps) {
   return (
     <div
@@ -19,7 +22,11 @@ export function PageSkeleton({
       aria-live="polite"
       className={cn("mx-auto w-full max-w-6xl flex-1 space-y-6 px-6 py-10", className)}
     >
-      <h1 className="sr-only">Loading</h1>
+      {asHeading ? (
+        <h1 className="sr-only">Loading</h1>
+      ) : (
+        <span className="sr-only">Loading</span>
+      )}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 space-y-2">
           <Skeleton className="h-8 w-48 md:h-9 md:w-64" />

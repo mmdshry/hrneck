@@ -487,7 +487,7 @@ export function MyCoursesSection() {
   ];
 
   if (loading && enrollments.length === 0) {
-    return <PageSkeleton className="px-0 py-0" />;
+    return <PageSkeleton className="px-0 py-0" asHeading={false} />;
   }
 
   if (enrollments.length === 0) {

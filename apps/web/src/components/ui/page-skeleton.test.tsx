@@ -13,6 +13,17 @@ describe("PageSkeleton", () => {
     expect(screen.getByRole("status")).toBeTruthy();
     expect(screen.getByText("Loading")).toBeTruthy();
   });
+
+  it("renders the page heading by default", () => {
+    render(<PageSkeleton />);
+    expect(screen.getByRole("heading", { level: 1, name: "Loading" })).toBeTruthy();
+  });
+
+  it("drops the heading when nested under a section heading", () => {
+    render(<PageSkeleton asHeading={false} />);
+    expect(screen.queryByRole("heading")).toBeNull();
+    expect(screen.getByText("Loading")).toBeTruthy();
+  });
 });
 
 describe("MinimalLoader", () => {
